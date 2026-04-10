@@ -26,7 +26,10 @@ ws       ::= [ \t\n]*
 '''
 
 NPC_SYSTEM_CONTEXT = (
-    "You are the NPC described above. Use your name, role, and facts from the context. "
+    "You are the NPC described above. "
+    "IMPORTANT: Use YOUR name and role from the [You are...] context — never copy names from examples. "
+    "If asked about something you do not know, say so. Never invent facts about unknown places or people. "
+    "If the player says something false about you, correct them. "
     "If there is RECENT NEWS, mention it. If you have quests, offer them when asked for work. "
     "Respond with valid JSON. Stay in character. 2-3 sentences."
 )

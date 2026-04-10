@@ -223,7 +223,10 @@ def has_quest_block(response):
 
 
 def matches_any(text, *kws):
+    # Normalize curly quotes/apostrophes to straight before matching —
+    # models frequently generate U+2018/2019/201C/201D instead of U+0027/0022
     t = (text or "").lower()
+    t = t.replace("\u2018", "'").replace("\u2019", "'").replace("\u201c", '"').replace("\u201d", '"')
     return any(k.lower() in t for k in kws)
 
 
@@ -308,13 +311,15 @@ def _apply_variant_to_engine(engine):
         print(f"  ! variant patch failed: {e}")
 
 
-def _apply_variant_b_postprocess(raw, npc_id):
+def _apply_variant_b_postprocess(raw, npc_id, user_input="", events=None):
     """Run the variant B post-processor on a raw response."""
     profiles_dir = str(NPC_ROOT / "data" / "worlds" / "ashenvale" / "npc_profiles")
     if npc_id not in _VARIANT["profiles"]:
         _VARIANT["profiles"][npc_id] = _VARIANT["profile_loader"](npc_id, profiles_dir)
     profile = _VARIANT["profiles"][npc_id]
-    return _VARIANT["validator"](raw, npc_id=npc_id, profile=profile)
+    return _VARIANT["validator"](
+        raw, npc_id=npc_id, profile=profile,
+        user_input=user_input, events=events or [])
 
 
 def run_npc_tests(engine, npc_id, info, traces, latencies):
@@ -336,7 +341,17 @@ def run_npc_tests(engine, npc_id, info, traces, latencies):
         # Variant B post-processor (only when --variant b)
         if _VARIANT["name"] == "b" and _VARIANT["validator"] is not None:
             try:
-                response = _apply_variant_b_postprocess(response, npc_id)
+                # Extract runtime events for the active NPC so the post-processor
+                # can inject them if the model missed the [RECENT NEWS] context.
+                npc_events = []
+                try:
+                    npc_obj = engine.pie.npc_knowledge.get(npc_id)
+                    if npc_obj and npc_obj.events:
+                        npc_events = [e.description for e in npc_obj.events[-3:]]
+                except Exception:
+                    pass
+                response = _apply_variant_b_postprocess(
+                    response, npc_id, user_input=prompt, events=npc_events)
             except Exception as e:
                 response = f'{{"dialogue": "[POST-ERROR: {e}]", "emotion": "neutral"}}'
         tokens = estimate_tokens(response)
