@@ -136,8 +136,8 @@ class EmotionalStateCapability(Capability):
                 self.intensity = min(1.0, self.intensity + 0.1 * self.volatility)
             else:
                 # Different mood — shift based on volatility
-                if self.volatility > 0.5 or self.turns_in_mood < 2:
-                    # High volatility or short-lived mood → switch immediately
+                if self.volatility > 0.5 or self.turns_in_mood >= 3:
+                    # High volatility OR well-established mood ready for change → switch
                     self.mood = new_mood
                     self.intensity = 0.3 + 0.2 * self.volatility
                     self.turns_in_mood = 1

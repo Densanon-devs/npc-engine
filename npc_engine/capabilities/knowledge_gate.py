@@ -93,11 +93,14 @@ class KnowledgeGateCapability(Capability):
         )
 
     def on_event(self, event: str, shared_state: dict) -> None:
-        """React to trust threshold crossings by re-checking gates."""
+        """React to trust threshold crossings by re-checking gates immediately."""
         if event.startswith("trust_crossed:"):
-            # Trust changed — some facts may now be unlockable
-            # The actual unlock happens in process_response next turn
-            pass
+            # Trust changed — check if any new facts are now unlockable
+            for fact in self.gated_facts:
+                if fact["id"] not in self.unlocked_ids:
+                    if self._check_requirements(fact["requires"], shared_state):
+                        self.unlocked_ids.add(fact["id"])
+                        logger.info(f"Knowledge gate unlocked via trust event: {fact['id']}")
 
     def _get_unlocked_facts(self, shared_state: dict) -> list[dict]:
         """Get all currently unlocked facts."""
