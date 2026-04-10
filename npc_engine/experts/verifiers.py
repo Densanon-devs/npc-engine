@@ -51,4 +51,47 @@ def verify_npc_dialogue(response: str, query: str) -> tuple[bool, str]:
     if len(dialogue_text) < 5:
         return False, "Response too short. Give a proper in-character reply."
 
+    # Echo detection — model copied user input verbatim
+    query_lower = query.lower().strip().rstrip("?!.")
+    dial_lower = dialogue_text.lower().strip().rstrip("?!.")
+    if query_lower and dial_lower == query_lower:
+        return False, "Do not repeat the player's words. Respond as the NPC with your own dialogue."
+
+    return True, ""
+
+
+def verify_npc_factual(response: str, query: str,
+                       npc_name: str = "", npc_role: str = "") -> tuple[bool, str]:
+    """Extended verifier that checks factual accuracy against the NPC profile.
+
+    Used when the caller passes NPC context. Falls back to verify_npc_dialogue
+    for basic checks, then adds profile-aware validation.
+
+    Plug into the expert system via:
+        expert.verifier = lambda r, q: verify_npc_factual(r, q, npc_name='Noah', npc_role='Village Elder')
+    """
+    # Run base checks first
+    passed, hint = verify_npc_dialogue(response, query)
+    if not passed:
+        return passed, hint
+
+    if not npc_name:
+        return True, ""
+
+    # Parse dialogue
+    try:
+        obj = json.loads(response.strip())
+        dialogue = obj.get("dialogue", response).lower()
+    except Exception:
+        dialogue = response.lower()
+
+    # Wrong-identity check: if dialogue says "I am [other NPC]" instead of the active NPC
+    _all_npcs = {"noah", "kael", "mara", "roderick", "elara", "bess", "pip"}
+    correct = npc_name.lower()
+    other_names = _all_npcs - {correct}
+    for other in other_names:
+        if f"i am {other}" in dialogue or f"i'm {other}" in dialogue:
+            if correct not in dialogue:
+                return False, f"You are {npc_name}, {npc_role}. Use YOUR name, not {other.title()}."
+
     return True, ""

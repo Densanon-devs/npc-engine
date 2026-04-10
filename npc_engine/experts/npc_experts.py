@@ -8,7 +8,7 @@ hardcoding them. The GBNF grammar and system context remain the same.
 import logging
 
 from npc_engine.bridge import Expert, SolvedExample
-from npc_engine.experts.verifiers import verify_npc_dialogue
+from npc_engine.experts.verifiers import verify_npc_dialogue, verify_npc_factual
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +36,22 @@ NPC_SYSTEM_CONTEXT = (
 
 
 def build_npc_expert(name: str, examples: list[SolvedExample],
-                     system_context: str = None) -> Expert:
-    """Build an NPC expert with the given examples."""
+                     system_context: str = None,
+                     npc_name: str = "", npc_role: str = "") -> Expert:
+    """Build an NPC expert with the given examples.
+    When npc_name/npc_role are provided, uses the factual verifier that
+    checks for wrong-identity (few-shot bleed) during the verify/retry loop.
+    """
+    if npc_name:
+        verifier = lambda r, q: verify_npc_factual(r, q, npc_name=npc_name, npc_role=npc_role)
+    else:
+        verifier = verify_npc_dialogue
     return Expert(
         name=name,
         system_context=system_context or NPC_SYSTEM_CONTEXT,
         examples=examples,
         scaffolding=None,
-        verifier=verify_npc_dialogue,
+        verifier=verifier,
         grammar_str=NPC_JSON_GRAMMAR,
         max_examples=3,
         max_retries=2,
@@ -100,9 +108,13 @@ def register_npc_experts(expert_router, few_shot_loader, npc_profiles: dict) -> 
 
         if npc_data.get("examples") or has_custom:
             expert_name = f"npc_{npc_id}"
+            npc_name = npc_profile.identity.get("name", "") if hasattr(npc_profile, "identity") else ""
+            npc_role = npc_profile.identity.get("role", "") if hasattr(npc_profile, "identity") else ""
             expert_router.experts[expert_name] = build_npc_expert(
                 name=expert_name,
                 examples=npc_solved,
+                npc_name=npc_name,
+                npc_role=npc_role,
             )
             logger.info(f"Registered expert '{expert_name}' with {len(npc_solved)} examples")
             count += 1

@@ -16,6 +16,7 @@ from npc_engine.bridge import PluginIntelligenceEngine, NPC_ENGINE_ROOT
 from npc_engine.config import NPCEngineConfig
 from npc_engine.experts.examples import FewShotLoader
 from npc_engine.experts.npc_experts import register_npc_experts
+from npc_engine.postgen import validate_and_repair
 from npc_engine.social.network import SocialGraph
 from npc_engine.social.propagation import GossipPropagator
 from npc_engine.social.reputation import ReputationRipple
@@ -52,6 +53,9 @@ class NPCEngine:
 
         if self.config.active_npc:
             self.pie.config.npc.active_profile = self.config.active_npc
+
+        # Post-generation validation & repair (on by default)
+        self.postgen_enabled = True
 
         # Social systems (initialized after PIE loads)
         self.social_graph: SocialGraph | None = None
@@ -97,8 +101,13 @@ class NPCEngine:
         """
         Process player input and return NPC response.
 
-        If npc_id is specified, switches to that NPC first.
-        After generation, propagates gossip and trust ripple through social network.
+        Pipeline:
+          1. Switch NPC if specified
+          2. Delegate to PIE (routing, experts, capabilities, generation)
+          3. Post-generation validation & repair (identity, hallucination, events, etc.)
+          4. Gossip propagation + trust ripple
+
+        Set self.postgen_enabled = False to skip step 3 (raw model output).
         """
         # Switch NPC if specified
         if npc_id:
@@ -110,6 +119,34 @@ class NPCEngine:
         # Delegate to PIE's full pipeline (handles routing, experts,
         # capabilities, quest injection, caching, memory — everything)
         response = self.pie.process(user_input)
+
+        # Post-generation validation & repair — catches common model failures
+        # (identity bleed, hallucination, echo, meta-gaming, OOD, etc.)
+        if self.postgen_enabled and active_npc:
+            try:
+                npc = self.pie.npc_knowledge.get(active_npc)
+                profile = None
+                events = []
+                if npc:
+                    # Build a profile dict for the post-processor
+                    profile = {
+                        "identity": npc.identity,
+                        "world_facts": npc.world_facts,
+                        "personal_knowledge": npc.personal_knowledge,
+                        "active_quests": [
+                            {"id": q.id, "name": q.name, "description": q.description,
+                             "status": q.status, "reward": q.reward,
+                             "objectives": q.objectives}
+                            for q in npc.quests
+                        ],
+                    }
+                    events = [e.description for e in npc.events[-3:]]
+                response = validate_and_repair(
+                    response, npc_id=active_npc, profile=profile,
+                    user_input=user_input, events=events,
+                )
+            except Exception as e:
+                logger.debug(f"Postgen error (using raw response): {e}")
 
         # Post-generation: gossip propagation
         if active_npc and self.gossip_propagator:
