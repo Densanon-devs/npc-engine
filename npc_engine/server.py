@@ -26,8 +26,10 @@ _engine = None
 def get_engine():
     global _engine
     if _engine is None:
+        import os
+        config_path = os.environ.get("NPC_ENGINE_CONFIG", "config.yaml")
         from npc_engine.engine import NPCEngine
-        _engine = NPCEngine("config.yaml")
+        _engine = NPCEngine(config_path)
         _engine.initialize()
         logger.info("NPC Engine initialized for API server")
     return _engine
