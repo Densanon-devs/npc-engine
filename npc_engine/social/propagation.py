@@ -189,21 +189,26 @@ class GossipPropagator:
         return targets
 
     def _passes_filter(self, from_npc: str, to_npc: str, category: str) -> bool:
-        """Check if a gossip category passes the connection's filter."""
+        """Check if a gossip category passes the connection's filter.
+        For direct connections, checks the edge filter.
+        For multi-hop, checks that at least one path from source to target
+        has all edges allowing the category."""
         gossip_filter = self.graph.get_gossip_filter(from_npc, to_npc)
 
-        # Try direct connection first
-        if gossip_filter == "none":
-            # Check if there's any indirect path with a valid filter
-            for conn in self.graph.get_connections(from_npc):
-                if conn.to_id == to_npc:
-                    return False
-                # For multi-hop, check the first hop's filter
-                if conn.gossip_filter in ("all", category):
-                    return True
-            return False
+        # Direct connection exists
+        if gossip_filter is not None:
+            return gossip_filter in ("all", category)
 
-        return gossip_filter in ("all", category)
+        # No direct connection — check 1-hop intermediaries
+        for conn in self.graph.get_connections(from_npc):
+            if conn.gossip_filter not in ("all", category):
+                continue  # first hop blocks this category
+            # Check if intermediary connects to target
+            hop2_filter = self.graph.get_gossip_filter(conn.to_id, to_npc)
+            if hop2_filter is not None and hop2_filter in ("all", category):
+                return True  # valid 2-hop path found
+
+        return False
 
     def _inject_gossip(self, target_npc: str, fact: GossipFact,
                        knowledge_manager, capability_managers: dict) -> None:

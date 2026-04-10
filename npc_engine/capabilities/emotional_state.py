@@ -96,6 +96,7 @@ class EmotionalStateCapability(Capability):
         self.intensity: float = 0.3
         self.turns_in_mood: int = 0
         self._previous_mood: str = self.mood
+        self._pinned_turns: int = 0  # when > 0, mood is pinned (set via API, resists model override)
 
         shared_state["emotional_state"] = self._state_snapshot()
 
@@ -119,9 +120,29 @@ class EmotionalStateCapability(Capability):
             section="state",
         )
 
+    def pin_mood(self, mood: str, intensity: float = 0.7, turns: int = 3) -> None:
+        """Pin mood via API (set_mood). Resists model override for N turns."""
+        self.mood = mood
+        self.intensity = max(0.0, min(1.0, intensity))
+        self.turns_in_mood = 1
+        self._pinned_turns = turns
+
     def process_response(self, response: str, query: str,
                          shared_state: dict) -> CapabilityUpdate:
         self._previous_mood = self.mood
+
+        # If mood is pinned (set via game API), resist model override
+        if self._pinned_turns > 0:
+            self._pinned_turns -= 1
+            self.turns_in_mood += 1
+            shared_state["emotional_state"] = {
+                "mood": self.mood, "intensity": self.intensity,
+            }
+            return CapabilityUpdate(
+                state_patch={"mood": self.mood, "intensity": self.intensity,
+                             "turns_in_mood": self.turns_in_mood},
+                events=[],
+            )
 
         # Extract emotion from model's JSON response
         detected_emotion = self._extract_emotion(response)

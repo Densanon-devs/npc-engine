@@ -194,10 +194,17 @@ class NPCEngine:
         return npcs
 
     def get_npc_state(self, npc_id: str) -> dict:
-        """Get an NPC's current capability state."""
+        """Get an NPC's current capability state.
+        Lazy-creates the CapabilityManager if it doesn't exist yet,
+        which triggers loading persisted state from disk."""
         mgr = self.pie.capability_managers.get(npc_id)
         if not mgr:
-            return {"npc_id": npc_id, "capabilities": {}, "shared_state": {}}
+            # Try to create the manager (which loads saved state from disk)
+            npc = self.pie.npc_knowledge.get(npc_id)
+            if npc:
+                mgr = self._ensure_capability_manager(npc_id)
+            if not mgr:
+                return {"npc_id": npc_id, "capabilities": {}, "shared_state": {}}
 
         cap_states = {}
         for name, cap in mgr.capabilities.items():
@@ -334,17 +341,18 @@ class NPCEngine:
             "total_entries": len(scratchpad.entries),
         }
 
-    def set_mood(self, npc_id: str, mood: str, intensity: float = 0.5) -> dict:
-        """Set an NPC's mood directly. For cutscenes, world events, etc."""
+    def set_mood(self, npc_id: str, mood: str, intensity: float = 0.5,
+                 pin_turns: int = 3) -> dict:
+        """Set an NPC's mood directly. For cutscenes, world events, etc.
+        The mood is 'pinned' for pin_turns — it resists being overridden by
+        the next model response's emotion extraction."""
         mgr = self._ensure_capability_manager(npc_id)
         if not mgr or "emotional_state" not in mgr.capabilities:
             return {"error": f"NPC '{npc_id}' has no emotional_state capability"}
 
         emo = mgr.capabilities["emotional_state"]
         old_mood = emo.mood
-        emo.mood = mood
-        emo.intensity = max(0.0, min(1.0, intensity))
-        emo.turns_in_mood = 1
+        emo.pin_mood(mood, intensity, turns=pin_turns)
         mgr.shared_state.setdefault("emotional_state", {}).update({
             "mood": mood,
             "intensity": emo.intensity,
