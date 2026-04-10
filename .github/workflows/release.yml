@@ -1,0 +1,169 @@
+name: Build Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ── Build compiled server for each platform ────────────────
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: npc-engine
+
+      - uses: actions/checkout@v4
+        with:
+          repository: densanon-devs/plug-in-intelligence-engine
+          token: ${{ secrets.PIE_DEPLOY_KEY }}
+          path: plug-in-intelligence-engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install cython setuptools pyinstaller
+          pip install -r plug-in-intelligence-engine/requirements.txt
+          pip install -r npc-engine/requirements.txt
+
+      - name: Build release
+        run: python plug-in-intelligence-engine/build/build_release.py
+        working-directory: .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-windows
+          path: plug-in-intelligence-engine/dist/windows/
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: npc-engine
+
+      - uses: actions/checkout@v4
+        with:
+          repository: densanon-devs/plug-in-intelligence-engine
+          token: ${{ secrets.PIE_DEPLOY_KEY }}
+          path: plug-in-intelligence-engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install cython setuptools pyinstaller
+          pip install -r plug-in-intelligence-engine/requirements.txt
+          pip install -r npc-engine/requirements.txt
+
+      - name: Build release
+        run: python plug-in-intelligence-engine/build/build_release.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-linux
+          path: plug-in-intelligence-engine/dist/linux/
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: npc-engine
+
+      - uses: actions/checkout@v4
+        with:
+          repository: densanon-devs/plug-in-intelligence-engine
+          token: ${{ secrets.PIE_DEPLOY_KEY }}
+          path: plug-in-intelligence-engine
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install cython setuptools pyinstaller
+          pip install -r plug-in-intelligence-engine/requirements.txt
+          pip install -r npc-engine/requirements.txt
+
+      - name: Build release
+        run: python plug-in-intelligence-engine/build/build_release.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-macos
+          path: plug-in-intelligence-engine/dist/darwin/
+
+  # ── Package SDKs ───────────────────────────────────────────
+
+  package-sdks:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: server-builds/
+
+      - name: Package Unity SDK
+        run: |
+          mkdir -p dist/unity
+          cp -r sdks/unity/NPCEngine dist/unity/
+          cp -r server-builds/server-windows dist/unity/NPCEngine/Server~/Windows/
+          cp -r server-builds/server-linux dist/unity/NPCEngine/Server~/Linux/
+          cp -r server-builds/server-macos dist/unity/NPCEngine/Server~/macOS/
+          cd dist && zip -r NPCEngine-Unity-${{ github.ref_name }}.zip unity/
+
+      - name: Package Godot SDK
+        run: |
+          mkdir -p dist/godot
+          cp -r sdks/godot/addons dist/godot/
+          cd dist && zip -r NPCEngine-Godot-${{ github.ref_name }}.zip godot/
+          # Server binary as separate download
+          cd .. && zip -r dist/NPCEngine-Server-Windows-${{ github.ref_name }}.zip server-builds/server-windows/
+          zip -r dist/NPCEngine-Server-Linux-${{ github.ref_name }}.zip server-builds/server-linux/
+          zip -r dist/NPCEngine-Server-macOS-${{ github.ref_name }}.zip server-builds/server-macos/
+
+      - name: Package Unreal SDK
+        run: |
+          mkdir -p dist/unreal
+          cp -r sdks/unreal/NPCEngine dist/unreal/
+          cp -r server-builds/server-windows dist/unreal/NPCEngine/Binaries/Win64/
+          cp -r server-builds/server-linux dist/unreal/NPCEngine/Binaries/Linux/
+          cp -r server-builds/server-macos dist/unreal/NPCEngine/Binaries/Mac/
+          cd dist && zip -r NPCEngine-Unreal-${{ github.ref_name }}.zip unreal/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-packages
+          path: dist/*.zip
+
+  # ── Create GitHub Release ──────────────────────────────────
+
+  release:
+    needs: [package-sdks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-packages
+          path: dist/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true

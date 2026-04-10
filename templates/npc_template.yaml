@@ -1,0 +1,86 @@
+# ─── NPC Knowledge Sheet Template ────────────────────────────
+# Copy this file to data/npc_profiles/{npc_id}.yaml
+# The filename (without .yaml) becomes the NPC's ID.
+#
+# Required: identity, world_facts
+# Optional: everything else (capabilities are opt-in)
+
+identity:
+  name: ""                    # NPC display name
+  role: ""                    # Profession or title
+  location: ""                # Where they can be found
+  personality: ""             # 1-2 sentences describing behavior
+  speech_style: ""            # How they talk (formal, slang, etc.)
+  # Optional: world override (defaults to config.yaml world_name)
+  # world: "Your World Name"
+
+world_facts:                  # Things this NPC knows about the world (max 6)
+  - ""
+
+personal_knowledge:           # Private memories and secrets (max 4)
+  - ""
+
+active_quests:                # Quests this NPC can give (0+)
+  - id: ""                    # Unique quest ID (snake_case)
+    name: ""                  # Display name
+    description: ""           # What the NPC tells the player
+    status: "available"       # available | active | completed | failed
+    reward: ""                # What the player gets
+    objectives:               # Quest steps
+      - ""
+
+recent_events: []             # Leave empty — injected at runtime by game engine
+
+# ─── Capabilities (all optional, delete what you don't need) ─
+
+capabilities:
+
+  # Scratchpad: NPC remembers facts about the player across conversations
+  scratchpad:
+    enabled: true
+    max_entries: 10           # How many facts to remember (more = more tokens)
+
+  # Trust: Relationship tracking that affects NPC behavior
+  trust:
+    enabled: true
+    initial_level: 30         # 0-100 starting trust
+    thresholds:               # Trust tier boundaries
+      wary: 0
+      neutral: 25
+      friendly: 50
+      trusted: 75
+    effects:                  # Behavioral instructions per tier
+      below_wary: "Be suspicious and withhold information"
+      wary: "Be cautious and guarded"
+      neutral: "Be professional, share basic info"
+      friendly: "Be warm, share useful knowledge"
+      trusted: "Share secrets, offer best rewards"
+
+  # Emotional State: Persistent mood that carries across conversations
+  emotional_state:
+    enabled: true
+    baseline_mood: "neutral"  # Mood NPC returns to over time
+    volatility: 0.3           # 0.0-1.0 how easily mood shifts
+    decay_rate: 0.1           # 0.0-1.0 how fast mood returns to baseline
+
+  # Goals: Personal motivations that influence conversation
+  goals:
+    enabled: true
+    active_goals:
+      - id: ""                # Unique goal ID
+        description: ""       # What the NPC wants
+        priority: 5           # 1-10, higher = more important
+        keywords: []           # Words that indicate this topic (for tracking)
+
+  # Knowledge Gate: Facts only revealed when conditions are met
+  # Requires: trust capability
+  knowledge_gate:
+    enabled: true
+    gated_facts:
+      - id: ""                # Unique fact ID
+        fact: ""              # The secret information
+        requires:             # All conditions must be met
+          trust: 50           # Minimum trust level (0-100)
+          # quest: "quest_id" # Quest must be completed
+          # quest_active: "quest_id"  # Quest must be in progress
+          # mood: "happy"     # NPC must be in this mood

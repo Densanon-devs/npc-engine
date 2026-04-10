@@ -1,0 +1,56 @@
+# ─── PIE Configuration Template ──────────────────────────────
+# Copy this to config.yaml in the project root and customize.
+# See README.md for full documentation.
+
+system:
+  name: "Plug-in Intelligence Engine"
+  version: "0.5.0"
+  log_level: "INFO"                     # DEBUG | INFO | WARNING | ERROR
+
+# ─── Model ───────────────────────────────────────────────────
+# Point this at any GGUF model file. Recommended: Llama 3.2 1B Q4_K_M (770MB)
+base_model:
+  path: "models/your-model.gguf"        # Path to your GGUF model
+  context_length: 4096
+  gpu_layers: 99                        # 99 = full GPU offload, 0 = CPU only
+  threads: 8                            # CPU threads (ignored if fully on GPU)
+  temperature: 0.5
+  max_tokens: 200
+  batch_size: 512
+
+# ─── NPC Mode ────────────────────────────────────────────────
+npc:
+  enabled: true
+  active_profile: ""                    # Starting NPC ID (filename without .yaml)
+  profiles_dir: "data/npc_profiles"     # Directory containing NPC YAML files
+  state_dir: "data/npc_state"           # Where capability state is persisted
+  world_name: ""                        # Your world name (appears in NPC context)
+  json_output: true
+  output_schema:
+    dialogue: "string"
+    emotion: "string"
+    action: "string|null"
+
+# ─── Router (usually fine as defaults) ───────────────────────
+router:
+  mode: "hybrid"
+  rules:
+    - keywords: ["npc"]
+      module: "npc_generic"
+      priority: 12
+
+# ─── Memory ──────────────────────────────────────────────────
+memory:
+  short_term:
+    max_turns: 20
+    max_tokens: 1024
+  long_term:
+    enabled: true
+    backend: "simple"                   # "simple" (keyword) or "faiss" (vector)
+    storage_dir: "data/memory"
+    top_k: 5
+
+# ─── Fusion ──────────────────────────────────────────────────
+fusion:
+  chat_format: "chatml"                 # chatml | llama3 | phi3 | alpaca | raw
+  max_prompt_tokens: 1536

@@ -1,0 +1,5 @@
+# NPC Engine dependencies
+# PIE's dependencies (llama-cpp-python, etc.) are expected from the PIE installation.
+pyyaml>=6.0
+fastapi>=0.100.0
+uvicorn>=0.20.0

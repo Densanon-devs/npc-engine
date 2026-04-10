@@ -1,0 +1,21 @@
+# NPC Engine Configuration
+# Wraps PIE with NPC-specific settings.
+
+world_dir: "data/worlds/ashenvale"
+world_name: "Ashenvale"
+active_npc: "noah"
+
+# Path to PIE's config.yaml (leave empty for auto-detect from sibling directory)
+pie_config: ""
+
+gossip_rules:
+  max_hops: 2
+  decay_per_hop: 0.5
+  min_significance: 0.2
+  propagation_delay: 1
+
+trust_ripple:
+  enabled: true
+  positive_factor: 0.3
+  negative_factor: 0.15
+  max_ripple: 10

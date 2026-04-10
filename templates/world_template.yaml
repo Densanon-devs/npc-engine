@@ -1,0 +1,26 @@
+# ─── World Configuration Template ────────────────────────────
+# Copy this to data/worlds/<your_world>/world.yaml
+# Defines social connections between NPCs and gossip propagation rules.
+
+world_name: ""                          # Your world name
+
+social_graph:
+  connections:
+    # Each connection is one-directional. Add both directions if mutual.
+    # - from: "npc_id_1"
+    #   to: "npc_id_2"
+    #   relationship: "friend"          # mentor, friend, rival, business, family, duty, acquaintance
+    #   closeness: 0.5                  # 0.0-1.0, how much they trust each other
+    #   gossip_filter: "all"            # all, personal, trade, military, lore, quest, none
+
+gossip_rules:
+  max_hops: 2                           # How far gossip travels (2 = friend-of-friend)
+  decay_per_hop: 0.5                    # Significance halves per hop
+  min_significance: 0.2                 # Below this, gossip is forgotten
+  propagation_delay: 1                  # Turns before gossip reaches next NPC
+
+trust_ripple:
+  enabled: true
+  positive_factor: 0.3                  # 30% of trust gain ripples to connected NPCs
+  negative_factor: 0.15                 # 15% of trust loss ripples
+  max_ripple: 10                        # Cap on rippled trust points

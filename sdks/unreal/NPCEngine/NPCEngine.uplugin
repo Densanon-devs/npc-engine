@@ -1,0 +1,18 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "NPC Engine",
+    "Description": "AI-powered NPC dialogue with trust, gossip, emotions, and quests",
+    "Category": "AI",
+    "CreatedBy": "NPC Engine",
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "Modules": [
+        {
+            "Name": "NPCEngine",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ]
+}

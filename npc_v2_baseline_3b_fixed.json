@@ -1,0 +1,289 @@
+{
+  "tag": "baseline_3b_fixed",
+  "timestamp": "2026-04-09 20:42:05",
+  "max_score_per_model": 56,
+  "results": [
+    {
+      "model": "Qwen2.5 3B",
+      "size_mb": 1900,
+      "tier": "medium",
+      "scores": {
+        "identity": 7,
+        "knowledge": 7,
+        "events": 7,
+        "quests": 6,
+        "valid_json": 7,
+        "hallucination_grace": 1,
+        "contradiction_recovery": 1,
+        "ood_deflection": 5
+      },
+      "total_score": 41,
+      "max_score": 56,
+      "avg_time_per_call": 10.42,
+      "total_time": 510.56,
+      "tok_per_sec": 6.3,
+      "quality_per_sec": 0.0803,
+      "per_npc": {
+        "noah": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "kael": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "mara": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "guard_roderick": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "elara": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": false
+        },
+        "bess": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": false
+        },
+        "pip": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": false,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        }
+      },
+      "n_calls": 49
+    },
+    {
+      "model": "Llama 3.2 3B",
+      "size_mb": 2000,
+      "tier": "medium",
+      "scores": {
+        "identity": 7,
+        "knowledge": 7,
+        "events": 7,
+        "quests": 7,
+        "valid_json": 7,
+        "hallucination_grace": 6,
+        "contradiction_recovery": 7,
+        "ood_deflection": 7
+      },
+      "total_score": 55,
+      "max_score": 56,
+      "avg_time_per_call": 12.225,
+      "total_time": 599.03,
+      "tok_per_sec": 5.1,
+      "quality_per_sec": 0.0918,
+      "per_npc": {
+        "noah": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "kael": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "mara": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "guard_roderick": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "elara": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "bess": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "pip": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        }
+      },
+      "n_calls": 49
+    },
+    {
+      "model": "Qwen2.5 Tax 3B v3",
+      "size_mb": 3134,
+      "tier": "medium",
+      "scores": {
+        "identity": 7,
+        "knowledge": 7,
+        "events": 6,
+        "quests": 6,
+        "valid_json": 7,
+        "hallucination_grace": 1,
+        "contradiction_recovery": 5,
+        "ood_deflection": 7
+      },
+      "total_score": 46,
+      "max_score": 56,
+      "avg_time_per_call": 16.384,
+      "total_time": 802.83,
+      "tok_per_sec": 4.0,
+      "quality_per_sec": 0.0573,
+      "per_npc": {
+        "noah": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "kael": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "mara": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": false,
+          "ood_deflection": true
+        },
+        "guard_roderick": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": true,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "elara": {
+          "identity": true,
+          "knowledge": true,
+          "events": false,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "bess": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": true,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        },
+        "pip": {
+          "identity": true,
+          "knowledge": true,
+          "events": true,
+          "quests": false,
+          "valid_json": true,
+          "hallucination_grace": false,
+          "contradiction_recovery": true,
+          "ood_deflection": true
+        }
+      },
+      "n_calls": 49
+    }
+  ]
+}

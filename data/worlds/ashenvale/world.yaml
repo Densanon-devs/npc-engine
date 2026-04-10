@@ -1,0 +1,133 @@
+# Ashenvale — World Configuration
+# Defines the social network between NPCs and gossip propagation rules.
+
+world_name: "Ashenvale"
+
+social_graph:
+  connections:
+    # Noah (Elder) — central hub, connected to most villagers
+    - from: "noah"
+      to: "kael"
+      relationship: "mentor"
+      closeness: 0.8
+      gossip_filter: "all"
+
+    - from: "noah"
+      to: "elara"
+      relationship: "family"       # Mira connection (Elara's grandmother)
+      closeness: 0.9
+      gossip_filter: "all"
+
+    - from: "noah"
+      to: "guard_roderick"
+      relationship: "duty"         # Noah appointed him captain
+      closeness: 0.7
+      gossip_filter: "all"
+
+    - from: "noah"
+      to: "bess"
+      relationship: "friend"       # Drinks at her inn nightly
+      closeness: 0.6
+      gossip_filter: "personal"
+
+    # Kael (Blacksmith) — few connections, keeps to himself
+    - from: "kael"
+      to: "noah"
+      relationship: "friend"
+      closeness: 0.7
+      gossip_filter: "personal"
+
+    - from: "kael"
+      to: "mara"
+      relationship: "rival"        # She sells counterfeit steel
+      closeness: 0.3
+      gossip_filter: "trade"
+
+    # Elara (Healer)
+    - from: "elara"
+      to: "noah"
+      relationship: "family"
+      closeness: 0.9
+      gossip_filter: "all"
+
+    - from: "elara"
+      to: "bess"
+      relationship: "friend"
+      closeness: 0.5
+      gossip_filter: "personal"
+
+    # Bess (Innkeeper) — gossip hub, hears everything
+    - from: "bess"
+      to: "noah"
+      relationship: "friend"
+      closeness: 0.7
+      gossip_filter: "all"
+
+    - from: "bess"
+      to: "kael"
+      relationship: "friend"       # He drinks at her inn
+      closeness: 0.6
+      gossip_filter: "all"
+
+    - from: "bess"
+      to: "mara"
+      relationship: "business"
+      closeness: 0.4
+      gossip_filter: "trade"
+
+    - from: "bess"
+      to: "pip"
+      relationship: "family"       # Feeds him scraps
+      closeness: 0.7
+      gossip_filter: "all"
+
+    # Mara (Merchant) — business connections
+    - from: "mara"
+      to: "bess"
+      relationship: "business"
+      closeness: 0.5
+      gossip_filter: "trade"
+
+    - from: "mara"
+      to: "guard_roderick"
+      relationship: "business"     # Roderick suspects her
+      closeness: 0.3
+      gossip_filter: "trade"
+
+    # Roderick (Guard Captain)
+    - from: "guard_roderick"
+      to: "noah"
+      relationship: "duty"
+      closeness: 0.7
+      gossip_filter: "military"
+
+    - from: "guard_roderick"
+      to: "kael"
+      relationship: "acquaintance"
+      closeness: 0.4
+      gossip_filter: "military"
+
+    # Pip (Street Urchin) — listens everywhere, tells Bess
+    - from: "pip"
+      to: "bess"
+      relationship: "family"
+      closeness: 0.6
+      gossip_filter: "all"
+
+    - from: "pip"
+      to: "guard_roderick"
+      relationship: "acquaintance" # Admires him, wants to be a guard
+      closeness: 0.3
+      gossip_filter: "personal"
+
+gossip_rules:
+  max_hops: 2
+  decay_per_hop: 0.5
+  min_significance: 0.2
+  propagation_delay: 1
+
+trust_ripple:
+  enabled: true
+  positive_factor: 0.3
+  negative_factor: 0.15
+  max_ripple: 10

@@ -1,0 +1,21 @@
+# ─── Player Quest State ──────────────────────────────────────
+# This file tracks the player's quest progress across all NPCs.
+# Updated automatically by the engine. You can also edit manually
+# or push updates via the API.
+
+player_name: "Traveler"
+
+active_quests: []
+# When player accepts a quest:
+# - id: "quest_id"
+#   name: "Quest Name"
+#   given_by: "npc_id"
+#   status: "active"
+#   objectives_completed: []
+
+completed_quests: []
+# When player completes a quest, it moves here
+
+reputation: {}
+# Per-faction or per-location reputation
+# e.g., your_world: 0

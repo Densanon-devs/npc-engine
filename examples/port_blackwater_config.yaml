@@ -1,0 +1,18 @@
+# Example config for the Port Blackwater demo world.
+# Copy to config.yaml in the project root to use.
+
+world_dir: "data/worlds/port_blackwater"
+world_name: "Port Blackwater"
+active_npc: "captain_reva"
+
+gossip_rules:
+  max_hops: 2
+  decay_per_hop: 0.4
+  min_significance: 0.2
+  propagation_delay: 1
+
+trust_ripple:
+  enabled: true
+  positive_factor: 0.3
+  negative_factor: 0.2
+  max_ripple: 8

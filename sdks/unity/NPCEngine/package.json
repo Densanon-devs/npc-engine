@@ -1,0 +1,17 @@
+{
+  "name": "com.npcengine.sdk",
+  "version": "0.1.0",
+  "displayName": "NPC Engine",
+  "description": "AI-powered NPC dialogue with trust, gossip, emotions, and quests",
+  "unity": "2021.3",
+  "author": {
+    "name": "NPC Engine"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Example",
+      "description": "Simple MonoBehaviour showing NPC listing, switching, and dialogue generation.",
+      "path": "Samples~/NPCEngineExample.cs"
+    }
+  ]
+}

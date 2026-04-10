@@ -1,0 +1,22 @@
+# Player Quest Tracker — tracks quest state across all NPCs
+# Updated by the game engine when quests are accepted/completed
+
+player_name: "Traveler"
+
+active_quests: []
+# Example when player accepts a quest:
+# - id: "bitter_well"
+#   name: "The Bitter Well"
+#   given_by: "noah"
+#   status: "active"
+#   objectives_completed: []
+
+completed_quests: []
+# Example:
+# - id: "cellar_rats"
+#   name: "Cellar Trouble"
+#   given_by: "bess"
+#   completed_at: "2026-03-29"
+
+reputation:
+  ashenvale: 0  # -100 to 100
