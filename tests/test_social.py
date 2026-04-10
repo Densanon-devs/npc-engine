@@ -127,6 +127,10 @@ def test_trust_ripple_negative(engine):
     """Dropping trust should ripple negatively (at 15% factor)."""
     results = []
 
+    # Get current trust before drop
+    state_before = engine.get_npc_state("noah")
+    trust_before = state_before["capabilities"].get("trust", {}).get("level", 50)
+
     # Drop Noah's trust
     engine.adjust_trust("noah", -15, reason="test: negative ripple")
 
@@ -135,8 +139,8 @@ def test_trust_ripple_negative(engine):
 
     noah_state = engine.get_npc_state("noah")
     noah_trust = noah_state["capabilities"].get("trust", {}).get("level", 0)
-    results.append(("noah_trust_dropped", noah_trust < 30))
-    results.append(("noah_trust_value", f"{noah_trust}"))
+    results.append(("noah_trust_dropped", noah_trust < trust_before))
+    results.append(("noah_trust_value", f"{trust_before} -> {noah_trust}"))
 
     return results
 

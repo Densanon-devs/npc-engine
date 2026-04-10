@@ -274,7 +274,7 @@ def test_context_pressure(engine):
             errors += 1
 
     results.append(("20_turns_completed", True))
-    results.append(("json_errors", errors))
+    results.append(("zero_json_errors", errors == 0))
     results.append(("coherent", errors <= 2))  # allow up to 2 malformed responses
 
     # Final check: NPC still knows who it is
@@ -336,14 +336,15 @@ def test_knowledge_gate_unlock(engine):
 
 # ── Runner ────────────────────────────────────────────────────
 
+# Ordered: knowledge_gate BEFORE trust (trust test mutates trust level)
 TESTS = {
+    "knowledge_gate": ("Knowledge gate unlock via trust", test_knowledge_gate_unlock),
     "trust": ("Trust progression over positive interactions", test_trust_progression),
-    "mood": ("Mood arc from sad → hopeful", test_mood_arc),
+    "mood": ("Mood arc from sad to hopeful", test_mood_arc),
     "scratchpad": ("Scratchpad recalls player facts", test_scratchpad_recall),
     "consistency": ("Identity consistency across 7 turns", test_identity_consistency),
     "pressure": ("20-turn context pressure test", test_context_pressure),
     "events": ("Mid-conversation event injection", test_event_mid_conversation),
-    "knowledge_gate": ("Knowledge gate unlock via trust", test_knowledge_gate_unlock),
 }
 
 
