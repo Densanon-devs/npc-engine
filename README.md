@@ -2,40 +2,99 @@
 
 Modular NPC intelligence system built on [PIE](https://github.com/densanon-devs/plug-in-intelligence-engine). One small model + YAML knowledge sheets = unlimited characters with memory, trust, moods, gossip, and gated knowledge.
 
-Runs on 135M-1B parameter models locally. No cloud API needed.
+Runs on 135M-3B parameter models **locally on your machine**. No cloud API, no subscription, no internet required after model download.
 
-## What NPC Engine Adds to PIE
+## Benchmark Results
 
-PIE is a general-purpose LLM engine. NPC Engine is the game layer:
+| Model | Size | Quality | Speed | Best for |
+|---|---|---|---|---|
+| **Llama 3.2 3B** | 2GB | 56/56 (raw) | 11s/call | Turn-based games, quality-first |
+| **Qwen2.5 0.5B** | 469MB | 56/56 (with postgen) | 3s/call | Real-time games, speed-first |
 
-- **Cross-NPC gossip network** — Tell Pip a secret, Bess hears about it. Help Noah, Kael respects you more.
-- **Custom few-shot examples** — Define your world's dialogue style in YAML. No hardcoded examples.
-- **6 modular capabilities** — Scratchpad, trust, emotional state, goals, knowledge gates, gossip. All opt-in per NPC.
-- **Social graph** — Define who knows whom, relationship types, and what gossip passes between them.
-- **Trust ripple** — Reputation propagates through the social network.
+100-scenario stress test (adversarial, hallucination, meta-gaming, combat, edge cases): Qwen 87/100, Llama 78/100.
+
+System tests: **88/88 (100%)** across multi-turn conversations, quest lifecycle, social gossip, state persistence, combat reactions, and edge cases.
 
 ## Quick Start
 
-### Prerequisites
+### 1. Install
 
-- [PIE](https://github.com/densanon-devs/plug-in-intelligence-engine) as a sibling directory
-- A GGUF model in PIE's `models/` directory
+```bash
+# Clone both repos as siblings
+git clone https://github.com/densanon-devs/plug-in-intelligence-engine
+git clone https://github.com/densanon-devs/npc-engine
 
+# Install dependencies
+cd npc-engine
+pip install -r requirements.txt
+cd ../plug-in-intelligence-engine
+pip install -r requirements.txt
 ```
-LLCWork/
-  plug-in-intelligence-engine/    # PIE
-  npc-engine/                     # This repo
-```
 
-### Run
+### 2. Download a model
 
 ```bash
 cd npc-engine
+python download_model.py              # Qwen2.5 0.5B (469MB, fastest)
+python download_model.py --quality    # Llama 3.2 3B (2GB, best quality)
+python download_model.py --both       # Both
+```
+
+### 3. Run
+
+**CLI (interactive)**:
+```bash
 python -m npc_engine.cli
 
 [noah] > Hello, who are you?
-
   Noah [warm]: I am Noah, elder of Ashenvale. Welcome, traveler.
+```
+
+**REST API (for game engine integration)**:
+```bash
+python -m npc_engine.server
+# API docs at http://localhost:8000/docs
+```
+
+**From your game engine** (Unity, Godot, Unreal):
+```
+POST http://localhost:8000/generate
+{"prompt": "Hello!", "npc_id": "noah"}
+```
+
+Response includes dialogue, emotion (for animation), capability state (trust, mood), and quest data.
+
+## What NPC Engine Does
+
+- **Post-generation validator** — Built-in 11-layer safety net catches hallucination, identity bleed, meta-gaming, modern-world leakage, and more. A 469MB model matches a 2GB model's quality through smart post-processing.
+- **Cross-NPC gossip network** — Tell Pip a secret, Bess hears about it. Help Noah, Kael respects you more.
+- **6 modular capabilities** — Scratchpad (remembers player facts), trust (relationship tracking), emotional state (mood system), goals (personal motivations), knowledge gates (secrets unlocked by trust/quests), gossip (rumors from social network). All opt-in per NPC.
+- **Social graph** — Define who knows whom, relationship types, and what gossip passes between them.
+- **Trust ripple** — Reputation propagates through the social network.
+- **Quest system** — NPCs offer quests from their profiles, track player progress, boost trust on completion.
+- **State persistence** — Trust, mood, scratchpad survive between play sessions.
+- **9 emotion labels** — calm, compassionate, confused, excited, friendly, laughing, neutral, serious, warm. Stable enough for animation mapping.
+
+## Game Engine SDKs
+
+| Engine | Location | Integration |
+|---|---|---|
+| **Unity** | `sdks/unity/` | C# async/await, `NPCEngineClient.cs` |
+| **Godot** | `sdks/godot/` | GDScript signals, autoload singleton |
+| **Unreal** | `sdks/unreal/` | C++ BlueprintCallable, FHttpModule |
+
+All SDKs connect to the local REST API server.
+
+## CLI Commands
+
+```
+/npc              List all NPCs
+/npc <name>       Switch to an NPC
+/caps             Show capability states (trust, mood, scratchpad)
+/gossip           Show social graph
+/gossip <name>    Show what an NPC has heard
+/event <text>     Inject world event to all NPCs
+/graph            Show social connections
 ```
 
 ### Commands

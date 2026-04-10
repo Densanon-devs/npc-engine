@@ -190,6 +190,7 @@ def create_app():
         npc_id: str
         mood: str                   # e.g., "angry", "happy", "fearful"
         intensity: Optional[float] = 0.5
+        pin_turns: Optional[int] = 3  # how many turns the mood resists model override
 
     class KnowledgeRequest(BaseModel):
         npc_id: str
@@ -237,7 +238,7 @@ def create_app():
     async def set_mood(req: MoodRequest):
         """Set an NPC's mood directly. For cutscenes, world events, etc."""
         engine = get_engine()
-        result = engine.set_mood(req.npc_id, req.mood, req.intensity)
+        result = engine.set_mood(req.npc_id, req.mood, req.intensity, pin_turns=req.pin_turns)
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
         return result
