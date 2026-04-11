@@ -4,11 +4,35 @@
 
 You don't need to understand Python, pip, or terminals. Anima ships as a standalone binary that runs alongside your game.
 
-**Unity**: Import the SDK package → Setup Wizard downloads everything → Press Play. See the [README](README.md) for step-by-step.
+**Unity** (easiest):
+1. Import the SDK package into your Assets folder
+2. Setup wizard auto-opens — click "Download Everything" (~1GB)
+3. Add `NPCEngineServer` + `NPCEngineClient` to a GameObject
+4. Press Play — zero terminal commands
 
-**Godot / Unreal**: Download the SDK + Anima binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases). Drop into your project. The SDK auto-launches Anima when your game starts.
+**Godot**:
+1. Copy the addon into `addons/npc_engine/`
+2. Enable the plugin, run `setup_anima.gd` for guided download instructions
+3. Download the server binary + AI model into `addons/npc_engine/bin/`
+4. Add `NPCEngineServerManager` + `NPCEngineClient` nodes to your scene
 
-**When you ship your game**: The Anima binary goes into your build folder (Unity: `StreamingAssets/NPCEngine/`). It runs as an invisible background process — players never see a terminal or know it's there. No internet required.
+**Unreal**:
+1. Copy the plugin into `Plugins/NPCEngine/`
+2. Download the server binary + AI model into `Binaries/NPCEngine/`
+3. Enable the plugin, add `UNPCEngineClient` to your actors
+
+**When you ship your game**: The Anima binary goes into your build folder. It runs as an invisible background process — players never see a terminal or know it's there. No internet required.
+
+| Engine | Anima binary location in build |
+|---|---|
+| Unity | `StreamingAssets/NPCEngine/` (auto-included) |
+| Godot | `addons/npc_engine/bin/` (include in export) |
+| Unreal | `Binaries/NPCEngine/` (include in package) |
+
+See the [README](README.md) for detailed step-by-step with code examples, or the per-SDK READMEs:
+- [Unity SDK README](sdks/unity/NPCEngine/README.md) (not yet created — see main README)
+- [Godot SDK README](sdks/godot/addons/npc_engine/README.md)
+- [Unreal SDK README](sdks/unreal/NPCEngine/README.md)
 
 Everything below is for tuning and customization. You don't need any of it to get started.
 

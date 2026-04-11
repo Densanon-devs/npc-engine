@@ -46,18 +46,63 @@ When you build your Unity project, `StreamingAssets/NPCEngine/` ships with the g
 
 ## Quick Start — Godot
 
-1. Copy `sdks/godot/addons/npc_engine/` into your project's `addons/` folder
-2. Download the server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into your project
-3. Enable the plugin in Project Settings
-4. Add `NPCEngineServerManager` + `NPCEngineClient` nodes to your scene
-5. Set the `server_binary_path` to where you placed the binary
+1. **Copy the addon** — `sdks/godot/addons/npc_engine/` into your project's `addons/` folder
+2. **Enable the plugin** — Project > Project Settings > Plugins > "Anima" > Enable
+3. **Run the setup script** — Open `addons/npc_engine/setup_anima.gd` in the Script Editor > File > Run. It checks what's installed and prints download instructions.
+4. **Download the server + model** — Follow the printed links to grab the Anima binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases) and the AI model from [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF). Place both in `addons/npc_engine/bin/`
+5. **Add nodes to your scene** — `NPCEngineServerManager` (set `server_binary_path` to your binary) + use the `NPCEngine` autoload singleton for API calls
+
+```gdscript
+# Await-based (cleanest)
+func _ready():
+    var result = await NPCEngine.generate_async("Hello, who are you?", "noah")
+    $DialogueLabel.text = result.parsed.dialogue   # "I am Noah, elder of Ashenvale."
+    $EmotionLabel.text = result.parsed.emotion      # "warm"
+
+# Signal-based (fire and forget)
+func _ready():
+    NPCEngine.npc_response_received.connect(_on_response)
+    NPCEngine.generate("Hello!", "noah")
+
+func _on_response(result):
+    $DialogueLabel.text = result.parsed.dialogue
+```
+
+### Shipping your Godot game
+
+Export your project normally. Include the `addons/npc_engine/bin/` folder in your export (server binary + model). The `NPCEngineServerManager` auto-launches Anima as a background process when the game starts.
 
 ## Quick Start — Unreal
 
-1. Copy `sdks/unreal/NPCEngine/` into your project's `Plugins/` folder
-2. Download the Anima server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into `Binaries/`
-3. Enable the plugin in Edit > Plugins
-4. Use `UNPCEngineClient` in C++ or Blueprint nodes for dialogue
+1. **Copy the plugin** — `sdks/unreal/NPCEngine/` into your project's `Plugins/` folder
+2. **Download the server + model** — Grab the Anima binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases) and the AI model from [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF). Place in `Binaries/NPCEngine/`
+3. **Enable the plugin** — Edit > Plugins > search "Anima" > Enable
+4. **Add to your .uproject** — `{"Name": "NPCEngine", "Enabled": true}` in the Plugins array
+5. **Use in C++ or Blueprint** — Create a `UNPCEngineClient`, bind response delegates, call `Generate`
+
+```cpp
+// C++ usage
+void AMyActor::BeginPlay()
+{
+    NPCClient = NewObject<UNPCEngineClient>(this);
+    NPCClient->OnGenerateResponse.AddDynamic(this, &AMyActor::OnDialogue);
+}
+
+void AMyActor::TalkToNPC(const FString& Prompt)
+{
+    NPCClient->Generate(Prompt, TEXT("noah"));
+}
+
+void AMyActor::OnDialogue(const FNPCGenerateResponse& Response)
+{
+    // Response.Parsed.Dialogue = "I am Noah, elder of Ashenvale."
+    // Response.Parsed.Emotion  = "warm"  (drive animation state machine)
+}
+```
+
+### Shipping your Unreal game
+
+Package your project normally. Include `Binaries/NPCEngine/` in your build. Launch the Anima binary as a subprocess in your GameMode's `BeginPlay`. Players never see a terminal.
 
 ## Quick Start — Python developers
 
