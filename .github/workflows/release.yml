@@ -160,10 +160,39 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: sdk-packages
-          path: dist/
+          path: artifacts/
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p dist
+          cp artifacts/sdk-packages/*.zip dist/ 2>/dev/null || true
+          # Create individual server zips for auto-download
+          cd artifacts
+          for platform in server-windows server-linux server-macos; do
+            if [ -d "$platform" ]; then
+              zip -r "../dist/NPCEngine-${platform}-${{ github.ref_name }}.zip" "$platform/"
+            fi
+          done
 
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
           generate_release_notes: true
+          body: |
+            ## NPC Engine ${{ github.ref_name }}
+
+            ### For Unity developers
+            1. Import `NPCEngine-Unity-*.zip` into your project
+            2. Open Window → NPC Engine → Setup Wizard
+            3. Click "Download NPC Engine Server"
+            4. Press Play — NPCs are ready
+
+            ### For Godot developers
+            1. Extract `NPCEngine-Godot-*.zip` into your project's `addons/` folder
+            2. Download the server binary for your platform
+            3. Set the binary path in the autoload settings
+
+            ### Server binaries (for manual setup)
+            - `NPCEngine-server-windows-*.zip` — Windows x64
+            - `NPCEngine-server-linux-*.zip` — Linux x64
+            - `NPCEngine-server-macos-*.zip` — macOS (universal)

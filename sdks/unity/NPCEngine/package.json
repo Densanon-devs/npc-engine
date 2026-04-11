@@ -1,17 +1,28 @@
 {
   "name": "com.npcengine.sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "NPC Engine",
-  "description": "AI-powered NPC dialogue with trust, gossip, emotions, and quests",
+  "description": "Local AI-powered NPC dialogue with trust, gossip, emotions, quests, and 6 modular capabilities. No cloud, no subscription. Runs on 469MB-2GB models.",
   "unity": "2021.3",
   "author": {
-    "name": "NPC Engine"
+    "name": "Densanon",
+    "url": "https://github.com/Densanon-devs/npc-engine"
   },
+  "keywords": [
+    "npc",
+    "dialogue",
+    "ai",
+    "llm",
+    "conversation",
+    "rpg",
+    "quest",
+    "gossip"
+  ],
   "samples": [
     {
-      "displayName": "Basic Example",
-      "description": "Simple MonoBehaviour showing NPC listing, switching, and dialogue generation.",
-      "path": "Samples~/NPCEngineExample.cs"
+      "displayName": "Basic Dialogue",
+      "description": "Complete dialogue UI with NPC switching, events, and quest integration.",
+      "path": "Samples~/BasicDialogue.cs"
     }
   ]
 }
