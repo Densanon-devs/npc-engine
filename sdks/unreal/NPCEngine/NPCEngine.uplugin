@@ -2,10 +2,10 @@
     "FileVersion": 3,
     "Version": 1,
     "VersionName": "0.1.0",
-    "FriendlyName": "NPC Engine",
-    "Description": "AI-powered NPC dialogue with trust, gossip, emotions, and quests",
+    "FriendlyName": "Anima",
+    "Description": "Every NPC has a soul. AI-powered dialogue with trust, gossip, emotions, and quests.",
     "Category": "AI",
-    "CreatedBy": "NPC Engine",
+    "CreatedBy": "Densanon",
     "CanContainContent": true,
     "IsBetaVersion": true,
     "Modules": [

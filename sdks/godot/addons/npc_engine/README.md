@@ -1,11 +1,18 @@
-# NPC Engine - Godot SDK
+# Anima — Godot Plugin
 
-GDScript HTTP client for the NPC Engine REST API. Provides AI-powered NPC dialogue with trust, gossip, emotions, and quests for Godot 4.2+.
+*Every NPC has a soul.*
 
-## Installation
+GDScript client for the Anima NPC system. AI-powered dialogue with trust, gossip, emotions, and quests for Godot 4.2+.
 
-1. Copy the `addons/npc_engine/` folder into your Godot project's `addons/` directory.
-2. Open **Project > Project Settings > Plugins** and enable **NPC Engine**.
+## Setup
+
+1. Copy `addons/npc_engine/` into your Godot project's `addons/` directory
+2. **Project > Project Settings > Plugins** > enable **Anima**
+3. Download the Anima server binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases)
+4. Place it in `res://addons/npc_engine/bin/` (or anywhere, then set the path)
+5. Download the AI model from [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF) into `bin/models/`
+
+Or run `setup_anima.gd` from the Script Editor (File > Run) for guided instructions.
 
 This registers a global autoload singleton named `NPCEngine` (an `NPCEngineClient` instance).
 

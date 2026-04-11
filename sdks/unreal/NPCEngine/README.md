@@ -1,8 +1,30 @@
-# NPC Engine - Unreal Engine Plugin
+# Anima — Unreal Engine Plugin
 
-HTTP client wrapper for the NPC Engine REST API. Provides Blueprint and C++ access to AI-powered NPC dialogue with trust, gossip, emotions, and quests.
+*Every NPC has a soul.*
 
-## Installation
+Blueprint and C++ client for the Anima NPC system. AI-powered dialogue with trust, gossip, emotions, and quests.
+
+## Setup
+
+### 1. Download Anima server
+
+Download the Anima server binary for your platform from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases). Place it in your project:
+
+```
+YourProject/
+  Binaries/
+    NPCEngine/
+      npc-engine.exe          (Windows)
+      models/
+        qwen2.5-0.5b-instruct-q4_k_m.gguf    (from HuggingFace)
+      data/
+        worlds/                (your NPC profiles)
+      config.yaml
+```
+
+Download the AI model (~469MB) from [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF).
+
+### 2. Install the plugin
 
 1. Copy the `NPCEngine/` folder into your project's `Plugins/` directory.
 2. Add `"NPCEngine"` to your `.uproject` file's `Plugins` array:
@@ -26,10 +48,16 @@ PublicDependencyModuleNames.Add("NPCEngine");
 
 4. Regenerate project files and build.
 
+### 3. Launch Anima with your game
+
+In your GameMode's `BeginPlay`, launch the server binary as a subprocess. See the [full documentation](https://github.com/Densanon-devs/npc-engine) for details.
+
+When shipping, include the `Binaries/NPCEngine/` folder in your build. The binary runs as an invisible background process — players never see it.
+
 ## Requirements
 
 - Unreal Engine 5.x
-- NPC Engine server running on `localhost:8000` (configurable)
+- Anima server binary (from GitHub Releases) running on `localhost:8000`
 
 ## Blueprint Usage
 
