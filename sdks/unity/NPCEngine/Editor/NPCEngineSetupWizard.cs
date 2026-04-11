@@ -43,7 +43,7 @@ namespace NPCEngine.Editor
         [MenuItem("Window/NPC Engine/Setup Wizard")]
         public static void ShowWindow()
         {
-            var window = GetWindow<NPCEngineSetupWizard>("NPC Engine Setup");
+            var window = GetWindow<NPCEngineSetupWizard>("Anima Setup");
             window.minSize = new Vector2(480, 400);
             window.RefreshStatus();
         }
@@ -121,7 +121,10 @@ namespace NPCEngine.Editor
 
             // Header
             var headerStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 18 };
-            GUILayout.Label("NPC Engine Setup", headerStyle);
+            GUILayout.Label("Anima Setup", headerStyle);
+            GUILayout.Space(2);
+            var tagline = new GUIStyle(EditorStyles.label) { fontStyle = FontStyle.Italic };
+            GUILayout.Label("Every NPC has a soul.", tagline);
             GUILayout.Space(5);
             GUILayout.Label(
                 "Local AI-powered NPCs with memory, trust, gossip, and quests.\n" +
@@ -191,7 +194,7 @@ namespace NPCEngine.Editor
                         fontSize = 14,
                         normal = { textColor = new Color(0.2f, 0.8f, 0.2f) }
                     };
-                    GUILayout.Label("Ready! Press Play to start talking to NPCs.", readyStyle);
+                    GUILayout.Label("Anima is ready. Press Play to bring your NPCs to life.", readyStyle);
 
                     GUILayout.Space(10);
                     GUILayout.Label(

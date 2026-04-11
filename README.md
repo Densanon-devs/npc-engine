@@ -1,8 +1,10 @@
-# NPC Engine
+# Anima
 
-Modular NPC intelligence system built on [PIE](https://github.com/densanon-devs/plug-in-intelligence-engine). One small model + YAML knowledge sheets = unlimited characters with memory, trust, moods, gossip, and gated knowledge.
+*Every NPC has a soul.*
 
-Runs on 135M-3B parameter models **locally on your machine**. No cloud API, no subscription, no internet required after model download.
+Local AI-powered NPC intelligence system. One small model + YAML knowledge sheets = unlimited characters with memory, trust, moods, gossip, and gated knowledge. NPCs that remember you, react to you, gossip about you, and guard secrets until they trust you.
+
+Runs on 469MB-2GB models **locally on your machine**. No cloud, no subscription, no internet after setup. Built on [PIE](https://github.com/densanon-devs/plug-in-intelligence-engine).
 
 ## Benchmark Results
 
@@ -19,9 +21,9 @@ System tests: **88/88 (100%)** across multi-turn conversations, quest lifecycle,
 
 1. **Import the SDK** — Copy `sdks/unity/NPCEngine/` into your Unity project's `Assets/` folder (or import from the [Releases](https://github.com/Densanon-devs/npc-engine/releases) page)
 2. **Setup wizard opens automatically** — Go to `Window > NPC Engine > Setup Wizard` if it doesn't
-3. **Click "Download Everything"** — Downloads the server binary + AI model (~1GB total)
-4. **Add components to a GameObject** — `NPCEngineServer` (auto-launches the engine) + `NPCEngineClient` (all your API calls)
-5. **Press Play** — The server starts in the background, NPCs are ready
+3. **Click "Download Everything"** — Downloads the Anima server binary + AI model (~1GB total)
+4. **Add components to a GameObject** — `NPCEngineServer` (auto-launches Anima) + `NPCEngineClient` (all your API calls)
+5. **Press Play** — Anima starts in the background, NPCs are ready
 
 ```csharp
 // Talk to an NPC
@@ -40,7 +42,7 @@ See `Samples~/BasicDialogue.cs` for a complete copy-paste example.
 
 ### Shipping your game
 
-When you build your Unity project, `StreamingAssets/NPCEngine/` ships with the game automatically. The `NPCEngineServer` component launches `npc-engine.exe` as a background process — players never see it. No internet needed, no cloud, no subscription.
+When you build your Unity project, `StreamingAssets/NPCEngine/` ships with the game automatically. The `NPCEngineServer` component launches the Anima server as a background process — players never see it. No internet needed, no cloud, no subscription.
 
 ## Quick Start — Godot
 
@@ -53,7 +55,7 @@ When you build your Unity project, `StreamingAssets/NPCEngine/` ships with the g
 ## Quick Start — Unreal
 
 1. Copy `sdks/unreal/NPCEngine/` into your project's `Plugins/` folder
-2. Download the server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into `Binaries/`
+2. Download the Anima server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into `Binaries/`
 3. Enable the plugin in Edit > Plugins
 4. Use `UNPCEngineClient` in C++ or Blueprint nodes for dialogue
 
@@ -79,7 +81,7 @@ python -m npc_engine.cli
   Noah [warm]: I am Noah, elder of Ashenvale. Welcome, traveler.
 ```
 
-## What NPC Engine Does
+## What Anima Does
 
 - **Zero-config for game devs** — Import SDK, click download, press play. No Python, no terminal, no cloud setup.
 - **Post-generation validator** — Built-in 11-layer safety net catches hallucination, identity bleed, meta-gaming, modern-world leakage, and more. A 469MB model matches a 2GB model's quality.
@@ -99,7 +101,7 @@ python -m npc_engine.cli
 | **Godot** | `sdks/godot/` | Copy addon + download binary | GDScript signals, autoload singleton |
 | **Unreal** | `sdks/unreal/` | Copy plugin + download binary | C++ BlueprintCallable, FHttpModule |
 
-All SDKs launch the NPC Engine as a local background process and connect via HTTP. The engine runs on the player's machine — no server hosting required.
+All SDKs launch Anima as a local background process and connect via HTTP. The engine runs on the player's machine — no server hosting required.
 
 ## CLI Commands (for testing)
 
@@ -467,7 +469,7 @@ Every mutation persists to disk, propagates through the gossip network when rele
 Player Input
     |
     v
-NPCEngine.process()
+Anima.process()
     |
     v
 PIE Pipeline (routing, experts, capabilities, generation)
@@ -479,7 +481,7 @@ Post-Generation
     └── Capability Updates (scratchpad, mood, trust, gates)
 ```
 
-NPC Engine does NOT modify PIE. It composes around it:
+Anima does NOT modify PIE. It composes around it:
 - Registers capabilities into PIE's `CapabilityRegistry` (class-level, auto-registers on import)
 - Injects custom examples into PIE's `ExpertRouter.experts` dict
 - Wraps `PIE.process()` with gossip propagation

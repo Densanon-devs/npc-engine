@@ -1,14 +1,14 @@
-# Getting the Best Results from NPC Engine
+# Getting the Best Results from Anima
 
 ## For Game Developers (Unity / Godot / Unreal)
 
-You don't need to understand Python, pip, or terminals. The NPC Engine ships as a standalone binary that runs alongside your game.
+You don't need to understand Python, pip, or terminals. Anima ships as a standalone binary that runs alongside your game.
 
 **Unity**: Import the SDK package → Setup Wizard downloads everything → Press Play. See the [README](README.md) for step-by-step.
 
-**Godot / Unreal**: Download the SDK + server binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases). Drop into your project. The SDK auto-launches the server when your game starts.
+**Godot / Unreal**: Download the SDK + Anima binary from [GitHub Releases](https://github.com/Densanon-devs/npc-engine/releases). Drop into your project. The SDK auto-launches Anima when your game starts.
 
-**When you ship your game**: The NPC Engine binary goes into your build folder (Unity: `StreamingAssets/NPCEngine/`). It runs as an invisible background process — players never see a terminal or know it's there. No internet required.
+**When you ship your game**: The Anima binary goes into your build folder (Unity: `StreamingAssets/NPCEngine/`). It runs as an invisible background process — players never see a terminal or know it's there. No internet required.
 
 Everything below is for tuning and customization. You don't need any of it to get started.
 

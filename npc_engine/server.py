@@ -46,9 +46,9 @@ def create_app():
         sys.exit(1)
 
     app = FastAPI(
-        title="NPC Engine API",
-        description="Game integration API for NPC dialogue with gossip, trust, and capabilities",
-        version="0.1.0",
+        title="Anima",
+        description="Every NPC has a soul. Game integration API for NPC dialogue with gossip, trust, and capabilities.",
+        version="0.2.0",
     )
 
     app.add_middleware(
@@ -284,7 +284,7 @@ def main():
         print("uvicorn not installed. Install with: pip install uvicorn")
         sys.exit(1)
 
-    print(f"\n  NPC Engine API Server")
+    print(f"\n  Anima — Every NPC has a soul")
     print(f"  http://{args.host}:{args.port}")
     print(f"  Docs: http://{args.host}:{args.port}/docs\n")
 

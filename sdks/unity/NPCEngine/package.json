@@ -1,8 +1,8 @@
 {
   "name": "com.npcengine.sdk",
   "version": "0.2.0",
-  "displayName": "NPC Engine",
-  "description": "Local AI-powered NPC dialogue with trust, gossip, emotions, quests, and 6 modular capabilities. No cloud, no subscription. Runs on 469MB-2GB models.",
+  "displayName": "Anima — NPC Engine",
+  "description": "Every NPC has a soul. Local AI-powered NPC dialogue with trust, gossip, emotions, quests, and 6 modular capabilities. No cloud, no subscription.",
   "unity": "2021.3",
   "author": {
     "name": "Densanon",
