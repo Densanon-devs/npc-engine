@@ -159,7 +159,7 @@ void UNPCEngineClient::Generate(const FString& Prompt, const FString& NpcId)
 
 void UNPCEngineClient::ListNPCs()
 {
-    SendRequest(TEXT("GET"), TEXT("/npcs"), TEXT(""),
+    SendRequest(TEXT("GET"), TEXT("/npc/list"), TEXT(""),
         [this](TSharedPtr<FJsonObject> Json)
         {
             FNPCListResponse Response;
@@ -201,7 +201,7 @@ void UNPCEngineClient::SwitchNPC(const FString& NpcId)
     TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
     Body->SetStringField(TEXT("npc_id"), NpcId);
 
-    SendRequest(TEXT("POST"), TEXT("/npcs/switch"), JsonObjectToString(Body),
+    SendRequest(TEXT("POST"), TEXT("/npc/switch"), JsonObjectToString(Body),
         [this](TSharedPtr<FJsonObject> Json)
         {
             FNPCInfo Info;
@@ -255,7 +255,7 @@ void UNPCEngineClient::AdjustTrust(const FString& NpcId, int32 Delta, const FStr
         Body->SetStringField(TEXT("reason"), Reason);
     }
 
-    SendRequest(TEXT("POST"), TEXT("/trust/adjust"), JsonObjectToString(Body),
+    SendRequest(TEXT("POST"), TEXT("/npc/trust"), JsonObjectToString(Body),
         [this](TSharedPtr<FJsonObject> Json)
         {
             FNPCTrustResponse Response;
@@ -276,7 +276,7 @@ void UNPCEngineClient::SetMood(const FString& NpcId, const FString& Mood, float 
     Body->SetStringField(TEXT("mood"), Mood);
     Body->SetNumberField(TEXT("intensity"), Intensity);
 
-    SendRequest(TEXT("POST"), TEXT("/mood/set"), JsonObjectToString(Body),
+    SendRequest(TEXT("POST"), TEXT("/npc/mood"), JsonObjectToString(Body),
         [this](TSharedPtr<FJsonObject> Json)
         {
             FNPCMoodResponse Response;
@@ -297,7 +297,7 @@ void UNPCEngineClient::AddScratchpad(const FString& NpcId, const FString& Text, 
     Body->SetNumberField(TEXT("importance"), Importance);
 
     // Fire-and-forget; no dedicated delegate for scratchpad.
-    SendRequest(TEXT("POST"), TEXT("/scratchpad/add"), JsonObjectToString(Body),
+    SendRequest(TEXT("POST"), TEXT("/npc/scratchpad"), JsonObjectToString(Body),
         [](TSharedPtr<FJsonObject> /*Json*/)
         {
             // Success — no broadcast needed.

@@ -78,12 +78,12 @@ func generate(prompt: String, npc_id: String = "") -> void:
 
 ## Request the list of all NPCs in the current world.
 func list_npcs() -> void:
-	_get("/npcs", _on_list_npcs_response)
+	_get("/npc/list", _on_list_npcs_response)
 
 
 ## Switch the active NPC to [param npc_id].
 func switch_npc(npc_id: String) -> void:
-	_post("/npcs/switch", {"npc_id": npc_id}, _on_switch_npc_response)
+	_post("/npc/switch", {"npc_id": npc_id}, _on_switch_npc_response)
 
 
 ## Inject a world event. If [param npc_id] is empty, it targets all NPCs.
@@ -99,17 +99,17 @@ func adjust_trust(npc_id: String, delta: int, reason: String = "") -> void:
 	var body: Dictionary = {"npc_id": npc_id, "delta": delta}
 	if reason != "":
 		body["reason"] = reason
-	_post("/trust/adjust", body, _on_trust_response)
+	_post("/npc/trust", body, _on_trust_response)
 
 
 ## Set an NPC's mood.
 func set_mood(npc_id: String, mood: String, intensity: float = 0.5) -> void:
-	_post("/mood/set", {"npc_id": npc_id, "mood": mood, "intensity": intensity}, _on_mood_response)
+	_post("/npc/mood", {"npc_id": npc_id, "mood": mood, "intensity": intensity}, _on_mood_response)
 
 
 ## Add a scratchpad entry for an NPC (short-term memory).
 func add_scratchpad(npc_id: String, text: String, importance: float = 0.7) -> void:
-	_post("/scratchpad/add", {"npc_id": npc_id, "text": text, "importance": importance}, func(_d: Dictionary) -> void:
+	_post("/npc/scratchpad", {"npc_id": npc_id, "text": text, "importance": importance}, func(_d: Dictionary) -> void:
 		pass  ## No specific signal for scratchpad; request_failed will fire on error.
 	)
 
@@ -154,7 +154,7 @@ func generate_async(prompt: String, npc_id: String = "") -> NPCModels.GenerateRe
 
 ## List NPCs and return the result (use with [code]await[/code]).
 func list_npcs_async() -> NPCModels.NPCListResult:
-	var data := await _get_async("/npcs")
+	var data := await _get_async("/npc/list")
 	if data.is_empty():
 		return null
 

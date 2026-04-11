@@ -60,7 +60,7 @@ namespace NPCEngine
         /// <returns>An <see cref="NPCListResponse"/> containing NPC info.</returns>
         public async Task<NPCListResponse> ListNPCsAsync()
         {
-            string json = await GetAsync("/npcs");
+            string json = await GetAsync("/npc/list");
             if (json == null) return null;
             return JsonUtility.FromJson<NPCListResponse>(json);
         }
@@ -73,7 +73,7 @@ namespace NPCEngine
         public async Task<NPCInfo> SwitchNPCAsync(string npcId)
         {
             var body = JsonUtility.ToJson(new SwitchNPCRequest { npc_id = npcId });
-            string json = await PostAsync("/npcs/switch", body);
+            string json = await PostAsync("/npc/switch", body);
             if (json == null) return null;
             return JsonUtility.FromJson<NPCInfo>(json);
         }
@@ -87,10 +87,10 @@ namespace NPCEngine
         public async Task<EventResponse> InjectEventAsync(string description, string npcId = null)
         {
             var body = npcId != null
-                ? JsonUtility.ToJson(new InjectEventRequest { event_description = description, npc_id = npcId })
-                : JsonUtility.ToJson(new InjectEventRequestSimple { event_description = description });
+                ? JsonUtility.ToJson(new InjectEventRequest { description = description, npc_id = npcId })
+                : JsonUtility.ToJson(new InjectEventRequestSimple { description = description });
 
-            string json = await PostAsync("/event", body);
+            string json = await PostAsync("/events/inject", body);
             if (json == null) return null;
             return JsonUtility.FromJson<EventResponse>(json);
         }
@@ -111,7 +111,7 @@ namespace NPCEngine
                 reason = reason
             });
 
-            string json = await PostAsync("/trust", body);
+            string json = await PostAsync("/npc/trust", body);
             if (json == null) return null;
             return JsonUtility.FromJson<TrustResponse>(json);
         }
@@ -132,7 +132,7 @@ namespace NPCEngine
                 intensity = intensity
             });
 
-            string json = await PostAsync("/mood", body);
+            string json = await PostAsync("/npc/mood", body);
             if (json == null) return null;
             return JsonUtility.FromJson<MoodResponse>(json);
         }
@@ -152,7 +152,7 @@ namespace NPCEngine
                 importance = importance
             });
 
-            await PostAsync("/scratchpad", body);
+            await PostAsync("/npc/scratchpad", body);
         }
 
         /// <summary>
@@ -170,7 +170,7 @@ namespace NPCEngine
                 given_by = givenBy
             });
 
-            await PostAsync("/quest/accept", body);
+            await PostAsync("/quests/accept", body);
         }
 
         /// <summary>
@@ -180,7 +180,7 @@ namespace NPCEngine
         public async Task CompleteQuestAsync(string questId)
         {
             var body = JsonUtility.ToJson(new CompleteQuestRequest { quest_id = questId });
-            await PostAsync("/quest/complete", body);
+            await PostAsync("/quests/complete", body);
         }
 
         /// <summary>
@@ -275,14 +275,14 @@ namespace NPCEngine
         [System.Serializable]
         private class InjectEventRequest
         {
-            public string event_description;
+            public string description;
             public string npc_id;
         }
 
         [System.Serializable]
         private class InjectEventRequestSimple
         {
-            public string event_description;
+            public string description;
         }
 
         [System.Serializable]
