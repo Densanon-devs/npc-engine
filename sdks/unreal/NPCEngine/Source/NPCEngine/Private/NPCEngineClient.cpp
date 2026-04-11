@@ -269,12 +269,13 @@ void UNPCEngineClient::AdjustTrust(const FString& NpcId, int32 Delta, const FStr
         });
 }
 
-void UNPCEngineClient::SetMood(const FString& NpcId, const FString& Mood, float Intensity)
+void UNPCEngineClient::SetMood(const FString& NpcId, const FString& Mood, float Intensity, int32 PinTurns)
 {
     TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
     Body->SetStringField(TEXT("npc_id"), NpcId);
     Body->SetStringField(TEXT("mood"), Mood);
     Body->SetNumberField(TEXT("intensity"), Intensity);
+    Body->SetNumberField(TEXT("pin_turns"), PinTurns);
 
     SendRequest(TEXT("POST"), TEXT("/npc/mood"), JsonObjectToString(Body),
         [this](TSharedPtr<FJsonObject> Json)

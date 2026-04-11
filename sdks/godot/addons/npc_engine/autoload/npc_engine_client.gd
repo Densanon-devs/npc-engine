@@ -103,8 +103,8 @@ func adjust_trust(npc_id: String, delta: int, reason: String = "") -> void:
 
 
 ## Set an NPC's mood.
-func set_mood(npc_id: String, mood: String, intensity: float = 0.5) -> void:
-	_post("/npc/mood", {"npc_id": npc_id, "mood": mood, "intensity": intensity}, _on_mood_response)
+func set_mood(npc_id: String, mood: String, intensity: float = 0.5, pin_turns: int = 3) -> void:
+	_post("/npc/mood", {"npc_id": npc_id, "mood": mood, "intensity": intensity, "pin_turns": pin_turns}, _on_mood_response)
 
 
 ## Add a scratchpad entry for an NPC (short-term memory).

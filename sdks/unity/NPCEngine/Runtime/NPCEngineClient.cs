@@ -123,13 +123,14 @@ namespace NPCEngine
         /// <param name="mood">The mood to set (e.g., "happy", "angry", "fearful").</param>
         /// <param name="intensity">Mood intensity from 0.0 to 1.0.</param>
         /// <returns>A <see cref="MoodResponse"/> showing old and new mood.</returns>
-        public async Task<MoodResponse> SetMoodAsync(string npcId, string mood, float intensity = 0.5f)
+        public async Task<MoodResponse> SetMoodAsync(string npcId, string mood, float intensity = 0.5f, int pinTurns = 3)
         {
             var body = JsonUtility.ToJson(new SetMoodRequest
             {
                 npc_id = npcId,
                 mood = mood,
-                intensity = intensity
+                intensity = intensity,
+                pin_turns = pinTurns
             });
 
             string json = await PostAsync("/npc/mood", body);
@@ -299,6 +300,7 @@ namespace NPCEngine
             public string npc_id;
             public string mood;
             public float intensity;
+            public int pin_turns;
         }
 
         [System.Serializable]

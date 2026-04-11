@@ -94,7 +94,7 @@ public:
 
     /** Set the mood of an NPC. */
     UFUNCTION(BlueprintCallable, Category = "NPC Engine")
-    void SetMood(const FString& NpcId, const FString& Mood, float Intensity = 0.5f);
+    void SetMood(const FString& NpcId, const FString& Mood, float Intensity = 0.5f, int32 PinTurns = 3);
 
     /** Add a scratchpad entry for an NPC. */
     UFUNCTION(BlueprintCallable, Category = "NPC Engine")
