@@ -15,77 +15,93 @@ Runs on 135M-3B parameter models **locally on your machine**. No cloud API, no s
 
 System tests: **88/88 (100%)** across multi-turn conversations, quest lifecycle, social gossip, state persistence, combat reactions, and edge cases.
 
-## Quick Start
+## Quick Start — Unity (no terminal needed)
 
-### 1. Install
+1. **Import the SDK** — Copy `sdks/unity/NPCEngine/` into your Unity project's `Assets/` folder (or import from the [Releases](https://github.com/Densanon-devs/npc-engine/releases) page)
+2. **Setup wizard opens automatically** — Go to `Window > NPC Engine > Setup Wizard` if it doesn't
+3. **Click "Download Everything"** — Downloads the server binary + AI model (~1GB total)
+4. **Add components to a GameObject** — `NPCEngineServer` (auto-launches the engine) + `NPCEngineClient` (all your API calls)
+5. **Press Play** — The server starts in the background, NPCs are ready
+
+```csharp
+// Talk to an NPC
+var response = await client.GenerateAsync("Hello, who are you?", "noah");
+dialogueText.text = response.parsed.dialogue;   // "I am Noah, elder of Ashenvale."
+animController.SetEmotion(response.parsed.emotion); // "warm"
+
+// Inject a world event (dragon attack, building destroyed, etc.)
+await client.InjectEventAsync("A dragon was spotted over the forbidden forest!");
+
+// Complete a quest (triggers trust boost + gossip propagation)
+await client.CompleteQuestAsync("bitter_well");
+```
+
+See `Samples~/BasicDialogue.cs` for a complete copy-paste example.
+
+### Shipping your game
+
+When you build your Unity project, `StreamingAssets/NPCEngine/` ships with the game automatically. The `NPCEngineServer` component launches `npc-engine.exe` as a background process — players never see it. No internet needed, no cloud, no subscription.
+
+## Quick Start — Godot
+
+1. Copy `sdks/godot/addons/npc_engine/` into your project's `addons/` folder
+2. Download the server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into your project
+3. Enable the plugin in Project Settings
+4. Add `NPCEngineServerManager` + `NPCEngineClient` nodes to your scene
+5. Set the `server_binary_path` to where you placed the binary
+
+## Quick Start — Unreal
+
+1. Copy `sdks/unreal/NPCEngine/` into your project's `Plugins/` folder
+2. Download the server binary from [Releases](https://github.com/Densanon-devs/npc-engine/releases) into `Binaries/`
+3. Enable the plugin in Edit > Plugins
+4. Use `UNPCEngineClient` in C++ or Blueprint nodes for dialogue
+
+## Quick Start — Python developers
+
+If you're building your own integration or running the server directly:
 
 ```bash
-# Clone both repos as siblings
 git clone https://github.com/densanon-devs/plug-in-intelligence-engine
 git clone https://github.com/densanon-devs/npc-engine
+cd npc-engine && pip install -r requirements.txt
+cd ../plug-in-intelligence-engine && pip install -r requirements.txt
+cd ../npc-engine
 
-# Install dependencies
-cd npc-engine
-pip install -r requirements.txt
-cd ../plug-in-intelligence-engine
-pip install -r requirements.txt
-```
-
-### 2. Download a model
-
-```bash
-cd npc-engine
 python download_model.py              # Qwen2.5 0.5B (469MB, fastest)
-python download_model.py --quality    # Llama 3.2 3B (2GB, best quality)
-python download_model.py --both       # Both
+python -m npc_engine.server           # REST API at localhost:8000
 ```
 
-### 3. Run
-
-**CLI (interactive)**:
+Interactive CLI for testing:
 ```bash
 python -m npc_engine.cli
-
 [noah] > Hello, who are you?
   Noah [warm]: I am Noah, elder of Ashenvale. Welcome, traveler.
 ```
 
-**REST API (for game engine integration)**:
-```bash
-python -m npc_engine.server
-# API docs at http://localhost:8000/docs
-```
-
-**From your game engine** (Unity, Godot, Unreal):
-```
-POST http://localhost:8000/generate
-{"prompt": "Hello!", "npc_id": "noah"}
-```
-
-Response includes dialogue, emotion (for animation), capability state (trust, mood), and quest data.
-
 ## What NPC Engine Does
 
-- **Post-generation validator** — Built-in 11-layer safety net catches hallucination, identity bleed, meta-gaming, modern-world leakage, and more. A 469MB model matches a 2GB model's quality through smart post-processing.
+- **Zero-config for game devs** — Import SDK, click download, press play. No Python, no terminal, no cloud setup.
+- **Post-generation validator** — Built-in 11-layer safety net catches hallucination, identity bleed, meta-gaming, modern-world leakage, and more. A 469MB model matches a 2GB model's quality.
 - **Cross-NPC gossip network** — Tell Pip a secret, Bess hears about it. Help Noah, Kael respects you more.
-- **6 modular capabilities** — Scratchpad (remembers player facts), trust (relationship tracking), emotional state (mood system), goals (personal motivations), knowledge gates (secrets unlocked by trust/quests), gossip (rumors from social network). All opt-in per NPC.
-- **Social graph** — Define who knows whom, relationship types, and what gossip passes between them.
-- **Trust ripple** — Reputation propagates through the social network.
-- **Quest system** — NPCs offer quests from their profiles, track player progress, boost trust on completion.
+- **6 modular capabilities** — Scratchpad (remembers player facts), trust (relationship tracking), emotional state (mood system), goals (personal motivations), knowledge gates (secrets unlocked by trust/quests), gossip (rumors from social network). All opt-in per NPC via YAML.
+- **Social graph + trust ripple** — Reputation propagates through connections.
+- **Quest system** — NPCs offer quests, track progress, boost trust on completion, gossip about it.
 - **State persistence** — Trust, mood, scratchpad survive between play sessions.
-- **9 emotion labels** — calm, compassionate, confused, excited, friendly, laughing, neutral, serious, warm. Stable enough for animation mapping.
+- **Emotion labels for animation** — calm, compassionate, confused, excited, friendly, laughing, neutral, serious, warm. Consistent enough for animation state machines.
+- **Ships with your game** — Standalone binary runs as a background process. No internet, no subscription, no player-visible setup.
 
 ## Game Engine SDKs
 
-| Engine | Location | Integration |
-|---|---|---|
-| **Unity** | `sdks/unity/` | C# async/await, `NPCEngineClient.cs` |
-| **Godot** | `sdks/godot/` | GDScript signals, autoload singleton |
-| **Unreal** | `sdks/unreal/` | C++ BlueprintCallable, FHttpModule |
+| Engine | Location | Setup | Integration |
+|---|---|---|---|
+| **Unity** | `sdks/unity/` | Import + Setup Wizard (auto-download) | C# async/await, `NPCEngineClient.cs` |
+| **Godot** | `sdks/godot/` | Copy addon + download binary | GDScript signals, autoload singleton |
+| **Unreal** | `sdks/unreal/` | Copy plugin + download binary | C++ BlueprintCallable, FHttpModule |
 
-All SDKs connect to the local REST API server.
+All SDKs launch the NPC Engine as a local background process and connect via HTTP. The engine runs on the player's machine — no server hosting required.
 
-## CLI Commands
+## CLI Commands (for testing)
 
 ```
 /npc              List all NPCs
