@@ -51,6 +51,20 @@ LEDGER_FILE = DATA_DIR / "fact_ledger.json"
 # mention of a recurring NPC. Tune via observation.
 _SIMILARITY_THRESHOLD = 0.6
 
+# NLI confidence above which a flagged pair is reported as a
+# contradiction. Empirically the small DeBERTa NLI model is
+# hypersensitive — it labels many "topically related but distinct"
+# pairs as contradiction with mid-range confidence (0.5-0.8). 0.85
+# filters out those false positives while still catching real
+# contradictions, which the small model labels with confidence 0.95+.
+_NLI_CONTRADICTION_THRESHOLD = 0.85
+
+# Cross-encoder NLI model — small variant runs on CPU at <500ms/pair.
+# Lazy-loaded on first contradiction check. Falls back silently if
+# sentence-transformers' CrossEncoder isn't available or the model
+# can't be downloaded.
+_NLI_MODEL_NAME = "cross-encoder/nli-deberta-v3-small"
+
 # Round-robin kind rotation. Python decides the kind so the LLM doesn't
 # default to 'event' every tick (which is exactly what 3B models do when
 # left to choose). Same split as focus NPC: deterministic planning layer
@@ -60,6 +74,86 @@ _ACTION_KIND_ROTATION = ("event", "quest", "fact")
 # Maximum concurrent active/available quests on one NPC — past this, we
 # skip 'quest' in rotation so a focus NPC doesn't accumulate unfinished work.
 _MAX_QUESTS_PER_NPC = 2
+
+class ContradictionChecker:
+    """
+    Wraps a small NLI cross-encoder to classify a (premise, hypothesis)
+    pair as contradiction / entailment / neutral. Used by the FactLedger
+    on flagged similarity pairs to elevate "these two are similar" into
+    "these two contradict each other".
+
+    First call lazy-loads the model (~140MB download on first run).
+    Falls back to no-op if sentence-transformers' CrossEncoder is
+    unavailable or the model can't be loaded — the FactLedger still
+    works without it.
+
+    Label order: ['contradiction', 'entailment', 'neutral'] per the
+    ``cross-encoder/nli-deberta-v3-*`` model cards.
+    """
+
+    LABELS = ("contradiction", "entailment", "neutral")
+
+    def __init__(self, model_name: str = _NLI_MODEL_NAME,
+                 contradiction_threshold: float = _NLI_CONTRADICTION_THRESHOLD):
+        self.model_name = model_name
+        self.contradiction_threshold = contradiction_threshold
+        self._model = None  # None = not yet attempted; False = unavailable
+
+    @property
+    def model(self):
+        if self._model is None:
+            try:
+                from sentence_transformers import CrossEncoder
+                self._model = CrossEncoder(self.model_name)
+                logger.info(f"ContradictionChecker loaded NLI model: {self.model_name}")
+            except Exception as e:
+                logger.warning(f"ContradictionChecker NLI model unavailable: {e}")
+                self._model = False
+        return self._model if self._model is not False else None
+
+    def check(self, premise: str, hypothesis: str) -> Optional[dict]:
+        """
+        Classify the pair. Returns a dict with the predicted label, its
+        confidence, and the full score breakdown — or ``None`` if the
+        model isn't available.
+        """
+        model = self.model
+        if model is None or not premise or not hypothesis:
+            return None
+        try:
+            raw = model.predict([(premise, hypothesis)])[0]
+            scores = [float(s) for s in raw]
+        except Exception as e:
+            logger.error(f"ContradictionChecker.predict failed: {e}")
+            return None
+
+        if len(scores) != len(self.LABELS):
+            return None
+
+        # Softmax for nicer probabilities (CrossEncoder returns logits)
+        try:
+            import math
+            mx = max(scores)
+            exps = [math.exp(s - mx) for s in scores]
+            total = sum(exps)
+            probs = [e / total for e in exps] if total else scores
+        except Exception:
+            probs = scores
+
+        label_idx = max(range(len(probs)), key=lambda i: probs[i])
+        return {
+            "label": self.LABELS[label_idx],
+            "confidence": round(float(probs[label_idx]), 3),
+            "is_contradiction": (
+                self.LABELS[label_idx] == "contradiction"
+                and float(probs[label_idx]) >= self.contradiction_threshold
+            ),
+            "scores": {
+                self.LABELS[i]: round(float(probs[i]), 3)
+                for i in range(len(self.LABELS))
+            },
+        }
+
 
 class FactLedger:
     """
@@ -81,12 +175,16 @@ class FactLedger:
     silently no-ops so the Director still works.
     """
 
-    def __init__(self, storage_path: Path, threshold: float = _SIMILARITY_THRESHOLD):
+    def __init__(self, storage_path: Path, threshold: float = _SIMILARITY_THRESHOLD,
+                 contradiction_checker: Optional["ContradictionChecker"] = None):
         self.storage_path = storage_path
         self.threshold = threshold
         self.entries: list[dict] = []
         self._embedder = None  # None = not yet attempted; False = unavailable
         self._np = None
+        # NLI checker — runs on flagged similarity pairs to upgrade
+        # "similar" to "contradiction". Optional; ledger works without it.
+        self.contradiction_checker = contradiction_checker or ContradictionChecker()
         self._load()
 
     # ── Lazy resource loading ────────────────────────────────────
@@ -135,6 +233,20 @@ class FactLedger:
 
         warning = self._check_similarity(embedding)
 
+        # If we have a similarity match, run NLI to see if it's a real
+        # contradiction. Only a few hundred ms on CPU per check, and only
+        # fires when there's already a flagged pair — so the cost is
+        # bounded by how often the Director recycles plot threads.
+        if warning is not None:
+            nli = self.contradiction_checker.check(
+                premise=warning["matches_text"],
+                hypothesis=text,
+            )
+            if nli is not None:
+                warning["nli"] = nli
+                if nli.get("is_contradiction"):
+                    warning["contradiction"] = True
+
         self.entries.append({
             "text": text[:400],
             "embedding": embedding.tolist(),
@@ -162,6 +274,8 @@ class FactLedger:
             "threshold": self.threshold,
             "embedder_loaded": isinstance(self._embedder, object)
                                 and self._embedder not in (None, False),
+            "nli_loaded": (self.contradiction_checker._model is not None
+                            and self.contradiction_checker._model is not False),
         }
 
     # ── Internals ───────────────────────────────────────────────

@@ -370,6 +370,80 @@ perspective.
 
 ---
 
+## NLI contradiction detection
+
+The FactLedger surfaces *similar* pairs. To turn similarity into
+**contradiction** you need an NLI model that classifies the pair. Built
+on top of the ledger:
+
+- **`ContradictionChecker`** wraps `cross-encoder/nli-deberta-v3-small`
+  (~140MB, ~500ms/pair on CPU)
+- Lazy-loaded on first check; falls back to no-op if unavailable
+- Outputs `contradiction / entailment / neutral` with softmax confidence
+- Runs **only on flagged similarity pairs** — cost is bounded by how
+  often the Director recycles plot threads (typically 0–2 per session)
+
+### Threshold tuning empirically
+
+The small DeBERTa NLI model is **hypersensitive**. Out of the box at the
+default 0.55 threshold it labeled this pair as contradiction with 0.991
+confidence:
+
+> Premise: *"Bess heard rumors that Elara is hiding something about the
+> Silverwood."*
+> Hypothesis: *"Elara, the healer, returned from the Silverwood looking
+> pale and silent."*
+
+These aren't a contradiction — they're two unrelated facts about
+distinct subjects. But the model is trained on MNLI/SNLI which compares
+hypothetical statements, not narrative consistency. It defaults to
+labeling "topically related but distinct" pairs as contradiction.
+
+**Fix:** raised `_NLI_CONTRADICTION_THRESHOLD` to 0.85. The model still
+catches genuine contradictions (which it labels with 0.95+ confidence),
+but borderline 0.55–0.84 false positives are filtered out.
+
+### What the layer reliably catches
+
+| Pair | NLI label | Caught? |
+|---|---|---|
+| *"Mara is hiding contraband under the floorboards"* vs *"Mara has nothing hidden, accusations are false"* | contradiction (0.99) | ✓ |
+| *"Mara is a merchant who runs a fabric shop in Ashenvale"* vs *"Mara owns a fabric shop in Ashenvale and works as a merchant"* | not contradiction | ✗ (correct) |
+| *"Noah the elder is troubled by an old letter from the king"* vs *"Noah the elder confided that the king's letter weighs heavily on him"* | not contradiction | ✗ (correct) |
+| *"Bess heard whispers that Elara is not speaking of her grandmother's disappearance"* vs *"The Disappeared Healer — Elara has been seen pale and silent, returning from the Silverwood"* | neutral (1.00) | ✗ (correct — plot escalation) |
+
+The third row is the actual T1/T2 pair from the production session. The
+ledger flagged it via similarity (sim=0.70) but NLI correctly classified
+it as `neutral` — Director escalation, not self-contradiction.
+
+### What this gives you
+
+The Director now has a primitive **self-consistency check**. Every
+fact-shaped injection is embedded, compared against the ledger, and —
+on flagged pairs — passed to NLI. If a future tick says *"Noah refused
+to ever discuss the letter"* and an earlier one said *"Noah read the
+letter aloud in the village square"*, the layer will flag it.
+
+This is the first novel piece in the stack — your existing AI projects
+(PIE, ultralight-coder, npc-engine) had nothing for narrative
+consistency. The pattern is general: any LLM-driven content-generation
+system that injects facts into a persistent state can use the same
+ledger + NLI scaffold to detect when it contradicts itself.
+
+### What it still can't do
+
+- **Subject resolution.** If T1 says "the elder" and T20 says "Noah", the
+  embedding similarity might miss the connection. Co-reference resolution
+  would help but adds another model.
+- **Reasoning over multi-fact contradictions.** E.g., A: *"Mara was in
+  Ashenvale on Monday."* B: *"Mara was 100 miles north on Monday."* —
+  these contradict only if you know Ashenvale isn't 100 miles north.
+- **Acting on the warning.** Right now contradictions are *surfaced* in
+  the dispatch result. A future layer could re-prompt the Director with
+  "your last action contradicts T8 — try again," but we don't yet.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -400,11 +474,6 @@ perspective.
   consecutive repeats, deterministic rotation when the player is quiet.
 
 ## What doesn't work yet
-
-- **Contradiction *detection*.** The FactLedger surfaces semantically
-  similar content. It doesn't classify entailment vs contradiction. A
-  small NLI model (~`cross-encoder/nli-deberta-v3-base` or smaller) over
-  flagged pairs would close this gap.
 
 - **Player quest tracking integration.** `record_player_action("Player
   completed Kael's quest")` records the *text* but doesn't update

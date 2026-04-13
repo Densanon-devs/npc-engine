@@ -38,7 +38,9 @@ sys.path.insert(0, str(NPC_ROOT))
 sys.path.insert(0, str(PIE_ROOT))
 
 from npc_engine.knowledge import NPCKnowledge, Quest  # noqa: E402
-from npc_engine.story_director import StoryDirector, FactLedger  # noqa: E402
+from npc_engine.story_director import (  # noqa: E402
+    StoryDirector, FactLedger, ContradictionChecker,
+)
 
 
 # ── Offline stub engine ─────────────────────────────────────────
@@ -547,6 +549,105 @@ def test_fact_ledger_persists_and_reloads():
     print("  [PASS] fact_ledger_persists_and_reloads")
 
 
+def test_contradiction_checker_catches_known_contradiction():
+    """A clear premise/hypothesis contradiction should be classified
+    as 'contradiction' by the small NLI model. This is the model's job
+    — if this fails, the model is broken, not our wrapper."""
+    checker = ContradictionChecker()
+    if checker.model is None:
+        print("  [SKIP] contradiction_checker_catches_known_contradiction — model unavailable")
+        return
+    result = checker.check(
+        premise="Mara is hiding contraband under the floorboards of her shop.",
+        hypothesis="Mara has nothing hidden in her shop. The accusations are false.",
+    )
+    assert result is not None
+    assert result["label"] == "contradiction", result
+    assert result["is_contradiction"] is True, result
+    assert result["confidence"] >= 0.55, result
+    print("  [PASS] contradiction_checker_catches_known_contradiction")
+
+
+def test_contradiction_checker_does_not_flag_paraphrase():
+    """A near-paraphrase pair (same fact, different wording) should
+    NOT be classified as contradiction. The small NLI model is
+    hypersensitive on topically-related-but-distinct pairs, so the
+    threshold at 0.85 is what filters those false positives."""
+    checker = ContradictionChecker()
+    if checker.model is None:
+        print("  [SKIP] contradiction_checker_does_not_flag_paraphrase — model unavailable")
+        return
+    result = checker.check(
+        premise="Mara is a merchant who runs a fabric shop in Ashenvale.",
+        hypothesis="Mara owns a fabric shop in the village of Ashenvale and works as a merchant.",
+    )
+    assert result is not None, result
+    assert result["is_contradiction"] is False, result
+    print("  [PASS] contradiction_checker_does_not_flag_paraphrase")
+
+
+def test_contradiction_checker_does_not_flag_plot_escalation():
+    """A plot escalation (fact B builds on fact A without contradicting
+    it) should also not be flagged. This is the most common Director
+    output pattern and the most important false-positive case to
+    eliminate."""
+    checker = ContradictionChecker()
+    if checker.model is None:
+        print("  [SKIP] contradiction_checker_does_not_flag_plot_escalation — model unavailable")
+        return
+    result = checker.check(
+        premise="Noah the elder is troubled by an old letter from the king.",
+        hypothesis="Noah the elder confided in the player that the king's letter weighs heavily on him.",
+    )
+    assert result is not None, result
+    # The pair may register as 'entailment' or 'neutral' — both are fine,
+    # we only care that it's not flagged as is_contradiction at our
+    # threshold (0.85).
+    assert result["is_contradiction"] is False, result
+    print("  [PASS] contradiction_checker_does_not_flag_plot_escalation")
+
+
+def test_contradiction_checker_silent_when_unavailable():
+    checker = ContradictionChecker()
+    checker._model = False  # force-disable
+    result = checker.check("a", "b")
+    assert result is None
+    print("  [PASS] contradiction_checker_silent_when_unavailable")
+
+
+def test_fact_ledger_warning_includes_nli_when_model_available():
+    """When the NLI model is loaded, ledger warnings should include an
+    nli block with label, confidence, and per-class scores."""
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_nli.json"
+    if tmp_path.exists():
+        tmp_path.unlink()
+    try:
+        ledger = FactLedger(tmp_path, threshold=0.5)
+        if ledger.embedder is None:
+            print("  [SKIP] fact_ledger_warning_includes_nli_when_model_available — embedder unavailable")
+            return
+        if ledger.contradiction_checker.model is None:
+            print("  [SKIP] fact_ledger_warning_includes_nli_when_model_available — NLI unavailable")
+            return
+        ledger.add(
+            "Mara is openly hiding contraband under the floorboards of her shop.",
+            npc_id="mara", kind="fact", tick=1,
+        )
+        warning = ledger.add(
+            "Mara has nothing hidden in her shop and the accusations are false.",
+            npc_id="mara", kind="fact", tick=2,
+        )
+        assert warning is not None, "expected a similarity match"
+        assert "nli" in warning, warning
+        assert warning["nli"]["label"] in ContradictionChecker.LABELS
+        # The pair is a clear contradiction; should be flagged
+        assert warning.get("contradiction") is True, warning
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    print("  [PASS] fact_ledger_warning_includes_nli_when_model_available")
+
+
 def test_fact_ledger_silent_when_embedder_missing():
     """If sentence-transformers is unavailable, add() must return None
     silently — the Director still works without the ledger."""
@@ -860,6 +961,11 @@ def main():
     test_fact_ledger_flags_similar_text()
     test_fact_ledger_does_not_flag_unrelated_text()
     test_fact_ledger_persists_and_reloads()
+    test_contradiction_checker_catches_known_contradiction()
+    test_contradiction_checker_does_not_flag_paraphrase()
+    test_contradiction_checker_does_not_flag_plot_escalation()
+    test_contradiction_checker_silent_when_unavailable()
+    test_fact_ledger_warning_includes_nli_when_model_available()
     test_fact_ledger_silent_when_embedder_missing()
     test_player_actions_trimmed_to_last_8()
     test_dispatch_quest_adds_to_npc()

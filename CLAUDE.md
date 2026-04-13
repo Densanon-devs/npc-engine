@@ -216,6 +216,7 @@ out of the model's hands:
 | Story content | LLM (single call) | Given focus NPC + action kind, write the actual story beat |
 | Schema enforcement | Python (`_enforce_*` methods) | Override at dispatch if model deviated |
 | Fact persistence | `FactLedger` | Embed every injection, surface similarity warnings |
+| Contradiction detection | `ContradictionChecker` | Run NLI (`cross-encoder/nli-deberta-v3-small`) on flagged ledger pairs; classify contradiction / entailment / neutral |
 
 This split is the entire reason the Director works on local 3B models.
 Without it, Qwen 2.5 3B fixates on one plot thread for 8/10 ticks.

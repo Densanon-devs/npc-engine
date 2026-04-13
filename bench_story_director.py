@@ -337,9 +337,14 @@ def main():
             print(f"  dispatch: {dispatch}")
             warning = dispatch.get("similarity_warning")
             if warning:
-                print(f"  ⚠ ledger sim={warning['similarity']:.2f} "
-                      f"(matches T{warning['matches_tick']} {warning['matches_kind']}/{warning['matches_npc']}): "
-                      f"{warning['matches_text'][:100]}")
+                nli = warning.get("nli") or {}
+                nli_label = nli.get("label", "?")
+                nli_conf = nli.get("confidence", 0.0)
+                marker = "⚠⚠ CONTRADICTION" if warning.get("contradiction") else "⚠ ledger"
+                print(f"  {marker} sim={warning['similarity']:.2f}  "
+                      f"nli={nli_label}({nli_conf:.2f})  "
+                      f"matches T{warning['matches_tick']} {warning['matches_kind']}/{warning['matches_npc']}: "
+                      f"{warning['matches_text'][:90]}")
                 similarity_warnings.append({
                     "tick": tick_num, **warning,
                 })
@@ -386,11 +391,16 @@ def main():
         print(f"Consecutive target repeats: {consecutive_repeats}/{max(args.ticks - 1, 0)}")
 
         if similarity_warnings:
-            print(f"FactLedger warnings: {len(similarity_warnings)}/{args.ticks}")
+            contradictions = [w for w in similarity_warnings if w.get("contradiction")]
+            print(f"FactLedger warnings: {len(similarity_warnings)}/{args.ticks}  "
+                  f"(contradictions: {len(contradictions)})")
             for w in similarity_warnings:
-                print(f"  T{w['tick']} sim={w['similarity']:.2f} -> "
-                      f"T{w['matches_tick']} {w['matches_kind']}/{w['matches_npc']}: "
-                      f"{w['matches_text'][:80]}")
+                nli = w.get("nli") or {}
+                marker = "CONTRA" if w.get("contradiction") else "sim   "
+                print(f"  T{w['tick']} {marker} sim={w['similarity']:.2f} "
+                      f"nli={nli.get('label', '?')}({nli.get('confidence', 0.0):.2f}) "
+                      f"-> T{w['matches_tick']} {w['matches_kind']}/{w['matches_npc']}: "
+                      f"{w['matches_text'][:70]}")
         try:
             ledger_stats = engine.story_director.ledger.stats()
             print(f"Ledger entries: {ledger_stats['entry_count']}  "
