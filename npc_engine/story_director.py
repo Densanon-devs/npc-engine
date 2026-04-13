@@ -212,6 +212,32 @@ class FactLedger:
 
     # ── Public API ──────────────────────────────────────────────
 
+    def check(self, text: str) -> Optional[dict]:
+        """
+        Compute a similarity + NLI warning for ``text`` against the
+        existing ledger, WITHOUT storing it. Used by the Director's
+        pre-dispatch retry path: if a candidate action would conflict
+        with prior content, retry before mutating the world.
+
+        Returns a warning dict (with ``nli`` block and ``contradiction``
+        flag if applicable) or ``None`` if no match exceeds the threshold.
+        """
+        embedding = self._encode(text)
+        if embedding is None:
+            return None
+        warning = self._check_similarity(embedding)
+        if warning is None:
+            return None
+        nli = self.contradiction_checker.check(
+            premise=warning["matches_text"],
+            hypothesis=text,
+        )
+        if nli is not None:
+            warning["nli"] = nli
+            if nli.get("is_contradiction"):
+                warning["contradiction"] = True
+        return warning
+
     def add(self, text: str, npc_id: str, kind: str, tick: int) -> Optional[dict]:
         """
         Add a new entry to the ledger and return a similarity warning if
@@ -220,15 +246,8 @@ class FactLedger:
         """
         if not text or not isinstance(text, str):
             return None
-        embedder = self.embedder
-        np = self.np
-        if embedder is None or np is None:
-            return None
-
-        try:
-            embedding = embedder.encode(text, normalize_embeddings=True)
-        except Exception as e:
-            logger.error(f"FactLedger encode failed: {e}")
+        embedding = self._encode(text)
+        if embedding is None:
             return None
 
         warning = self._check_similarity(embedding)
@@ -259,6 +278,19 @@ class FactLedger:
             self.entries = self.entries[-200:]
         self._save()
         return warning
+
+    def _encode(self, text: str):
+        """Lazy-encode helper shared by ``check`` and ``add``."""
+        if not text or not isinstance(text, str):
+            return None
+        embedder = self.embedder
+        if embedder is None or self.np is None:
+            return None
+        try:
+            return embedder.encode(text, normalize_embeddings=True)
+        except Exception as e:
+            logger.error(f"FactLedger encode failed: {e}")
+            return None
 
     def reset(self) -> None:
         self.entries = []
@@ -521,16 +553,39 @@ class StoryDirector:
                             temperature: float) -> dict:
         """
         Run one (focus_npc, action_kind) slot through the LLM + enforce
-        + dispatch + ledger pipeline. Returns a dict the tick caller
-        merges into the response. Used by both single- and multi-action
-        ticks so the worker logic lives in exactly one place.
+        + (pre-dispatch contradiction check) + dispatch + ledger
+        pipeline. Returns a dict the tick caller merges into the response.
+
+        If the pre-dispatch ledger check reports a real contradiction
+        (similarity match + NLI contradiction at >=0.85 confidence),
+        the worker retries ONCE with a corrective preamble that names
+        the conflicting prior fact. Capped at one retry to bound
+        latency and prevent oscillation.
         """
         prompt = self._build_prompt(snapshot, focus_npc, action_kind)
         raw, action = self._llm_call_with_repair(prompt, max_tokens, temperature)
+        action = self._finalize_action(action, focus_npc, action_kind)
 
-        if focus_npc:
-            action = self._enforce_focus_npc(action, focus_npc)
-        action = self._enforce_action_kind(action, action_kind, focus_npc)
+        # Pre-dispatch contradiction check — fires only when the ledger
+        # has prior entries AND NLI flags the pair at >=0.85 confidence.
+        # Cheap to check (one embed + one NLI inference) and bypassed
+        # entirely on the first few ticks before the ledger has anything.
+        retried = False
+        precheck = self._precheck_contradiction(action)
+        if precheck is not None:
+            retried = True
+            retry_prompt = prompt + (
+                "\n\nNOTE: Your previous attempt contradicts an earlier "
+                f"established fact (T{precheck['matches_tick']} "
+                f"{precheck['matches_kind']}/{precheck['matches_npc']}): "
+                f"\"{precheck['matches_text'][:160]}\". "
+                "Pick a DIFFERENT angle that does not conflict with that fact. "
+                "Do not negate it; build a story beat that's consistent with it."
+            )
+            raw2, action2 = self._llm_call_with_repair(retry_prompt, max_tokens, temperature)
+            action2 = self._finalize_action(action2, focus_npc, action_kind)
+            action = action2
+            raw = raw2
 
         dispatch_result = self._dispatch(action)
 
@@ -555,13 +610,42 @@ class StoryDirector:
                 if warning is not None:
                     dispatch_result["similarity_warning"] = warning
 
+        if retried:
+            dispatch_result["retried_after_contradiction"] = True
+
         return {
             "focus_npc": focus_npc,
             "action_kind": action_kind,
             "action": action,
             "dispatch": dispatch_result,
             "raw_response": raw,
+            "retried": retried,
         }
+
+    def _finalize_action(self, action: dict, focus_npc: Optional[str],
+                         action_kind: str) -> dict:
+        """Apply both enforcement passes in one call. DRY for the
+        worker + retry paths."""
+        if focus_npc:
+            action = self._enforce_focus_npc(action, focus_npc)
+        action = self._enforce_action_kind(action, action_kind, focus_npc)
+        return action
+
+    def _precheck_contradiction(self, action: dict) -> Optional[dict]:
+        """
+        Embed the proposed action's content and check it against the
+        ledger BEFORE dispatch. Returns the warning dict if NLI flags
+        the candidate as a contradiction with an existing fact;
+        ``None`` otherwise. Skips silently when the ledger has nothing
+        to compare against or the embedder/NLI aren't loaded.
+        """
+        text = self._ledger_text_for(action)
+        if not text:
+            return None
+        warning = self.ledger.check(text)
+        if warning is not None and warning.get("contradiction"):
+            return warning
+        return None
 
     def _architect_plan(self, n_actions: int) -> list[tuple[Optional[str], str]]:
         """
@@ -599,7 +683,9 @@ class StoryDirector:
 
     def record_player_action(self, text: str,
                               target: Optional[str] = None,
-                              trust_delta: Optional[int] = None) -> dict:
+                              trust_delta: Optional[int] = None,
+                              quest_completed: Optional[str] = None,
+                              quest_accepted: Optional[dict] = None) -> dict:
         """
         Record something the player did. Surfaced in the next tick's
         world snapshot so the Director can react to player behavior.
@@ -610,6 +696,14 @@ class StoryDirector:
             trust_delta: Optional trust adjustment to apply to ``target``
                 (positive = friendlier, negative = more hostile). Lets
                 a game client encode "player gave a gift" in one call.
+            quest_completed: Optional quest id. When set, the Director
+                calls ``engine.complete_quest`` so the engine's
+                ``player_quests`` tracker reflects the completion. The
+                trust ripple + gossip propagation happen automatically
+                through the engine's existing pipeline.
+            quest_accepted: Optional ``{id, name, given_by}`` dict. When
+                set, the Director calls ``engine.accept_quest`` so the
+                engine's tracker shows the quest as active.
         """
         if not text or not isinstance(text, str):
             return {"ok": False, "reason": "empty_text"}
@@ -630,6 +724,35 @@ class StoryDirector:
                 record["trust_delta"] = int(trust_delta)
             except Exception as e:
                 logger.warning(f"adjust_trust failed for {target}: {e}")
+
+        # Optional side-effect: complete a quest. Routes through the
+        # engine so trust boost + gossip propagation fire as a side
+        # effect — a player ACTUALLY finishing a quest is one of the
+        # strongest signals the Director can react to.
+        if quest_completed:
+            try:
+                result = self.engine.complete_quest(str(quest_completed))
+                record["quest_completed"] = str(quest_completed)
+                if isinstance(result, dict) and "error" in result:
+                    record["quest_completed_error"] = result["error"]
+            except Exception as e:
+                logger.warning(f"complete_quest failed for {quest_completed}: {e}")
+                record["quest_completed_error"] = str(e)
+
+        # Optional side-effect: accept a quest from a specific NPC.
+        if quest_accepted and isinstance(quest_accepted, dict):
+            qid = quest_accepted.get("id")
+            qname = quest_accepted.get("name") or qid
+            qgiver = quest_accepted.get("given_by") or target or ""
+            if qid and qgiver:
+                try:
+                    self.engine.accept_quest(str(qid), str(qname), str(qgiver))
+                    record["quest_accepted"] = qid
+                except Exception as e:
+                    logger.warning(f"accept_quest failed for {qid}: {e}")
+                    record["quest_accepted_error"] = str(e)
+            else:
+                record["quest_accepted_error"] = "missing_id_or_given_by"
 
         self.recent_player_actions.append(record)
         self.recent_player_actions = self.recent_player_actions[-8:]

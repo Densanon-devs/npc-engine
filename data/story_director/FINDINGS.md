@@ -536,9 +536,40 @@ ledger + NLI scaffold to detect when it contradicts itself.
 - **Reasoning over multi-fact contradictions.** E.g., A: *"Mara was in
   Ashenvale on Monday."* B: *"Mara was 100 miles north on Monday."* —
   these contradict only if you know Ashenvale isn't 100 miles north.
-- **Acting on the warning.** Right now contradictions are *surfaced* in
-  the dispatch result. A future layer could re-prompt the Director with
-  "your last action contradicts T8 — try again," but we don't yet.
+
+### Acting on the warning — pre-dispatch retry loop
+
+The contradiction layer doesn't just surface conflicts now — it
+**recovers from them**. The flow:
+
+1. Worker generates a candidate action (LLM call)
+2. Action is finalized (focus + kind enforcement)
+3. **Pre-dispatch ledger check**: embed the action's text, search the
+   ledger, run NLI on any similarity match
+4. **If NLI flags contradiction** at >=0.85 confidence, retry the
+   worker ONCE with a corrective preamble:
+   > NOTE: Your previous attempt contradicts an earlier established
+   > fact (T8 fact/noah): "Noah refuses to discuss the king's letter".
+   > Pick a DIFFERENT angle that does not conflict with that fact.
+   > Do not negate it; build a story beat that's consistent with it.
+5. The retry's response (whether it succeeds or fails) is what gets
+   dispatched
+
+The retry is capped at one attempt to bound latency and prevent
+oscillation. The dispatch result includes
+`retried_after_contradiction: True` so callers can audit retry rate.
+
+`FactLedger.check()` was split out from `add()` for this — pre-dispatch
+needs to compute the warning *without* storing the candidate (otherwise
+the candidate would compare against itself).
+
+This is the **first piece in the stack that lets a small local LLM
+recover from its own contradictions**. Verified end-to-end with a unit
+test that pre-seeds the ledger with *"Mara is hiding contraband"*, then
+drives the worker with a stub model whose first response is
+*"Mara has nothing hidden, the accusations are false"* and second
+response is a non-contradicting alternative. The retry path correctly
+discards the first response and dispatches the second.
 
 ---
 

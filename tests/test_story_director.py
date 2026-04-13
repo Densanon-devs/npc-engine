@@ -112,6 +112,7 @@ class _StubEngine:
     def __init__(self, profiles, world_name="Ashenvale"):
         self.pie = _StubPIE(profiles)
         self.config = SimpleNamespace(world_name=world_name)
+        self.calls: list[tuple] = []  # for assertions in tests
 
     # Mirror the NPCEngine methods the director calls
     def inject_event(self, description: str, npc_id=None):
@@ -130,6 +131,23 @@ class _StubEngine:
             npc.world_facts.append(fact)
         return {"npc_id": npc_id, "added": fact, "type": fact_type}
 
+    def adjust_trust(self, npc_id: str, delta: int, reason: str = "") -> dict:
+        self.calls.append(("adjust_trust", npc_id, delta, reason))
+        return {"npc_id": npc_id, "delta": delta}
+
+    def complete_quest(self, quest_id: str) -> dict:
+        self.calls.append(("complete_quest", quest_id))
+        # Mark on the player_quests stub so the snapshot reflects it
+        self.pie.player_quests.completed_quests.append({"id": quest_id, "name": quest_id})
+        return {"completed": quest_id}
+
+    def accept_quest(self, quest_id: str, quest_name: str, given_by: str) -> dict:
+        self.calls.append(("accept_quest", quest_id, quest_name, given_by))
+        self.pie.player_quests.active_quests.append({
+            "id": quest_id, "name": quest_name, "given_by": given_by, "status": "active",
+        })
+        return {"accepted": quest_id, "given_by": given_by}
+
 
 def _make_stub_engine(responses=None):
     profiles = {
@@ -143,24 +161,33 @@ def _make_stub_engine(responses=None):
 
 
 def _isolate_state_file(tag: str):
-    """Redirect StoryDirector's STATE_FILE to a per-test temp path so the
-    offline tests don't scribble on the real state file. Returns a restore fn."""
+    """Redirect StoryDirector's STATE_FILE *and* LEDGER_FILE to per-test
+    temp paths so offline tests don't scribble on the real runtime
+    files. Returns a restore fn that puts the originals back and
+    deletes the temp files."""
     import npc_engine.story_director as sd_mod
-    original = sd_mod.STATE_FILE
-    tmp = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}.json"
-    if tmp.exists():
-        try:
-            tmp.unlink()
-        except Exception:
-            pass
-    sd_mod.STATE_FILE = tmp
+    original_state = sd_mod.STATE_FILE
+    original_ledger = sd_mod.LEDGER_FILE
+    tmp_state = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_state.json"
+    tmp_ledger = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_ledger.json"
+    for p in (tmp_state, tmp_ledger):
+        if p.exists():
+            try:
+                p.unlink()
+            except Exception:
+                pass
+    sd_mod.STATE_FILE = tmp_state
+    sd_mod.LEDGER_FILE = tmp_ledger
 
     def restore():
-        sd_mod.STATE_FILE = original
-        try:
-            tmp.unlink()
-        except Exception:
-            pass
+        sd_mod.STATE_FILE = original_state
+        sd_mod.LEDGER_FILE = original_ledger
+        for p in (tmp_state, tmp_ledger):
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
     return restore
 
 
@@ -739,6 +766,104 @@ def test_fact_ledger_warning_includes_nli_when_model_available():
     print("  [PASS] fact_ledger_warning_includes_nli_when_model_available")
 
 
+def test_contradiction_retry_redoes_worker_when_pre_check_fires():
+    """Pre-seed the ledger with a fact, then run a worker whose FIRST
+    LLM response contradicts that fact. The retry path should kick in
+    and the SECOND response should be the one dispatched."""
+    restore = _isolate_state_file("retry")
+    try:
+        engine = _make_stub_engine(responses=[
+            # First response: directly contradicts the seeded fact
+            '{"action": "fact", "npc_id": "mara", '
+            '"fact": "Mara has nothing hidden in her shop. The accusations are completely false."}',
+            # Second response (after retry): non-contradicting alternative
+            '{"action": "fact", "npc_id": "mara", '
+            '"fact": "Mara is reorganizing her fabric inventory after a busy week."}',
+        ])
+        director = StoryDirector(engine)
+        if director.ledger.embedder is None or director.ledger.contradiction_checker.model is None:
+            print("  [SKIP] contradiction_retry_redoes_worker_when_pre_check_fires — model unavailable")
+            return
+
+        # Seed the ledger with a fact the first response will contradict
+        director.ledger.add(
+            text="Mara is openly hiding contraband under the floorboards of her shop.",
+            npc_id="mara", kind="fact", tick=0,
+        )
+
+        # Pin the rotation so this tick fires a fact for Mara.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("fact")
+        # Force focus to mara directly via player action so reactivity wins
+        director.recent_player_actions = [{
+            "at": "2030-01-01T00:00:00+00:00",
+            "tick_at_time": 0,
+            "text": "Player asked Mara about the rumors.",
+            "target": "mara",
+        }]
+
+        result = director.tick()
+        # Both responses were consumed (one for first attempt, one for retry)
+        assert len(engine.pie.base_model.prompts) == 2, engine.pie.base_model.prompts
+        # The dispatched action is the SECOND response — non-contradicting
+        assert "reorganizing" in str(result["action"]), result
+        # The dispatch result is flagged as retried
+        assert result["dispatch"].get("retried_after_contradiction") is True, result["dispatch"]
+    finally:
+        restore()
+    print("  [PASS] contradiction_retry_redoes_worker_when_pre_check_fires")
+
+
+def test_no_retry_when_pre_check_finds_no_contradiction():
+    """If the pre-check returns None (no contradiction), the worker
+    should dispatch the FIRST response — no retry, single LLM call."""
+    restore = _isolate_state_file("no_retry")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "fact", "npc_id": "noah", '
+            '"fact": "Noah has been spending more time in his study lately."}',
+        ])
+        director = StoryDirector(engine)
+        if director.ledger.embedder is None:
+            print("  [SKIP] no_retry_when_pre_check_finds_no_contradiction — embedder unavailable")
+            return
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("fact")
+        director.recent_player_actions = [{
+            "at": "2030-01-01T00:00:00+00:00",
+            "tick_at_time": 0,
+            "text": "Player visited Noah.",
+            "target": "noah",
+        }]
+        result = director.tick()
+        assert len(engine.pie.base_model.prompts) == 1, "expected exactly one LLM call"
+        assert result["dispatch"].get("retried_after_contradiction") is not True, result["dispatch"]
+    finally:
+        restore()
+    print("  [PASS] no_retry_when_pre_check_finds_no_contradiction")
+
+
+def test_fact_ledger_check_separates_from_add():
+    """The check() method must compute a warning without storing the
+    candidate in the ledger — that's what enables pre-dispatch retry."""
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_check.json"
+    if tmp_path.exists():
+        tmp_path.unlink()
+    try:
+        ledger = FactLedger(tmp_path, threshold=0.5)
+        if ledger.embedder is None:
+            print("  [SKIP] fact_ledger_check_separates_from_add — embedder unavailable")
+            return
+        ledger.add("Mara is hiding contraband under the floorboards.",
+                   npc_id="mara", kind="fact", tick=1)
+        # check() should find the prior entry but NOT add the new candidate
+        warning = ledger.check("Mara has a hidden package beneath the floorboards.")
+        assert warning is not None
+        assert len(ledger.entries) == 1, "check() should not store the candidate"
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    print("  [PASS] fact_ledger_check_separates_from_add")
+
+
 def test_fact_ledger_silent_when_embedder_missing():
     """If sentence-transformers is unavailable, add() must return None
     silently — the Director still works without the ledger."""
@@ -755,6 +880,58 @@ def test_fact_ledger_silent_when_embedder_missing():
         if tmp_path.exists():
             tmp_path.unlink()
     print("  [PASS] fact_ledger_silent_when_embedder_missing")
+
+
+def test_record_player_action_routes_quest_completion_to_engine():
+    """Setting quest_completed should call engine.complete_quest and
+    record the result in the player action."""
+    restore = _isolate_state_file("quest_complete")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        result = director.record_player_action(
+            text="Player returned the stolen hammers to Kael.",
+            target="kael",
+            trust_delta=10,
+            quest_completed="missing_hammers",
+        )
+        assert result["ok"], result
+        assert ("complete_quest", "missing_hammers") in engine.calls
+        assert ("adjust_trust", "kael", 10, "player: Player returned the stolen hammers to Kael.") in engine.calls
+        # Player quest tracker now reflects the completion
+        assert any(q["id"] == "missing_hammers"
+                   for q in engine.pie.player_quests.completed_quests)
+        # Record carries the completion marker
+        last = director.recent_player_actions[-1]
+        assert last.get("quest_completed") == "missing_hammers", last
+    finally:
+        restore()
+    print("  [PASS] record_player_action_routes_quest_completion_to_engine")
+
+
+def test_record_player_action_routes_quest_acceptance_to_engine():
+    restore = _isolate_state_file("quest_accept")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        result = director.record_player_action(
+            text="Player accepted Bess's tavern rumors quest.",
+            target="bess",
+            quest_accepted={
+                "id": "tavern_rumors",
+                "name": "Tavern Rumors",
+                "given_by": "bess",
+            },
+        )
+        assert result["ok"], result
+        assert ("accept_quest", "tavern_rumors", "Tavern Rumors", "bess") in engine.calls
+        assert any(q["id"] == "tavern_rumors"
+                   for q in engine.pie.player_quests.active_quests)
+        last = director.recent_player_actions[-1]
+        assert last.get("quest_accepted") == "tavern_rumors", last
+    finally:
+        restore()
+    print("  [PASS] record_player_action_routes_quest_acceptance_to_engine")
 
 
 def test_player_actions_trimmed_to_last_8():
@@ -921,6 +1098,53 @@ def test_tick_persists_state_between_instances():
     print("  [PASS] tick_persists_state_between_instances")
 
 
+def test_cross_session_persistence_smoke():
+    """
+    End-to-end persistence: run a few ticks, simulate engine shutdown,
+    boot a fresh director against the same state files, verify the
+    second director picked up tick_count, recent_decisions, and ledger
+    entries from the first session. Unit-level test (stub engine) —
+    the real-engine version is in the integration smoke test above.
+    """
+    restore = _isolate_state_file("persist_smoke")
+    try:
+        # Session 1 — three ticks
+        engine1 = _make_stub_engine(responses=[
+            '{"action": "event", "target": "kael", "event": "Kael forged a new blade."}',
+            '{"action": "event", "target": "bess", "event": "Bess heard a traveler arrive."}',
+            '{"action": "event", "target": "noah", "event": "Noah considered the king\'s letter."}',
+        ])
+        director1 = StoryDirector(engine1)
+        director1.tick()
+        director1.tick()
+        director1.tick()
+        assert director1.tick_count == 3
+        assert len(director1.recent_decisions) == 3
+        first_session_ledger_count = len(director1.ledger.entries)
+
+        # Session 2 — fresh engine, same state files
+        engine2 = _make_stub_engine(responses=[
+            '{"action": "event", "target": "elara", "event": "Elara returned at dawn."}',
+        ])
+        director2 = StoryDirector(engine2)
+        assert director2.tick_count == 3, director2.tick_count
+        assert len(director2.recent_decisions) == 3, director2.recent_decisions
+        assert len(director2.ledger.entries) == first_session_ledger_count, \
+            (len(director2.ledger.entries), first_session_ledger_count)
+
+        # One more tick should advance the count to 4
+        director2.tick()
+        assert director2.tick_count == 4
+
+        # Third reload to confirm persistence still works after multi sessions
+        engine3 = _make_stub_engine(responses=[])
+        director3 = StoryDirector(engine3)
+        assert director3.tick_count == 4, director3.tick_count
+    finally:
+        restore()
+    print("  [PASS] cross_session_persistence_smoke")
+
+
 # ── Integration smoke test (optional) ──────────────────────────
 
 def _pie_model_available() -> bool:
@@ -967,6 +1191,10 @@ def test_integration_tick_mutates_world():
     engine = NPCEngine(str(temp_npc))
     engine.initialize()
     assert engine.story_director is not None, "Story Director should be initialized"
+
+    # Reset the ledger so prior bench/test runs don't pollute the
+    # integration check with stale entries.
+    engine.story_director.ledger.reset()
 
     # Dialogue auto-feed: a real engine.process call should cause the
     # Director to record the player's input as a player action.
@@ -1054,6 +1282,8 @@ def main():
     test_record_player_action_and_snapshot()
     test_focus_npc_prioritizes_pending_player_target()
     test_pending_player_target_ignores_stale_actions()
+    test_record_player_action_routes_quest_completion_to_engine()
+    test_record_player_action_routes_quest_acceptance_to_engine()
     test_fact_ledger_flags_similar_text()
     test_fact_ledger_does_not_flag_unrelated_text()
     test_fact_ledger_persists_and_reloads()
@@ -1062,7 +1292,11 @@ def main():
     test_contradiction_checker_does_not_flag_plot_escalation()
     test_contradiction_checker_silent_when_unavailable()
     test_fact_ledger_warning_includes_nli_when_model_available()
+    test_contradiction_retry_redoes_worker_when_pre_check_fires()
+    test_no_retry_when_pre_check_finds_no_contradiction()
+    test_fact_ledger_check_separates_from_add()
     test_fact_ledger_silent_when_embedder_missing()
+    test_cross_session_persistence_smoke()
     test_player_actions_trimmed_to_last_8()
     test_dispatch_quest_adds_to_npc()
     test_dispatch_quest_dedupes_by_id()

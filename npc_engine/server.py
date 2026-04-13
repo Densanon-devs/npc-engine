@@ -211,6 +211,8 @@ def create_app():
         text: str
         target: Optional[str] = None
         trust_delta: Optional[int] = None
+        quest_completed: Optional[str] = None
+        quest_accepted: Optional[dict] = None
 
     @app.post("/quests/accept")
     async def quest_accept(req: QuestAcceptRequest):
@@ -295,12 +297,17 @@ def create_app():
 
     @app.post("/story/player_action")
     async def story_player_action(req: PlayerActionRequest):
-        """Record something the player did so the Director reacts next tick."""
+        """Record something the player did so the Director reacts next tick.
+        Optionally completes or accepts a quest as a side effect."""
         engine = get_engine()
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         result = engine.story_director.record_player_action(
-            req.text, target=req.target, trust_delta=req.trust_delta,
+            req.text,
+            target=req.target,
+            trust_delta=req.trust_delta,
+            quest_completed=req.quest_completed,
+            quest_accepted=req.quest_accepted,
         )
         if not result.get("ok"):
             raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
