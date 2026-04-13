@@ -1103,7 +1103,10 @@ class StoryDirector:
         world_name = self.engine.config.world_name or "Ashenvale"
         lines.append(f"World: {world_name}")
 
-        # NPCs with role + current mood/trust if available
+        # NPCs with role + current mood/trust/top goal if available. The
+        # top goal is the single biggest piece of motivational fuel for
+        # the Director — with it, every NPC in the roster tells the
+        # model WHAT THEY WANT, not just what they are.
         for npc_id, npc in pie.npc_knowledge.profiles.items():
             role = npc.identity.get("role", "")
             mood, trust = self._peek_npc_state(npc_id)
@@ -1115,6 +1118,11 @@ class StoryDirector:
             quests_here = [q for q in npc.quests if q.status in ("available", "active")]
             if quests_here:
                 bits.append(f"quests={len(quests_here)}")
+            goals = self._peek_npc_goals(npc_id)
+            if goals:
+                top_desc = str(goals[0].get("description", "")).strip()
+                if top_desc:
+                    bits.append(f"wants: {top_desc[:70]}")
             lines.append("  - " + ", ".join(bits))
 
         # Player block — surface everything the Director needs to react
@@ -1342,6 +1350,82 @@ class StoryDirector:
             trust = getattr(trust_cap, "level", None)
         return mood, trust
 
+    def _peek_npc_goals(self, npc_id: str) -> list[dict]:
+        """
+        Non-destructive read of an NPC's goals list from the capability
+        manager. Returns priority-sorted dicts (as stored by GoalsCapability)
+        or an empty list if the NPC has no goals capability configured.
+        """
+        mgr = self.engine.pie.capability_managers.get(npc_id)
+        if mgr is None:
+            return []
+        goals_cap = mgr.capabilities.get("goals")
+        if goals_cap is None:
+            return []
+        raw = getattr(goals_cap, "goals", None)
+        if not isinstance(raw, list):
+            return []
+        return list(raw)
+
+    def _build_focus_npc_bio(self, focus_npc: str) -> Optional[str]:
+        """
+        Compact full-bio block for the focus NPC the current worker is
+        writing for. Gives the Director motivations, secrets, and
+        personality to work with instead of just (role, mood, trust).
+
+        Returns None when the NPC has no data beyond what's already in
+        the roster — callers should skip the block entirely in that
+        case rather than emit an empty header.
+        """
+        npc = self.engine.pie.npc_knowledge.get(focus_npc)
+        if npc is None:
+            return None
+
+        lines: list[str] = []
+
+        identity = getattr(npc, "identity", None) or {}
+        personality = identity.get("personality")
+        if personality:
+            lines.append(f"Personality: {str(personality)[:180]}")
+
+        # Priority-sorted goals — the heart of the bio. This is the
+        # single biggest jump in material the Director gets, because
+        # goals describe what the NPC WANTS rather than what they are.
+        goals = self._peek_npc_goals(focus_npc)
+        if goals:
+            goal_lines: list[str] = []
+            for g in goals[:3]:
+                desc = str(g.get("description", "")).strip()
+                if not desc:
+                    continue
+                prio = g.get("priority", "?")
+                goal_lines.append(f"  [p{prio}] {desc[:140]}")
+            if goal_lines:
+                lines.append("Driving goals:")
+                lines.extend(goal_lines)
+
+        # Personal knowledge = secrets, private memories, things the
+        # NPC knows that aren't public. The richest seed for emergent
+        # plotting. The Director sees these but should build AROUND
+        # them rather than stating them literally in public content.
+        pk = getattr(npc, "personal_knowledge", None) or []
+        if pk:
+            lines.append("Private knowledge (build AROUND these, do not state literally):")
+            for fact in list(pk)[:4]:
+                lines.append(f"  - {str(fact)[:160]}")
+
+        # A few world facts to ground the NPC's perspective on Ashenvale
+        wf = getattr(npc, "world_facts", None) or []
+        if wf:
+            lines.append("Their view of the world:")
+            for fact in list(wf)[:3]:
+                lines.append(f"  - {str(fact)[:160]}")
+
+        if not lines:
+            return None
+
+        return f"=== FOCUS NPC BIO: {focus_npc} ===\n" + "\n".join(lines)
+
     # ── Prompt assembly ─────────────────────────────────────────
 
     def _build_prompt(self, snapshot: str, focus_npc: Optional[str],
@@ -1401,6 +1485,16 @@ class StoryDirector:
                 "If not, write something the cast can react to next tick.",
             ]
             parts.append("\n".join(arc_lines))
+
+        # Focus NPC bio — the FULL motivational picture for whoever
+        # this worker is about to write for. Includes personality,
+        # priority-sorted goals, and personal_knowledge so the model
+        # can write beats grounded in what the NPC actually wants and
+        # knows — not just their role label.
+        if focus_npc:
+            bio_block = self._build_focus_npc_bio(focus_npc)
+            if bio_block:
+                parts.append(bio_block)
 
         # Forced focus NPC + action kind — Python made both choices.
         # Placed immediately before ACTION: so recency bias favors them

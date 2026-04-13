@@ -101,6 +101,23 @@ class _StubBaseModel:
         return self._responses.pop(0)
 
 
+class _StubGoalsCap:
+    """Mimic the shape of GoalsCapability.goals (priority-sorted list of dicts)."""
+
+    def __init__(self, goals: list[dict]):
+        # Priority-descending, same as the real capability does on init
+        self.goals = sorted(goals, key=lambda g: g.get("priority", 0), reverse=True)
+
+
+class _StubCapabilityManager:
+    """Mimic the shape NPC capability managers expose — a .capabilities dict
+    keyed by capability name. Tests attach _StubGoalsCap instances here so
+    _peek_npc_goals / _build_focus_npc_bio can read them."""
+
+    def __init__(self, capabilities: Optional[dict] = None):
+        self.capabilities: dict = dict(capabilities or {})
+
+
 class _StubPIE:
     def __init__(self, profiles):
         self.npc_knowledge = _StubKnowledgeManager(profiles)
@@ -1573,6 +1590,148 @@ def test_arc_planner_cooldown_prevents_immediate_reproposal():
     print("  [PASS] arc_planner_cooldown_prevents_immediate_reproposal")
 
 
+# ── NPC bio injection tests ─────────────────────────────────────
+
+def _attach_goals(engine, npc_id: str, goals: list[dict]) -> None:
+    """Attach a stub GoalsCapability to an NPC so _peek_npc_goals can
+    find it. Mirrors the shape real NPC capability managers expose."""
+    mgr = engine.pie.capability_managers.get(npc_id)
+    if mgr is None:
+        mgr = _StubCapabilityManager()
+        engine.pie.capability_managers[npc_id] = mgr
+    mgr.capabilities["goals"] = _StubGoalsCap(goals)
+
+
+def test_peek_npc_goals_reads_priority_sorted():
+    """_peek_npc_goals should return the capability's priority-sorted
+    goal list, and an empty list when the NPC has no goals."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    _attach_goals(engine, "mara", [
+        {"id": "expand_trade", "description": "Grow the guild", "priority": 7},
+        {"id": "hide_counterfeits", "description": "Hide the fake steel", "priority": 9},
+    ])
+    goals = director._peek_npc_goals("mara")
+    assert len(goals) == 2
+    assert goals[0]["id"] == "hide_counterfeits", goals  # priority 9 first
+    assert goals[1]["id"] == "expand_trade", goals
+    # NPC without a goals cap
+    assert director._peek_npc_goals("kael") == []
+    # Unknown NPC
+    assert director._peek_npc_goals("nobody") == []
+    print("  [PASS] peek_npc_goals_reads_priority_sorted")
+
+
+def test_focus_npc_bio_contains_personality_goals_and_knowledge():
+    """_build_focus_npc_bio should pull personality, goals, and
+    personal_knowledge into a single multi-line block."""
+    engine = _make_stub_engine()
+    mara = engine.pie.npc_knowledge.get("kael")  # use existing stub slot
+    mara.identity = {
+        "name": "Kael", "role": "blacksmith",
+        "personality": "Gruff, proud, quick to anger but slow to forgive.",
+    }
+    mara.personal_knowledge = [
+        "I suspect Mara is selling counterfeit steel.",
+        "I've been losing hammers — someone is stealing them.",
+    ]
+    mara.world_facts = ["Ashenvale has a blacksmith (me) and a merchant (Mara)."]
+    _attach_goals(engine, "kael", [
+        {"id": "find_thief", "description": "Catch whoever is stealing my hammers", "priority": 8},
+        {"id": "expose_mara", "description": "Prove Mara is selling fake steel", "priority": 9},
+    ])
+    director = StoryDirector(engine)
+    bio = director._build_focus_npc_bio("kael")
+    assert bio is not None
+    assert "FOCUS NPC BIO: kael" in bio
+    assert "Gruff, proud" in bio
+    assert "Driving goals:" in bio
+    # Priority-9 should appear before priority-8 in the bio
+    idx_p9 = bio.index("[p9]")
+    idx_p8 = bio.index("[p8]")
+    assert idx_p9 < idx_p8, bio
+    assert "Prove Mara is selling fake steel" in bio, bio
+    assert "Catch whoever is stealing my hammers" in bio, bio
+    assert "Private knowledge" in bio
+    assert "counterfeit steel" in bio
+    assert "Their view of the world" in bio
+    print("  [PASS] focus_npc_bio_contains_personality_goals_and_knowledge")
+
+
+def test_focus_npc_bio_returns_none_when_npc_is_bare():
+    """An NPC with only {name, role} (no personality, goals, pk, wf)
+    produces no bio — the caller should skip the block entirely."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Stub NPCs default to empty personal_knowledge/world_facts and no
+    # personality in identity — no goals attached either
+    bio = director._build_focus_npc_bio("noah")
+    assert bio is None, bio
+    print("  [PASS] focus_npc_bio_returns_none_when_npc_is_bare")
+
+
+def test_world_snapshot_roster_includes_top_goal():
+    """The per-NPC line in the snapshot should surface 'wants: ...'
+    when the NPC has an active goal."""
+    engine = _make_stub_engine()
+    _attach_goals(engine, "bess", [
+        {"id": "protect_village", "description": "Keep Ashenvale safe from the Silverwood threats", "priority": 8},
+    ])
+    director = StoryDirector(engine)
+    snapshot = director._world_snapshot()
+    # The bess line should include the wants suffix
+    bess_lines = [ln for ln in snapshot.split("\n") if "bess" in ln and "(innkeeper)" in ln]
+    assert bess_lines, f"bess line missing from snapshot: {snapshot}"
+    assert "wants:" in bess_lines[0], bess_lines[0]
+    assert "Silverwood" in bess_lines[0], bess_lines[0]
+    # NPCs without goals should not emit a wants suffix
+    kael_lines = [ln for ln in snapshot.split("\n") if "kael" in ln and "(blacksmith)" in ln]
+    assert kael_lines
+    assert "wants:" not in kael_lines[0], kael_lines[0]
+    print("  [PASS] world_snapshot_roster_includes_top_goal")
+
+
+def test_prompt_contains_bio_block_for_focus_npc():
+    """When a focus NPC has bio data, _build_prompt should inject a
+    FOCUS NPC BIO block between ACTIVE NARRATIVE ARC and FOCUS NPC."""
+    engine = _make_stub_engine()
+    kael = engine.pie.npc_knowledge.get("kael")
+    kael.identity = {
+        "name": "Kael", "role": "blacksmith",
+        "personality": "Gruff and hardworking.",
+    }
+    kael.personal_knowledge = ["I suspect someone is stealing my hammers."]
+    _attach_goals(engine, "kael", [
+        {"id": "catch_thief", "description": "Catch the hammer thief", "priority": 8},
+    ])
+    director = StoryDirector(engine)
+    prompt = director._build_prompt("world snap", focus_npc="kael", action_kind="event")
+    assert "FOCUS NPC BIO: kael" in prompt
+    assert "Gruff and hardworking" in prompt
+    assert "Catch the hammer thief" in prompt
+    assert "I suspect someone is stealing my hammers." in prompt
+    # Ordering: BIO must come before the FOCUS NPC directive block
+    bio_idx = prompt.index("FOCUS NPC BIO")
+    focus_idx = prompt.index("FOCUS NPC FOR THIS TICK")
+    assert bio_idx < focus_idx, (
+        "bio block must come before the forced-focus directive "
+        "(directive holds recency, bio provides context)"
+    )
+    print("  [PASS] prompt_contains_bio_block_for_focus_npc")
+
+
+def test_prompt_skips_bio_block_when_npc_is_bare():
+    """A bio-less NPC should not produce a FOCUS NPC BIO header in
+    the prompt — the block is skipped entirely."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    prompt = director._build_prompt("world snap", focus_npc="noah", action_kind="event")
+    assert "FOCUS NPC BIO" not in prompt
+    # The forced-focus directive should still be there
+    assert "FOCUS NPC FOR THIS TICK" in prompt
+    print("  [PASS] prompt_skips_bio_block_when_npc_is_bare")
+
+
 # ── Runner ──────────────────────────────────────────────────────
 
 def main():
@@ -1636,6 +1795,14 @@ def main():
     test_prompt_contains_active_arc_block()
     test_arc_planner_persists_and_reloads()
     test_arc_planner_cooldown_prevents_immediate_reproposal()
+
+    print("\nStory Director — NPC bio injection tests")
+    test_peek_npc_goals_reads_priority_sorted()
+    test_focus_npc_bio_contains_personality_goals_and_knowledge()
+    test_focus_npc_bio_returns_none_when_npc_is_bare()
+    test_world_snapshot_roster_includes_top_goal()
+    test_prompt_contains_bio_block_for_focus_npc()
+    test_prompt_skips_bio_block_when_npc_is_bare()
 
     print("\nStory Director — integration smoke test")
     test_integration_tick_mutates_world()

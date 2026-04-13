@@ -822,6 +822,126 @@ ledger — fast, deterministic, and independent of model availability.
 
 ---
 
+## NPC bio injection
+
+### The gap
+
+Pre-bio, `_world_snapshot()` surfaced exactly `(role, mood, trust,
+quest_count)` per NPC. The Director never saw motives, fears,
+secrets, personality, or backstory — all of which the NPC profiles
+ALREADY carry for the dialogue capabilities to consume.
+
+Mara's YAML has a priority-9 goal *"Keep the counterfeit steel
+operation secret"* and personal knowledge *"Knows Kael suspects her —
+she does"*. Kael's YAML has a priority-10 goal *"Learn what happened
+to apprentice Tam in the forbidden forest"*. Noah's has priority-8
+*"Discover why the well water turned bitter"* and personal knowledge
+*"Lost wife Elena five years ago, tends her garden daily"*.
+
+None of that reached the Director. Every NPC was one-dimensional from
+the overseer's perspective, which forced it to riff on the 5
+examples and the 30-line lore bible for its entire plot vocabulary.
+
+### The fix
+
+Two cheap additions to the prompt assembly:
+
+1. **Roster one-liners.** Each NPC's line in `_world_snapshot()` now
+   includes `wants: {top_goal_description}` when the NPC has an
+   active goal via the `goals` capability. Costs ~40 chars/NPC but
+   tells the LLM what every character in the world wants at a
+   glance.
+2. **Focus NPC full bio.** `_build_focus_npc_bio()` produces a
+   multi-line block with personality, priority-sorted goals,
+   personal_knowledge, and a few world_facts for the NPC each worker
+   is currently writing for. Injected into the prompt between the
+   `ACTIVE NARRATIVE ARC` block and the forced-focus directive, so
+   bio context comes *before* the MUST rules hit.
+
+Both read from the capability manager via the same pattern as
+`_peek_npc_state`: `mgr.capabilities.get("goals").goals` exposes the
+priority-sorted goal list on `GoalsCapability`. No changes to the
+capability system itself — purely a new consumer.
+
+### Empirical verification (3B, 15 ticks × 3 sub-actions)
+
+Compared the same session configuration with and without bio
+injection. The pre-bio run had already been tuned for multi-tick arcs
+(threshold=4, etc.), so any content difference is attributable to the
+bio block alone.
+
+**Brand-new plot hooks that did not exist in the pre-bio run:**
+
+| Hook | Source | Pre | Bio |
+|---|---|---|---|
+| Bitter well / well water | Noah goal p8 | 0 | **5** |
+| Elena / garden (Noah) | Noah pk | 0 | **2** |
+| Soldiers whispering / guard barracks | emergent | 0 | **4** |
+| Rare minerals / weapons hidden (Mara) | Mara pk | 0 | **2** |
+| Merchant guild warehouse | Mara pk | 0 | **2** |
+| Strange lights forest edge | emergent | 0 | **3** |
+
+**Vocabulary expansion:** 204 → 221 unique content words, with 149
+newly-introduced terms including *bitterness, flickering, forbidden,
+glowing, informer, minerals, muttering, whispering*. The model isn't
+just remixing the same 5 examples — it's pulling novel vocabulary
+from the bio data.
+
+**Arc cluster shifted.** Pre-bio 3B sessions always clustered around
+`[kael, mara]` because the missing-hammers few-shot example is so
+gravitationally strong. With bio enabled, the cluster re-formed
+around `[kael, guard_roderick]` — the bio's motivational fuel
+changed what content the model emitted, which changed which ledger
+entries clustered together.
+
+**Wall-clock impact: noise-level.** 92.5s vs the prior run's 92-183s
+variance envelope. Prompt grows ~200 tokens per worker (~15 bio
+lines), which at 1000 tok/sec eval adds ~0.2s/worker — under the
+run-to-run variance.
+
+### What didn't surface
+
+Three bios stayed invisible across the whole session:
+- Kael's priority-10 goal *"Learn what happened to apprentice Tam"*
+- Bess's priority-9 goal *"Clear whatever is in the cellar tunnels"*
+- Kael's dwarf/Iron Ridge backstory from his pk
+
+Root cause: **the few-shot examples in `examples.yaml` have stronger
+gravitational pull on 3B than the NPC bio does.** Every time the
+worker rotation landed on Kael, the model re-wrote the
+`missing_hammers` example verbatim instead of pulling from his bio
+goals. The bio steers content at the margins — it can invent new
+side threads and novel vocabulary — but it can't escape the few-shot
+orbit when the focus NPC has an example directly in the library.
+
+**Implication for v3 work:** diversify or rotate `examples.yaml` per
+tick. Either pick examples dynamically based on the focus NPC's top
+goal (so Kael ticks don't always see the hammers example), or
+shrink the library so the bio can compete for salience. This is a
+larger change than bio injection itself and is called out as a v3
+item below.
+
+### Tests
+
+6 offline unit tests cover the goals peek helper, the bio block
+shape, priority ordering, roster goal suffix, prompt integration
+(bio before forced-focus), and the skip-when-bare fallback. Stub
+test engine now has `_StubGoalsCap` and `_StubCapabilityManager` so
+bio tests don't need the real capability system wired up.
+
+### Tuning knobs
+
+- Top 3 goals per NPC bio (more would bloat the prompt with
+  low-priority padding)
+- Top 4 personal_knowledge items
+- Top 3 world_facts
+- 60-char cap on roster goal suffix
+- 180-char cap on personality
+- 140-char cap per goal description in bio
+- 160-char cap per pk/wf line
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -889,6 +1009,8 @@ prompt template and three action types. By the end it's:
 - **A dialogue auto-feed loop** (every player turn observed)
 - **A multi-tick arc planner** (deterministic cluster → theme + 4-beat
   skeleton, touch-counter advancement, zero new LLM calls)
+- **NPC bio injection** (goals + personality + personal_knowledge +
+  world_facts per focus NPC, one-line motive summary per roster NPC)
 - **A REST surface** (`/story/tick`, `/story/state`, `/story/player_action`)
 
 Every single piece exists because an empirical run produced a failure
@@ -908,7 +1030,40 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. NPC dialogue identity bleed
+### 1. Dynamic few-shot example rotation (escape the hammers orbit)
+
+**The gap:** The 3B bio-injection bench proved that NPC bio data
+does steer content, but only at the margins — every tick that
+focuses on Kael still rewrites the `missing_hammers` example from
+`examples.yaml` almost verbatim. The few-shot examples have stronger
+gravitational pull than bio data, so plot hooks like Kael's
+priority-10 *"apprentice Tam"* goal never surface. The dominant
+thread of every 3B session ends up being whatever's in the examples
+file.
+
+**Design sketch:**
+- Keep `examples.yaml` as a library indexed by theme/NPC rather
+  than as a static "show them all every tick" block.
+- At prompt-build time, pick 2-3 examples whose theme is NOT the
+  focus NPC's strongest bio hook. So a Kael tick with a
+  "find_apprentice_tam" priority goal would see examples about
+  OTHER NPCs (bess's tavern, elara's silverwood), giving the bio
+  block room to drive the content.
+- Alternatively: shrink the default library to 2 minimal examples
+  (just enough to stabilize the schema) and trust the bio for
+  theme.
+
+**Where to start:** `StoryDirector._build_prompt` — the
+`=== EXAMPLES ===` section is assembled from `self._examples` which
+is loaded once at init. Make it a pick function instead:
+`_pick_examples(focus_npc, action_kind)` that returns a filtered
+subset each tick.
+
+**Risk:** Lower example count = lower schema stability on 0.5B.
+Would need to re-run the 0.5B bench and verify the parser/coercion
+handles any schema drift the thinner example set produces.
+
+### 2. NPC dialogue identity bleed
 
 **The gap:** In bench dialogue tests, Noah called the player "Mara"
 and Mara called the player "Kael". This is in the npc-engine
@@ -927,7 +1082,7 @@ flag for retry.
 done as a focused npc-engine fix on its own branch, then merge
 forward.
 
-### 2. Real parallel workers
+### 3. Real parallel workers
 
 **The gap:** Multi-action ticks run sub-actions sequentially because
 llama-cpp-python isn't thread-safe for one base model. On a 3-action
@@ -951,7 +1106,7 @@ is the single function that needs to become async-aware. The
 working memory). Option B requires understanding PIE's queue
 priorities. Option C is the cleanest but adds operational complexity.
 
-### 3. Co-reference resolution in the FactLedger
+### 4. Co-reference resolution in the FactLedger
 
 **The gap:** Embedding similarity misses linked entities when names
 differ. *"The elder is hiding something"* and *"Noah won't talk
@@ -976,7 +1131,7 @@ director (it doesn't change at runtime).
 
 **Risk:** Low — purely additive to the embedding path.
 
-### 4. Auto-augmentor generation for narrative examples
+### 5. Auto-augmentor generation for narrative examples
 
 **The gap:** The 0.5B path's content is more literal than the 3B path
 because it copies few-shot examples verbatim. The fix is more curated
@@ -1005,7 +1160,7 @@ Then a new `generate_story_augmentors.py` script in the repo root.
 **Risk:** Medium — needs careful human review of generated examples
 to avoid drift away from the lore bible's tone.
 
-### 5. Narrative arc polish (v2 items)
+### 6. Narrative arc polish (v2 items)
 
 The deterministic arc planner shipped in v1 leaves a few things on
 the table that would be worth coming back to once multi-tick arcs
@@ -1024,7 +1179,7 @@ have been exercised in real sessions:
 - **Abandonment**: stale arcs with no recent cast touches should
   flip to `status = "abandoned"` so new arcs can form.
 
-### 6. Smaller items worth doing
+### 7. Smaller items worth doing
 
 - **Acting on contradiction** beyond retry: when the retry ALSO
   fails, fall back to a noop and log to a `narrative_conflicts.json`
