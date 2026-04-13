@@ -423,32 +423,120 @@ class StoryDirector:
 
     # ── Public API ──────────────────────────────────────────────
 
-    def tick(self, max_tokens: int = 400, temperature: float = 0.7) -> dict:
+    def tick(self, max_tokens: int = 400, temperature: float = 0.7,
+              actions_per_tick: int = 1) -> dict:
         """
-        Advance the story by one decision. Returns a dict describing what
-        happened. Always returns — never raises — so a game loop can call
-        this on a timer without guarding every field.
-        """
-        snapshot = self._world_snapshot()
-        focus_npc = self._pick_focus_npc()
-        action_kind = self._pick_action_kind(focus_npc)
-        prompt = self._build_prompt(snapshot, focus_npc, action_kind)
+        Advance the story by one decision (or by N parallel decisions
+        when ``actions_per_tick > 1``).
 
+        Single-action mode (``actions_per_tick=1``, default) returns the
+        legacy shape ``{tick, action, dispatch, raw_response}`` for
+        backward compatibility with existing clients.
+
+        Multi-action mode (``actions_per_tick >= 2``) runs Python's
+        architect/worker pattern: the architect picks N distinct
+        ``(focus_npc, action_kind)`` slots up front, then each worker
+        generates the content for its slot independently. All sub-
+        actions share the same pre-tick world snapshot — they are true
+        peers, not a sequential pipeline. Returns
+        ``{tick, sub_actions: [{action, dispatch, raw_response}, ...]}``.
+
+        Always returns — never raises — so a game loop can call this on
+        a timer without guarding every field.
+        """
+        if actions_per_tick < 1:
+            actions_per_tick = 1
+
+        snapshot = self._world_snapshot()
+        plan = self._architect_plan(actions_per_tick)
+
+        if not plan:
+            # No NPCs to focus on — return a minimal noop response
+            self.tick_count += 1
+            self.last_tick_at = datetime.now(timezone.utc).isoformat()
+            self._save_state()
+            empty = {"action": "noop", "reason": "no_focus_npc_available"}
+            if actions_per_tick == 1:
+                return {
+                    "tick": self.tick_count,
+                    "action": empty,
+                    "dispatch": {"ok": True, "kind": "noop"},
+                    "raw_response": "",
+                }
+            return {"tick": self.tick_count, "sub_actions": []}
+
+        sub_results: list[dict] = []
+        for focus_npc, action_kind in plan:
+            sub_results.append(self._run_single_action(
+                snapshot=snapshot,
+                focus_npc=focus_npc,
+                action_kind=action_kind,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            ))
+
+        self.tick_count += 1
+        self.last_tick_at = datetime.now(timezone.utc).isoformat()
+
+        # Record this tick. For multi-action ticks we store ALL sub-action
+        # actions in the recent_decisions trail (under their parent tick)
+        # so future cooldown calculations see every NPC touched.
+        decision_record = {
+            "tick": self.tick_count,
+            "at": self.last_tick_at,
+            "snapshot_preview": snapshot[:200],
+        }
+        if actions_per_tick == 1:
+            decision_record["action"] = sub_results[0]["action"]
+            decision_record["dispatch"] = sub_results[0]["dispatch"]
+        else:
+            # Use the FIRST sub-action's metadata as the canonical "action"
+            # so legacy cooldown code that reads decision["action"] still
+            # works. Store the full list under sub_actions.
+            decision_record["action"] = sub_results[0]["action"]
+            decision_record["dispatch"] = sub_results[0]["dispatch"]
+            decision_record["sub_actions"] = [
+                {"action": r["action"], "dispatch": r["dispatch"]}
+                for r in sub_results
+            ]
+        self.recent_decisions.append(decision_record)
+        self.recent_decisions = self.recent_decisions[-5:]
+        self._save_state()
+
+        if actions_per_tick == 1:
+            r = sub_results[0]
+            return {
+                "tick": self.tick_count,
+                "action": r["action"],
+                "dispatch": r["dispatch"],
+                "raw_response": r["raw_response"],
+            }
+        return {
+            "tick": self.tick_count,
+            "sub_actions": sub_results,
+        }
+
+    def _run_single_action(self, snapshot: str, focus_npc: Optional[str],
+                            action_kind: str, max_tokens: int,
+                            temperature: float) -> dict:
+        """
+        Run one (focus_npc, action_kind) slot through the LLM + enforce
+        + dispatch + ledger pipeline. Returns a dict the tick caller
+        merges into the response. Used by both single- and multi-action
+        ticks so the worker logic lives in exactly one place.
+        """
+        prompt = self._build_prompt(snapshot, focus_npc, action_kind)
         raw, action = self._llm_call_with_repair(prompt, max_tokens, temperature)
 
-        # Python owns both the focus NPC and the action kind — the LLM
-        # only decides the creative content. Enforce both after parse in
-        # case the model deviated from the prompt directive.
         if focus_npc:
             action = self._enforce_focus_npc(action, focus_npc)
         action = self._enforce_action_kind(action, action_kind, focus_npc)
 
         dispatch_result = self._dispatch(action)
 
-        # Record successful injections in the FactLedger and surface any
-        # similarity warning. We do this AFTER dispatch so we only ledger
-        # actions that actually mutated the world (no point auditing noops
-        # or rejected dispatches).
+        # Ledger every successful, non-noop injection so contradictions
+        # across sub-actions (within the same tick or across ticks) are
+        # caught uniformly.
         if dispatch_result.get("ok") and dispatch_result.get("kind") not in (None, "noop"):
             ledger_text = self._ledger_text_for(action)
             if ledger_text:
@@ -467,25 +555,35 @@ class StoryDirector:
                 if warning is not None:
                     dispatch_result["similarity_warning"] = warning
 
-        self.tick_count += 1
-        self.last_tick_at = datetime.now(timezone.utc).isoformat()
-        decision_record = {
-            "tick": self.tick_count,
-            "at": self.last_tick_at,
-            "action": action,
-            "dispatch": dispatch_result,
-            "snapshot_preview": snapshot[:200],
-        }
-        self.recent_decisions.append(decision_record)
-        self.recent_decisions = self.recent_decisions[-5:]
-        self._save_state()
-
         return {
-            "tick": self.tick_count,
+            "focus_npc": focus_npc,
+            "action_kind": action_kind,
             "action": action,
             "dispatch": dispatch_result,
             "raw_response": raw,
         }
+
+    def _architect_plan(self, n_actions: int) -> list[tuple[Optional[str], str]]:
+        """
+        Plan N distinct ``(focus_npc, action_kind)`` slots for a multi-
+        action tick. Each slot is picked using the same focus + kind
+        rotation as single-action mode, but the in-flight planning loop
+        adds each chosen NPC to a temporary exclusion set so two
+        workers can't compete for the same target.
+
+        Returns at most ``n_actions`` slots, fewer if the world doesn't
+        have enough NPCs.
+        """
+        plan: list[tuple[Optional[str], str]] = []
+        excluded: set[str] = set()
+        for _ in range(max(1, n_actions)):
+            focus = self._pick_focus_npc(extra_exclude=excluded)
+            if focus is None:
+                break
+            excluded.add(focus)
+            kind = self._pick_action_kind(focus)
+            plan.append((focus, kind))
+        return plan
 
     def get_state(self) -> dict:
         return {
@@ -635,7 +733,7 @@ class StoryDirector:
         self._kind_rotation_index = (start + 1) % len(_ACTION_KIND_ROTATION)
         return "event"
 
-    def _pick_focus_npc(self) -> Optional[str]:
+    def _pick_focus_npc(self, extra_exclude: Optional[set[str]] = None) -> Optional[str]:
         """
         Python decides WHICH NPC this tick focuses on. The LLM decides WHAT
         happens to them. Two layers:
@@ -647,6 +745,10 @@ class StoryDirector:
            touched NPC. This keeps the story from fixating when the
            player is passive.
 
+        ``extra_exclude`` is used by the architect's in-flight planner to
+        prevent two workers in the same multi-action tick from competing
+        for the same NPC. NPCs in this set are skipped at both layers.
+
         The split exists because Qwen/Llama 3B — even with strongly-worded
         rules in the prompt — still fixate on a single target or abuse
         ``"all"``. We take the choice out of the model's hands.
@@ -655,26 +757,38 @@ class StoryDirector:
         if not profiles:
             return None
 
-        # Layer 1: react to pending player action
-        pending_target = self._pending_player_target(profiles)
+        excluded = set(extra_exclude or ())
+        available = [nid for nid in profiles if nid not in excluded]
+        if not available:
+            return None
+
+        # Layer 1: react to pending player action (but only if the
+        # player's target isn't already taken by another worker)
+        pending_target = self._pending_player_target(available)
         if pending_target:
             return pending_target
 
         # Layer 2: least-recently-touched rotation
-        last_touched: dict[str, int] = {npc_id: -1 for npc_id in profiles}
+        last_touched: dict[str, int] = {npc_id: -1 for npc_id in available}
         for d in self.recent_decisions:
             tick_num = d.get("tick", 0)
-            act = d.get("action", {})
-            if not isinstance(act, dict):
-                continue
-            for key in ("npc_id", "target"):
-                val = act.get(key)
-                if isinstance(val, str) and val in last_touched:
-                    last_touched[val] = max(last_touched[val], tick_num)
+            # Aggregate touches across both the canonical "action" field
+            # and any sub-actions stored on multi-action ticks.
+            actions_in_decision: list[dict] = []
+            if isinstance(d.get("action"), dict):
+                actions_in_decision.append(d["action"])
+            for sub in d.get("sub_actions", []) or []:
+                if isinstance(sub, dict) and isinstance(sub.get("action"), dict):
+                    actions_in_decision.append(sub["action"])
+            for act in actions_in_decision:
+                for key in ("npc_id", "target"):
+                    val = act.get(key)
+                    if isinstance(val, str) and val in last_touched:
+                        last_touched[val] = max(last_touched[val], tick_num)
 
         ordered = sorted(
-            profiles,
-            key=lambda nid: (last_touched[nid], profiles.index(nid)),
+            available,
+            key=lambda nid: (last_touched[nid], available.index(nid)),
         )
         return ordered[0]
 

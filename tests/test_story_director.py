@@ -381,6 +381,97 @@ def test_enforce_action_kind_event_to_fact():
     print("  [PASS] enforce_action_kind_event_to_fact")
 
 
+def test_architect_plan_picks_distinct_npcs():
+    """The architect must not pick the same NPC twice in one tick."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    plan = director._architect_plan(3)
+    npcs = [p[0] for p in plan]
+    assert len(npcs) == 3, plan
+    assert len(set(npcs)) == 3, f"duplicate NPCs in plan: {plan}"
+    print("  [PASS] architect_plan_picks_distinct_npcs")
+
+
+def test_architect_plan_caps_at_npc_count():
+    """If we ask for more sub-actions than there are NPCs, the plan
+    truncates rather than repeating."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    plan = director._architect_plan(10)
+    npcs = [p[0] for p in plan]
+    # The stub engine has 3 NPCs; the plan can be at most 3 long.
+    assert len(plan) == 3, plan
+    assert len(set(npcs)) == 3, plan
+    print("  [PASS] architect_plan_caps_at_npc_count")
+
+
+def test_pick_focus_respects_extra_exclude():
+    """The in-flight architect planner uses extra_exclude to mark NPCs
+    as taken. _pick_focus_npc must honor it across both layers (player
+    reactivity + rotation)."""
+    restore = _isolate_state_file("exclude")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        # Even with a pending player action targeting bess, exclude={bess}
+        # should fall through to rotation
+        director.recent_player_actions = [{
+            "at": "2026-04-13T10:05:00+00:00",
+            "tick_at_time": 1,
+            "text": "Player gave bess a gift",
+            "target": "bess",
+        }]
+        focus = director._pick_focus_npc(extra_exclude={"bess"})
+        assert focus != "bess", focus
+        assert focus in {"kael", "noah"}, focus
+    finally:
+        restore()
+    print("  [PASS] pick_focus_respects_extra_exclude")
+
+
+def test_multi_action_tick_runs_n_workers():
+    """An actions_per_tick=3 tick should produce 3 distinct sub-actions
+    and update tick_count by exactly one (not three — it's still ONE
+    tick, just with parallel workers)."""
+    restore = _isolate_state_file("multi")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "event", "target": "kael", "event": "kael event"}',
+            '{"action": "event", "target": "bess", "event": "bess event"}',
+            '{"action": "event", "target": "noah", "event": "noah event"}',
+        ])
+        director = StoryDirector(engine)
+        result = director.tick(actions_per_tick=3)
+        assert "sub_actions" in result, result
+        assert len(result["sub_actions"]) == 3, result
+        assert director.tick_count == 1, director.tick_count
+        targets = [r["focus_npc"] for r in result["sub_actions"]]
+        assert len(set(targets)) == 3, targets
+    finally:
+        restore()
+    print("  [PASS] multi_action_tick_runs_n_workers")
+
+
+def test_single_action_tick_is_backward_compatible():
+    """tick() default behavior must still return the legacy shape with
+    'action' and 'dispatch' at the top level — existing clients depend
+    on it."""
+    restore = _isolate_state_file("single_compat")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "event", "target": "kael", "event": "x"}',
+        ])
+        director = StoryDirector(engine)
+        result = director.tick()  # actions_per_tick default = 1
+        assert "action" in result
+        assert "dispatch" in result
+        assert "raw_response" in result
+        assert "sub_actions" not in result
+    finally:
+        restore()
+    print("  [PASS] single_action_tick_is_backward_compatible")
+
+
 def test_dialogue_autofeed_format():
     """The engine.process wiring formats player dialogue as 'Player said
     to <npc_id>: <text>' so the Director sees both speaker intent and
@@ -954,6 +1045,11 @@ def main():
     test_enforce_action_kind_event_to_quest()
     test_enforce_action_kind_leaves_noop_alone()
     test_enforce_action_kind_event_to_fact()
+    test_architect_plan_picks_distinct_npcs()
+    test_architect_plan_caps_at_npc_count()
+    test_pick_focus_respects_extra_exclude()
+    test_multi_action_tick_runs_n_workers()
+    test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()
     test_record_player_action_and_snapshot()
     test_focus_npc_prioritizes_pending_player_target()

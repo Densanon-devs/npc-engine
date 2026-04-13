@@ -240,6 +240,10 @@ def main():
                         help="Interleave real engine.process() dialogue turns between "
                              "ticks. Tests the full player→NPC→director loop via "
                              "auto-feed instead of synthetic record_player_action calls.")
+    parser.add_argument("--actions-per-tick", type=int, default=1,
+                        help="Number of parallel sub-actions per tick (architect/worker). "
+                             "Default 1 = single-action mode. >=2 = each tick plans N "
+                             "distinct (focus, kind) slots and runs one LLM call per slot.")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
@@ -311,57 +315,85 @@ def main():
             result = engine.story_director.tick(
                 max_tokens=args.max_tokens,
                 temperature=args.temperature,
+                actions_per_tick=args.actions_per_tick,
             )
             elapsed = time.monotonic() - t0
             timings.append(elapsed)
 
-            raw = result.get("raw_response") or ""
-            action = result.get("action") or {}
-            dispatch = result.get("dispatch") or {}
+            # Multi-action ticks return a sub_actions list; single-action
+            # ticks return action/dispatch at the top level. Normalize.
+            if "sub_actions" in result:
+                sub_results = result["sub_actions"]
+            else:
+                sub_results = [{
+                    "focus_npc": result.get("action", {}).get("npc_id")
+                                  or result.get("action", {}).get("target"),
+                    "action_kind": result.get("action", {}).get("action"),
+                    "action": result.get("action") or {},
+                    "dispatch": result.get("dispatch") or {},
+                    "raw_response": result.get("raw_response") or "",
+                }]
 
             after = _snapshot_world(engine)
             world_changes = _diff_world(before, after)
 
-            tag = classify(action, dispatch)
-            outcomes[tag] += 1
-            action_kinds[action.get("action", "?")] += 1
-            target = action.get("npc_id") or action.get("target") or "-"
-            action_targets[target] += 1
-            coerced = _was_coerced(raw, action)
-            if coerced:
-                coerce_count += 1
+            print(f"  elapsed: {elapsed:.2f}s   sub_actions: {len(sub_results)}")
+            tick_actions: list[dict] = []
+            for sub_idx, sub in enumerate(sub_results):
+                raw = sub.get("raw_response") or ""
+                action = sub.get("action") or {}
+                dispatch = sub.get("dispatch") or {}
 
-            print(f"  elapsed: {elapsed:.2f}s   outcome: {tag}   coerced: {coerced}")
-            print(f"  raw ({len(raw)} chars): {raw[:220]}")
-            print(f"  action: {json.dumps(action, ensure_ascii=False)[:300]}")
-            print(f"  dispatch: {dispatch}")
-            warning = dispatch.get("similarity_warning")
-            if warning:
-                nli = warning.get("nli") or {}
-                nli_label = nli.get("label", "?")
-                nli_conf = nli.get("confidence", 0.0)
-                marker = "⚠⚠ CONTRADICTION" if warning.get("contradiction") else "⚠ ledger"
-                print(f"  {marker} sim={warning['similarity']:.2f}  "
-                      f"nli={nli_label}({nli_conf:.2f})  "
-                      f"matches T{warning['matches_tick']} {warning['matches_kind']}/{warning['matches_npc']}: "
-                      f"{warning['matches_text'][:90]}")
-                similarity_warnings.append({
-                    "tick": tick_num, **warning,
+                tag = classify(action, dispatch)
+                outcomes[tag] += 1
+                action_kinds[action.get("action", "?")] += 1
+                target = action.get("npc_id") or action.get("target") or "-"
+                action_targets[target] += 1
+                coerced = _was_coerced(raw, action)
+                if coerced:
+                    coerce_count += 1
+
+                indent = "    " if len(sub_results) > 1 else "  "
+                marker = f"[{sub_idx + 1}/{len(sub_results)}] " if len(sub_results) > 1 else ""
+                print(f"{indent}{marker}{tag}  coerced={coerced}")
+                print(f"{indent}  action: {json.dumps(action, ensure_ascii=False)[:280]}")
+                print(f"{indent}  dispatch: {dispatch}")
+                warning = dispatch.get("similarity_warning")
+                if warning:
+                    nli = warning.get("nli") or {}
+                    nli_label = nli.get("label", "?")
+                    nli_conf = nli.get("confidence", 0.0)
+                    wmark = "⚠⚠ CONTRADICTION" if warning.get("contradiction") else "⚠ ledger"
+                    print(f"{indent}  {wmark} sim={warning['similarity']:.2f}  "
+                          f"nli={nli_label}({nli_conf:.2f})  "
+                          f"matches T{warning['matches_tick']} {warning['matches_kind']}/{warning['matches_npc']}")
+                    similarity_warnings.append({
+                        "tick": tick_num, **warning,
+                    })
+                tick_actions.append({
+                    "focus_npc": sub.get("focus_npc"),
+                    "action_kind": sub.get("action_kind"),
+                    "outcome": tag,
+                    "coerced": coerced,
+                    "raw": raw,
+                    "action": action,
+                    "dispatch": dispatch,
                 })
+
             if world_changes:
                 print(f"  world: {'; '.join(world_changes)}")
             else:
                 print(f"  world: (no change)")
 
             trace.append({
-                "tick": i + 1,
+                "tick": tick_num,
                 "elapsed": round(elapsed, 3),
-                "outcome": tag,
-                "coerced": coerced,
-                "raw": raw,
-                "action": action,
-                "dispatch": dispatch,
+                "sub_actions": tick_actions,
                 "world_changes": world_changes,
+                # Legacy fields for the player-reactivity scanner below
+                "action": tick_actions[0]["action"],
+                "dispatch": tick_actions[0]["dispatch"],
+                "outcome": tick_actions[0]["outcome"],
             })
 
         # Summary
@@ -383,12 +415,21 @@ def main():
         for t, c in action_targets.most_common():
             print(f"  {t:20} {c}")
 
-        # Drift signal: how often did the director pick the same target in a row?
-        target_seq = [t.get("action", {}).get("npc_id") or t.get("action", {}).get("target")
-                      for t in trace]
-        consecutive_repeats = sum(1 for i in range(1, len(target_seq))
-                                  if target_seq[i] and target_seq[i] == target_seq[i-1])
-        print(f"Consecutive target repeats: {consecutive_repeats}/{max(args.ticks - 1, 0)}")
+        # Drift signal: how often did consecutive sub-actions (across the
+        # whole flat sequence, including within and across ticks) target
+        # the same NPC? This is a stronger metric for multi-action ticks
+        # than per-tick repeats.
+        flat_targets: list[Optional[str]] = []
+        for t in trace:
+            for sub in t.get("sub_actions", []):
+                a = sub.get("action") or {}
+                flat_targets.append(a.get("npc_id") or a.get("target"))
+        consecutive_repeats = sum(
+            1 for i in range(1, len(flat_targets))
+            if flat_targets[i] and flat_targets[i] == flat_targets[i - 1]
+        )
+        print(f"Consecutive target repeats (sub-action level): "
+              f"{consecutive_repeats}/{max(len(flat_targets) - 1, 0)}")
 
         if similarity_warnings:
             contradictions = [w for w in similarity_warnings if w.get("contradiction")]

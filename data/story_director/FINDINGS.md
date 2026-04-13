@@ -370,6 +370,104 @@ perspective.
 
 ---
 
+## Architect / worker — multi-action ticks
+
+The default `tick()` produces one action per call. SAO's Cardinal plans
+*arcs*, not single beats. Adding the architect/worker pattern from
+ultralight-coder lets a single tick advance N plot threads in parallel:
+
+```python
+director.tick(actions_per_tick=3)
+# returns {tick, sub_actions: [{action, dispatch, raw_response}, ...]}
+```
+
+### Architecture
+
+The split is **planning vs writing**, same as before — just at a wider
+scope:
+
+- **Architect (`_architect_plan`)** — picks N distinct
+  `(focus_npc, action_kind)` slots up front. Uses the same focus +
+  rotation logic as single-action mode, but maintains an in-flight
+  `excluded` set so two workers can't compete for the same NPC.
+- **Workers (`_run_single_action`)** — each takes one slot from the
+  plan and runs the same LLM-call → enforce → dispatch → ledger
+  pipeline that single-action mode uses. Same prompt builder, same
+  parser, same coercion. Workers are **independent** — they all see
+  the same pre-tick world snapshot.
+- **Backward compatible** — `actions_per_tick=1` (default) still
+  returns the legacy `{tick, action, dispatch, raw_response}` shape.
+
+### Empirical run: Qwen 2.5 3B, 5 ticks × 3 actions = 15 actions
+
+```
+Total time: 49.33s   mean: 9.87s/tick (= ~3.3s/worker)
+Dispatch: 15/15 OK
+Coercions / Noops / Errors: 0 / 0 / 0
+Consecutive target repeats (sub-action level): 0 / 14
+Action kinds: event×6, fact×5, quest×4
+Targets touched: bess×3, elara×3, roderick×2, kael×2, mara×2, noah×2, pip×1
+```
+
+**All 7 Ashenvale NPCs got airtime in 5 ticks.** The single-action mode
+took 10 ticks to do the same. Multi-action *halves* the wall-clock per
+NPC visit.
+
+The narrative was meaningfully richer because each tick advanced **three
+plot threads at once.** Selected highlights:
+
+- **T2:** Kael finds a letter in one of his stolen hammers signed
+  "Kael" (a planted forgery!) → Quest "Steel Breach" against Mara →
+  Noah finally reads the sealed letter, which *"speaks of a hidden
+  treasure and a prophecy about the village's future."*
+- **T3:** Roderick whispers something to Pip in a recruitment scene
+  → Bess starts a "Tavern Rumors" quest about the tax collector →
+  Elara confides she's heard whispers about the Silverwood ruins.
+- **T5:** Noah and Roderick exchange a knowing look about the letter
+  → Bess hears whispers about Roderick's letter (gossip propagation
+  in real-time) → Elara stumbles out of the Silverwood *"as if she
+  had seen something she shouldn't have."*
+
+### What multi-action ticks revealed about the FactLedger
+
+Six ledger warnings fired across the 15 sub-actions — all correctly
+classified as `neutral` by NLI. The most informative match was:
+
+> T5 sub-2: *"I've heard whispers that a mysterious letter has been
+> delivered to Roderick. It's been sitting in his mailbag for days."*
+> matched T4 sub-1: *"Roderick receives a mysterious letter in his
+> mailbag. It's addressed to him with no return address."*
+> Similarity: 0.86. NLI: neutral (1.00 confidence).
+
+This is **the FactLedger watching the Director propagate gossip across
+plot threads.** T4 dropped a piece of information; T5 had a different
+NPC react to it. The ledger correctly identified them as related and
+the NLI correctly identified them as consistent (not contradictory) —
+exactly the signal a contradiction-detection layer should produce.
+
+### Performance
+
+- ~3.3s per worker on Qwen 2.5 3B (vs ~2.5s for a standalone single-
+  action call — the slight overhead is from the larger ledger needing
+  more cosine comparisons each call)
+- Workers run sequentially on local CPU (llama-cpp-python isn't thread-
+  safe for parallel calls into one base model). On a real game loop,
+  3 sub-actions in 10 seconds is fine for a story tick that fires
+  every 30+ seconds.
+- A future optimization: keep N independent base_model instances and
+  run workers in actual parallel. Or use ultralight-coder's
+  `GenerationQueue` from PIE which already prioritizes background work.
+
+### When to use it
+
+| Mode | Use when |
+|---|---|
+| `actions_per_tick=1` | Real-time game director on a fast cadence (one beat every 5-10s of gameplay). Lowest latency per call. |
+| `actions_per_tick=3` | Story-tick on a slower cadence (one tick every 30+ seconds). Richer narrative per call, full NPC coverage in fewer ticks. |
+| `actions_per_tick=N>3` | Burst story progression — exposition, scene transitions, between-act planning. Diminishing returns past 3 because the architect runs out of distinct NPCs in a 7-NPC world. |
+
+---
+
 ## NLI contradiction detection
 
 The FactLedger surfaces *similar* pairs. To turn similarity into
