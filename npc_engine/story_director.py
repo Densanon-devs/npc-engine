@@ -1158,6 +1158,77 @@ class StoryDirector:
 
         return "\n".join(lines)
 
+    def _pick_examples(self, focus_npc: Optional[str],
+                        action_kind: Optional[str]) -> list[dict]:
+        """
+        Pick a small subset of examples to show THIS worker, instead of
+        dumping the whole library every tick. Two rules:
+
+        1. **Exclude examples about the focus NPC.** The 3B bio-injection
+           bench showed that when a Kael-focused tick sees the
+           ``missing_hammers`` example directly, the model rewrites it
+           verbatim instead of pulling from Kael's bio goals. Removing
+           the focus-NPC example breaks that copy loop and lets the bio
+           compete for salience.
+
+        2. **Prefer one example matching the target action_kind.** The
+           forced-focus block already says the worker MUST emit a given
+           kind; showing one example of that kind stabilizes the schema
+           for that output. Fill the remaining slots with different
+           kinds for variety so the model sees all shapes.
+
+        Returns at most 3 picks. Falls back to the full library if
+        filtering leaves nothing (never emit an empty EXAMPLES block —
+        schema parse reliability drops when the model loses its shape
+        reference entirely).
+        """
+        if not self._examples:
+            return []
+
+        # Rule 1: exclude examples whose primary_npc matches focus_npc
+        eligible = [
+            ex for ex in self._examples
+            if focus_npc is None or ex.get("primary_npc") != focus_npc
+        ]
+        if not eligible:
+            # All examples were about the focus NPC (shouldn't happen with
+            # 5 examples and 7 NPCs, but guard anyway)
+            eligible = list(self._examples)
+
+        # Rule 2: prioritize one example matching the target action_kind
+        picks: list[dict] = []
+        if action_kind:
+            for ex in eligible:
+                if ex.get("action", {}).get("action") == action_kind:
+                    picks.append(ex)
+                    break
+
+        # Fill remaining slots with examples of OTHER kinds for diversity.
+        # Prefer kinds we haven't shown yet this tick.
+        shown_kinds = {
+            p.get("action", {}).get("action") for p in picks
+        }
+        for ex in eligible:
+            if len(picks) >= 3:
+                break
+            if ex in picks:
+                continue
+            ex_kind = ex.get("action", {}).get("action")
+            # Skip if we already have this kind AND we haven't filled up
+            if ex_kind in shown_kinds and len(picks) < 3:
+                continue
+            picks.append(ex)
+            shown_kinds.add(ex_kind)
+
+        # If we still don't have 3, top up with anything left
+        for ex in eligible:
+            if len(picks) >= 3:
+                break
+            if ex not in picks:
+                picks.append(ex)
+
+        return picks[:3]
+
     def _pick_action_kind(self, focus_npc: Optional[str]) -> str:
         """
         Python decides the action KIND (event / quest / fact) — round-robin
@@ -1457,9 +1528,10 @@ class StoryDirector:
             '{"action": "noop", "reason": "..."}.'
         )
 
-        if self._examples:
+        picked_examples = self._pick_examples(focus_npc, action_kind)
+        if picked_examples:
             ex_blocks = []
-            for ex in self._examples:
+            for ex in picked_examples:
                 ws = str(ex.get("world_state", "")).strip()
                 action = ex.get("action", {})
                 ex_blocks.append(

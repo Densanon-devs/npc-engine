@@ -942,6 +942,129 @@ bio tests don't need the real capability system wired up.
 
 ---
 
+## Dynamic example rotation (escaping the few-shot orbit)
+
+### The gap
+
+The NPC bio injection worked for low-salience bios but hit a hard
+ceiling on high-salience ones. Kael's priority-10 goal *"Learn what
+happened to apprentice Tam in the forbidden forest"* never once
+surfaced across three 3B sessions, even though the bio block
+repeatedly told the model about it. Root cause: every time the
+forced-focus rotation landed on Kael, the model saw the
+``missing_hammers`` example in the EXAMPLES block and rewrote it
+near-verbatim. The example had stronger gravitational pull than the
+bio, so Kael's content was stuck in the hammers loop.
+
+This was the *same* failure mode documented for 0.5B (literal copy
+of few-shots), just showing up at 3B as thematic copy. More
+parameters, same anchor.
+
+### The fix
+
+Replace the "dump all 5 examples every tick" block with a per-worker
+picker. Each example in `examples.yaml` now has a ``primary_npc``
+tag (the NPC the example is directly about). On each prompt build,
+`_pick_examples(focus_npc, action_kind)`:
+
+1. **Excludes examples whose primary_npc matches the focus NPC.**
+   A Kael-focused worker never sees the Kael example. The copy
+   loop is broken at the source.
+2. **Prioritizes one example matching the target action_kind.**
+   The forced-focus block says the worker MUST emit a specific
+   kind; showing one example of that kind stabilizes the schema
+   for that shape.
+3. **Fills remaining slots with different kinds for variety.**
+   So the worker still sees event/quest/fact shapes even when
+   forced to emit one.
+4. **Caps at 3 picks.** Fewer examples leaves more salience for
+   the bio and arc blocks.
+5. **Falls back to the full library if filtering leaves nothing.**
+   An empty EXAMPLES block tanks schema parse reliability.
+
+No other change to the prompt — same lore, same bio, same arc
+block, same forced-focus directive. Just a smarter example pick.
+
+### Empirical verification (3B, 15 × 3 actions)
+
+Compared rotation against the prior (arcs) and (bio) runs on the
+same config. The numbers are the biggest leap in Director output
+quality in the whole branch so far.
+
+**Dormant hooks finally surfaced:**
+
+| Hook | arcs | bio | rotation |
+|---|---|---|---|
+| Tam apprentice (Kael p10) | 0 | 0 | **4** ✨ |
+| Cellar tunnels (Bess p9) | 0 | 0 | **1** ✨ |
+| Bitter well (Noah p8) | 0 | 4 | 5 |
+| Elena / garden (Noah pk) | 0 | 2 | 3 |
+
+**Hammers copy loop collapsed:**
+
+| Metric | arcs | bio | rotation |
+|---|---|---|---|
+| Kael-focus subs mentioning hammers | **7/7 (100%)** | 3/7 (42%) | **1/7 (14%)** |
+| Total ticks w/ any hammer mention | 10/15 | 6/15 | **1/15** |
+
+**Vocabulary exploded:** 204 → 221 → **260** unique content words.
+147 new words exclusive to the rotation run: *caravan, clatters,
+dismisses, enchanted, faeries, feverish, footprints, ghostly,
+incantations, informants, intruder*. These are real thematic
+shifts, not just paraphrase.
+
+**Kael's bio unlocked a detective arc.** In the rotation run,
+Kael's 7 focus ticks built a coherent "find the missing apprentice"
+investigation: shadowy figure in the workshop → Tam's disappearance
+quest → footprints in the snow → wolves acting strange → unknown
+metal Tam brought from the forest → Kael shouting Tam's name in
+the Silverwood. Every thread pulled from his bio: Tam (p10 goal),
+Silverwood (lore rule), the metal-sense backstory from his pk, the
+wolf bounty (lore fact). None of this content existed in the prior
+runs.
+
+**Bonus: a new arc emerged around Roderick alone.** The planner
+clustered `[guard_roderick]` with theme *"Roderick saw strange
+lights in the forest last week but dismissed it as nothing"* — a
+7-tick investigation arc that appeared nowhere in the prior runs.
+The model even extrapolated plausibly (*"he thinks it might be
+faeries or something harmless"*) before escalating toward a
+smuggling suspicion (*"The Northern caravan had strange items like
+enchanted weapons and potions, which Roderick suspects are
+contraband"*). Genuinely emergent story from zero prior seed.
+
+### Tradeoffs
+
+- **Lost some prior content threads.** The counterfeit-steel thread
+  (Kael's p6 goal) vanished — 5 hits → 0. That's because the old
+  Kael example was the only thing bridging Kael to "counterfeit",
+  and pulling it removed the bridge. Not a regression if you think
+  of it as "making room for Tam to surface", but worth noting.
+- **Per-NPC content can still fixate on top bio items.** Bess's
+  8 ticks concentrated heavily on her top pk entry ("merchant
+  guild planning to raise taxes") — 5 of 8 mentioned it. The bio
+  fix broke the example copy loop but didn't stop per-NPC bio
+  concentration. A v4 item is probably *rotating WITHIN a bio*
+  (showing different goal/pk items on different ticks).
+- **One LLM-pacing oddity:** Bess's ticks kept using the phrase
+  "I heard whispers of the merchant guild planning to raise taxes"
+  almost verbatim. Phrasing cloning at the bio level. Not a bug
+  but a signal that bio text could use a "paraphrase, don't quote"
+  instruction.
+- **Wall-clock: within variance.** 203s for 15 × 3 ticks this run
+  vs the 92-183s envelope on prior runs. 3 picks instead of 5
+  shrinks the prompt by ~300 tokens, so generation should be
+  faster, but run-to-run variance on CPU is larger than the savings.
+
+### Tests
+
+6 offline unit tests cover the picker: exclude focus_npc,
+prioritize target action_kind, cap at 3, fallback when the filter
+strips everything, kind diversity, and an integration check that
+`_build_prompt` emits only non-focus-NPC examples.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -1011,6 +1134,10 @@ prompt template and three action types. By the end it's:
   skeleton, touch-counter advancement, zero new LLM calls)
 - **NPC bio injection** (goals + personality + personal_knowledge +
   world_facts per focus NPC, one-line motive summary per roster NPC)
+- **Dynamic example rotation** (per-worker example picker that
+  excludes focus-NPC examples so the bio can escape the few-shot
+  copy loop — this is what unlocked emergent plots like Kael's
+  search for Tam)
 - **A REST surface** (`/story/tick`, `/story/state`, `/story/player_action`)
 
 Every single piece exists because an empirical run produced a failure
@@ -1030,40 +1157,61 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Dynamic few-shot example rotation (escape the hammers orbit)
+### 1. Rotate within a bio (stop per-NPC fixation)
 
-**The gap:** The 3B bio-injection bench proved that NPC bio data
-does steer content, but only at the margins — every tick that
-focuses on Kael still rewrites the `missing_hammers` example from
-`examples.yaml` almost verbatim. The few-shot examples have stronger
-gravitational pull than bio data, so plot hooks like Kael's
-priority-10 *"apprentice Tam"* goal never surface. The dominant
-thread of every 3B session ends up being whatever's in the examples
-file.
+**The gap:** The rotation work (commit `TBD`) broke the few-shot
+copy loop but revealed a new smaller one: Bess's 8 ticks in the
+rotation run concentrated 5/8 mentions on her top personal_knowledge
+item (*"merchant guild planning to raise taxes"*), often with
+near-verbatim phrasing. Each focus NPC's content now orbits its
+top bio items the way it used to orbit the few-shot example.
 
 **Design sketch:**
-- Keep `examples.yaml` as a library indexed by theme/NPC rather
-  than as a static "show them all every tick" block.
-- At prompt-build time, pick 2-3 examples whose theme is NOT the
-  focus NPC's strongest bio hook. So a Kael tick with a
-  "find_apprentice_tam" priority goal would see examples about
-  OTHER NPCs (bess's tavern, elara's silverwood), giving the bio
-  block room to drive the content.
-- Alternatively: shrink the default library to 2 minimal examples
-  (just enough to stabilize the schema) and trust the bio for
-  theme.
+- Track per-NPC "bio item mention count" in the director's state.
+- In `_build_focus_npc_bio`, rotate which 3 goals / 4 pk items get
+  shown based on mention count (least-mentioned first).
+- Add a "PARAPHRASE, don't quote" instruction inside the bio block
+  so the model doesn't reuse bio text verbatim.
+- Optionally: truncate pk items to short clauses so the model can't
+  just lift full sentences.
 
-**Where to start:** `StoryDirector._build_prompt` — the
-`=== EXAMPLES ===` section is assembled from `self._examples` which
-is loaded once at init. Make it a pick function instead:
-`_pick_examples(focus_npc, action_kind)` that returns a filtered
-subset each tick.
+**Where to start:** `_build_focus_npc_bio` in
+`npc_engine/story_director.py`. Add a `_bio_mention_count` dict to
+the director, bump it each time a bio item appears in a worker
+output (heuristic: substring match), and sort bio items by
+mentions-ascending before trimming to top 3/4.
 
-**Risk:** Lower example count = lower schema stability on 0.5B.
-Would need to re-run the 0.5B bench and verify the parser/coercion
-handles any schema drift the thinner example set produces.
+**Risk:** Low — purely additive to the bio block selection.
 
-### 2. NPC dialogue identity bleed
+### 2. Auto-diversify examples.yaml library
+
+**The gap:** `examples.yaml` has exactly 5 examples covering 5 NPCs
+(kael, elara, roderick, bess, pip). When a focus NPC has no
+primary example, the picker shows all 5 and things work fine. But
+if the example library grew to 10+ per-NPC examples with different
+themes, the picker could show 2-3 NOT-about-focus examples drawn
+from a wider thematic pool — giving the model exposure to more
+action shapes and tones without ever touching the focus NPC's
+example territory. Right now the library is too thin to exercise
+that.
+
+**Design sketch:**
+- Expand `examples.yaml` to ~15-20 entries, covering each NPC with
+  at least 2 examples (different action kinds per NPC).
+- Add a `theme` tag to each entry so the picker can prefer examples
+  whose theme differs from the current active arc's theme.
+- Optionally port ultralight-coder's `generate_augmentors_from_failures`
+  approach: run benches, flag literal-copy events, generate
+  augmentor variants with a larger model, isolation-gate, and
+  write to `examples_generated/` for manual review.
+
+**Where to start:** `data/story_director/examples.yaml` (hand-curate
+first), then `_pick_examples` to honor theme diversity.
+
+**Risk:** Medium — hand-curating 15+ good examples takes effort.
+Auto-generation risks drift from the lore bible's tone.
+
+### 3. NPC dialogue identity bleed
 
 **The gap:** In bench dialogue tests, Noah called the player "Mara"
 and Mara called the player "Kael". This is in the npc-engine
@@ -1082,7 +1230,7 @@ flag for retry.
 done as a focused npc-engine fix on its own branch, then merge
 forward.
 
-### 3. Real parallel workers
+### 4. Real parallel workers
 
 **The gap:** Multi-action ticks run sub-actions sequentially because
 llama-cpp-python isn't thread-safe for one base model. On a 3-action
@@ -1106,7 +1254,7 @@ is the single function that needs to become async-aware. The
 working memory). Option B requires understanding PIE's queue
 priorities. Option C is the cleanest but adds operational complexity.
 
-### 4. Co-reference resolution in the FactLedger
+### 5. Co-reference resolution in the FactLedger
 
 **The gap:** Embedding similarity misses linked entities when names
 differ. *"The elder is hiding something"* and *"Noah won't talk
@@ -1131,7 +1279,7 @@ director (it doesn't change at runtime).
 
 **Risk:** Low — purely additive to the embedding path.
 
-### 5. Auto-augmentor generation for narrative examples
+### 6. Auto-augmentor generation for narrative examples
 
 **The gap:** The 0.5B path's content is more literal than the 3B path
 because it copies few-shot examples verbatim. The fix is more curated
@@ -1160,7 +1308,7 @@ Then a new `generate_story_augmentors.py` script in the repo root.
 **Risk:** Medium — needs careful human review of generated examples
 to avoid drift away from the lore bible's tone.
 
-### 6. Narrative arc polish (v2 items)
+### 7. Narrative arc polish (v2 items)
 
 The deterministic arc planner shipped in v1 leaves a few things on
 the table that would be worth coming back to once multi-tick arcs
@@ -1179,7 +1327,7 @@ have been exercised in real sessions:
 - **Abandonment**: stale arcs with no recent cast touches should
   flip to `status = "abandoned"` so new arcs can form.
 
-### 7. Smaller items worth doing
+### 8. Smaller items worth doing
 
 - **Acting on contradiction** beyond retry: when the retry ALSO
   fails, fall back to a noop and log to a `narrative_conflicts.json`

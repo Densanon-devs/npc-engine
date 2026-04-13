@@ -2,9 +2,15 @@
 # Each example pairs a compact world-state summary with a single action the
 # overseer would take. Keep them diverse: mix quest / event / fact actions.
 # Keep strings short — small models copy structure better when examples are lean.
+#
+# Each example has a `primary_npc` tag so the example picker can exclude
+# examples about the current focus NPC at prompt-build time. That lets the
+# Director see HOW to do an action without copying the specific content
+# template for the NPC it's currently writing for.
 
 examples:
-  - world_state: |
+  - primary_npc: kael
+    world_state: |
       Kael (blacksmith, mood: angry, trust of player: 35) lost three hammers last week.
       Rumors say Mara was seen near his forge at night. No active quests from Kael.
     action:
@@ -19,7 +25,8 @@ examples:
         objectives:
           - "Investigate the forge at night and identify the thief."
 
-  - world_state: |
+  - primary_npc: elara
+    world_state: |
       Elara (healer) returned from the Silverwood looking pale. Bess has not seen her
       in days. Global events this week: none.
     action:
@@ -28,7 +35,8 @@ examples:
       target: all
       event: "Elara stumbled out of the Silverwood white-faced and silent. Something is wrong in the deep trees."
 
-  - world_state: |
+  - primary_npc: guard_roderick
+    world_state: |
       Roderick (guard captain, mood: frustrated) has no proof against Mara. Player
       has completed two quests for Noah. Trust with Roderick: 55.
     action:
@@ -38,7 +46,8 @@ examples:
       fact: "I am watching Mara the merchant. I think she smuggles more than fabric, but I have no proof yet."
       fact_type: personal
 
-  - world_state: |
+  - primary_npc: bess
+    world_state: |
       Bess (innkeeper) heard travelers say the tax collector's body was found on the
       north road. No quests from Bess. Player is in the tavern asking for news.
     action:
@@ -53,7 +62,8 @@ examples:
         objectives:
           - "Travel the north road and find out who killed the tax collector."
 
-  - world_state: |
+  - primary_npc: pip
+    world_state: |
       Pip (street urchin) overheard something in Mara's shop. No event yet injected.
       Mara's trust with player: 40. No active quests from Pip.
     action:

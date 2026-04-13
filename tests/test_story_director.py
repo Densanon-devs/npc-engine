@@ -1732,6 +1732,103 @@ def test_prompt_skips_bio_block_when_npc_is_bare():
     print("  [PASS] prompt_skips_bio_block_when_npc_is_bare")
 
 
+# ── Example rotation tests ──────────────────────────────────────
+
+def test_pick_examples_excludes_focus_npc():
+    """When focus_npc matches a primary_npc in the library, that example
+    must be excluded from the picks. This breaks the copy-loop where
+    the model rewrites its own focus NPC's example verbatim."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    picks = director._pick_examples(focus_npc="kael", action_kind="event")
+    primary_npcs = [p.get("primary_npc") for p in picks]
+    assert "kael" not in primary_npcs, f"kael example should be excluded: {primary_npcs}"
+    # And picks is non-empty (fallback shouldn't kick in — we have 4 eligible)
+    assert len(picks) > 0
+    print("  [PASS] pick_examples_excludes_focus_npc")
+
+
+def test_pick_examples_prefers_target_action_kind():
+    """The picker must include at least one example whose action kind
+    matches the target kind — this stabilizes the schema for the shape
+    the worker is about to emit."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    picks = director._pick_examples(focus_npc="noah", action_kind="quest")
+    picked_kinds = [p.get("action", {}).get("action") for p in picks]
+    assert "quest" in picked_kinds, f"quest kind missing: {picked_kinds}"
+    # And we should get at most 3
+    assert len(picks) <= 3
+    print("  [PASS] pick_examples_prefers_target_action_kind")
+
+
+def test_pick_examples_caps_at_three():
+    """Even if every example is eligible, the picker returns at most 3
+    to keep the prompt lean — fewer examples gives bio and arc blocks
+    more salience."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Focus on an NPC that's not primary in any example — everything qualifies
+    picks = director._pick_examples(focus_npc="mara", action_kind="fact")
+    assert len(picks) <= 3, f"expected at most 3 picks, got {len(picks)}"
+    print("  [PASS] pick_examples_caps_at_three")
+
+
+def test_pick_examples_falls_back_when_all_match_focus():
+    """If the entire library is about the focus NPC (pathological but
+    possible with a shrunk library), the picker returns all of them
+    rather than an empty list — an empty EXAMPLES block tanks schema
+    parse reliability on small models."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Manually replace the loaded examples with an all-kael library
+    director._examples = [
+        {"primary_npc": "kael", "world_state": "kael does something",
+         "action": {"action": "event", "target": "kael", "event": "x"}},
+        {"primary_npc": "kael", "world_state": "kael does something else",
+         "action": {"action": "fact", "npc_id": "kael", "fact": "y"}},
+    ]
+    picks = director._pick_examples(focus_npc="kael", action_kind="event")
+    assert len(picks) == 2, f"fallback should return all available: {picks}"
+    print("  [PASS] pick_examples_falls_back_when_all_match_focus")
+
+
+def test_pick_examples_diversifies_action_kinds():
+    """When filling remaining picks, the picker prefers examples of
+    kinds it hasn't shown yet — so the worker sees all three shapes."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    picks = director._pick_examples(focus_npc="noah", action_kind="quest")
+    kinds = [p.get("action", {}).get("action") for p in picks]
+    # With 5 real examples and focus=noah (not a primary), we should
+    # get 3 different kinds
+    assert len(set(kinds)) >= 2, f"expected kind diversity: {kinds}"
+    print("  [PASS] pick_examples_diversifies_action_kinds")
+
+
+def test_prompt_excludes_focus_npc_examples():
+    """_build_prompt should only include examples about NON-focus NPCs
+    so the forced-focus directive gets to drive the content without a
+    per-NPC example template fighting it."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    prompt = director._build_prompt("world snap", focus_npc="kael",
+                                     action_kind="event")
+    # The kael missing_hammers example mentions that specific quest id
+    assert "missing_hammers" not in prompt, (
+        "kael's missing_hammers example should not appear in a "
+        "kael-focused prompt:\n" + prompt
+    )
+    # But OTHER examples should be there — e.g., the pip shipment
+    # example or the bess tax-collector-body example
+    assert ("tax_collector_body" in prompt or
+            "Silverwood" in prompt or
+            "floorboards" in prompt), (
+        "expected at least one non-kael example to appear:\n" + prompt
+    )
+    print("  [PASS] prompt_excludes_focus_npc_examples")
+
+
 # ── Runner ──────────────────────────────────────────────────────
 
 def main():
@@ -1803,6 +1900,14 @@ def main():
     test_world_snapshot_roster_includes_top_goal()
     test_prompt_contains_bio_block_for_focus_npc()
     test_prompt_skips_bio_block_when_npc_is_bare()
+
+    print("\nStory Director — example rotation tests")
+    test_pick_examples_excludes_focus_npc()
+    test_pick_examples_prefers_target_action_kind()
+    test_pick_examples_caps_at_three()
+    test_pick_examples_falls_back_when_all_match_focus()
+    test_pick_examples_diversifies_action_kinds()
+    test_prompt_excludes_focus_npc_examples()
 
     print("\nStory Director — integration smoke test")
     test_integration_tick_mutates_world()
