@@ -690,6 +690,167 @@ make.** That's the whole insight in one sentence.
 
 ---
 
+## Next steps — pick up here
+
+Ranked by leverage. Each entry is detailed enough that a fresh
+session (or another agent) can start work without re-reading the
+full narrative above.
+
+### 1. Multi-tick narrative arcs (the biggest remaining piece)
+
+**The gap:** Each tick is currently independent. The architect plans
+for *one* tick; nothing plans across ticks. SAO Cardinal plans arcs
+that span dozens of ticks and have an overall narrative shape (rising
+action → climax → resolution). Right now we get coherent local
+decisions but no story-level structure.
+
+**Design sketch:**
+- New `NarrativeArc` dataclass: `{id, theme, focus_npcs, beat_goals,
+  current_beat, status}` — e.g., `theme="Mara smuggling investigation"`,
+  `focus_npcs=["mara", "roderick", "kael"]`,
+  `beat_goals=["seed suspicion", "find evidence", "confrontation",
+  "resolution"]`, `current_beat=0`.
+- New `ArcPlanner` class. On every Nth tick (say, every 5), Python
+  reads recent ledger entries + recent_decisions and picks a theme
+  worth committing to. Could be deterministic (highest-similarity
+  cluster from the ledger) or LLM-driven (Qwen 3B summarizes recent
+  beats and proposes an arc).
+- Each tick's `_build_prompt` adds an `=== ACTIVE ARC ===` block
+  naming the current arc and the current beat goal. Workers write
+  content that advances the beat.
+- Arcs auto-advance: when the current beat's goal is met (heuristic:
+  the focus NPC is targeted N times with thematically-similar
+  content), bump `current_beat`. When all beats complete, mark
+  `status=resolved` and start a new arc.
+- Persist arcs to `data/story_director/arcs.json`.
+
+**Where to start:** `npc_engine/story_director.py`. Add `NarrativeArc`
++ `ArcPlanner` + plumbing in `_build_prompt`. The cleanest extension
+point is right after `_pick_action_kind` in `tick()`: query the
+planner for the active arc, inject it into the prompt.
+
+**Test approach:** Same pattern as the rest — unit tests with stub
+engine + scripted responses, then run the bench with arcs enabled
+and verify multi-tick coherence.
+
+**Risk:** the LLM-driven arc planner adds another LLM call per N
+ticks. Cheap if the cadence is 1 plan call per 5 ticks. Worth it.
+
+### 2. NPC dialogue identity bleed
+
+**The gap:** In bench dialogue tests, Noah called the player "Mara"
+and Mara called the player "Kael". This is in the npc-engine
+*dialogue path* (`engine.process` → PIE → expert generation), not
+the StoryDirector. It taints the dialogue auto-feed because the
+Director records garbled dialogue.
+
+**Where to start:** `npc_engine/postgen.py` already does
+identity/hallucination/echo validation — it's where to add a
+"speaker addresses player by wrong name" check. Need to detect when
+an NPC dialogue uses ANOTHER NPC's name as if addressing the
+player, and either repair (replace with "traveler" / "stranger") or
+flag for retry.
+
+**Risk:** This is its own concern, separate from the Director. Best
+done as a focused npc-engine fix on its own branch, then merge
+forward.
+
+### 3. Real parallel workers
+
+**The gap:** Multi-action ticks run sub-actions sequentially because
+llama-cpp-python isn't thread-safe for one base model. On a 3-action
+tick this means 3× the wall-clock vs. theoretical parallel.
+
+**Design sketch:**
+- Option A: keep N independent `BaseModel` instances (3× the RAM but
+  trivial parallelism via `concurrent.futures.ThreadPoolExecutor`)
+- Option B: use PIE's `GenerationQueue` from `densanon.core.pipeline`
+  which already prioritizes background work — the Director would
+  enqueue all N sub-actions at once and await results
+- Option C: a separate llama.cpp server process per worker (real
+  process isolation, no thread issues)
+
+**Where to start:** `npc_engine/story_director.py:_run_single_action`
+is the single function that needs to become async-aware. The
+`tick(actions_per_tick=N)` loop would dispatch N futures and
+`await asyncio.gather(*futures)`.
+
+**Risk:** RAM cost for option A is significant (3× model size in
+working memory). Option B requires understanding PIE's queue
+priorities. Option C is the cleanest but adds operational complexity.
+
+### 4. Co-reference resolution in the FactLedger
+
+**The gap:** Embedding similarity misses linked entities when names
+differ. *"The elder is hiding something"* and *"Noah won't talk
+about it"* would not match because "elder" vs "Noah" lowers the
+embedding cosine.
+
+**Design sketch:**
+- Build an alias map from NPC profiles: `{"noah": ["the elder",
+  "village elder"], "kael": ["the blacksmith", "smith"]}`
+- Before embedding, expand alias references in the text to the
+  canonical NPC id. So *"The elder is hiding something"* becomes
+  *"noah (the elder) is hiding something"* before passing to the
+  embedder.
+- The expanded form keeps the original surface text in the entry
+  but uses the augmented version for similarity comparison.
+
+**Where to start:** `FactLedger._encode` in
+`npc_engine/story_director.py`. Add an `_expand_aliases` step that
+reads NPC profile data from `engine.pie.npc_knowledge.profiles`
+and substitutes role/title references. Cache the alias map on the
+director (it doesn't change at runtime).
+
+**Risk:** Low — purely additive to the embedding path.
+
+### 5. Auto-augmentor generation for narrative examples
+
+**The gap:** The 0.5B path's content is more literal than the 3B path
+because it copies few-shot examples verbatim. The fix is more curated
+examples — that's the ultralight-coder playbook
+(`generate_augmentors_from_failures.py`). Port it to story examples.
+
+**Design sketch:**
+- Run the bench against 0.5B repeatedly, log every "literal copy"
+  failure (heuristic: tick text contains 80%+ overlap with an
+  examples.yaml entry)
+- Feed the failures to a larger local model (Qwen 2.5 3B is already
+  loaded) with a prompt: *"Here's a story-state and a worker action
+  that copied the example too literally. Generate 3 alternative
+  story beats that match the same pattern but use different
+  specifics."*
+- Schema-gate, isolation-gate (run the new candidate as a few-shot
+  on 0.5B and verify it doesn't trigger another literal-copy
+  failure), and write to `data/story_director/examples_generated/`
+  with a `_meta` quarantine block. Manual review before merging
+  into the main library.
+
+**Where to start:** `bench_story_director.py` — it already produces
+trace JSON. Add a "literal copy detector" pass over the trace.
+Then a new `generate_story_augmentors.py` script in the repo root.
+
+**Risk:** Medium — needs careful human review of generated examples
+to avoid drift away from the lore bible's tone.
+
+### 6. Smaller items worth doing
+
+- **Acting on contradiction** beyond retry: when the retry ALSO
+  fails, fall back to a noop and log to a `narrative_conflicts.json`
+  file for human review. Currently we just dispatch the conflicting
+  retry result.
+- **Dialogue auto-feed filtering**: every player turn currently feeds
+  the Director. For a chatty player this floods `recent_player_actions`.
+  Add a heuristic: only feed if the dialogue contains substance
+  (length >= N, or matches a "meaningful" keyword set).
+- **Token budget management**: `_build_prompt` concatenates lore +
+  examples + snapshot + ALREADY DONE + FOCUS + ACTION. As ledger
+  grows and recent_decisions accumulate, the prompt gets long. Add
+  a token budget split (e.g., 40% lore + examples, 30% snapshot,
+  20% history, 10% directive) with truncation.
+
+---
+
 ## File map
 
 ```
