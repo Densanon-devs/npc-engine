@@ -1732,6 +1732,239 @@ def test_prompt_skips_bio_block_when_npc_is_bare():
     print("  [PASS] prompt_skips_bio_block_when_npc_is_bare")
 
 
+# ── Intra-bio rotation tests ────────────────────────────────────
+
+def test_is_bio_mentioned_detects_word_overlap():
+    """The mention heuristic should fire when a majority of content
+    words from a bio item appear in the output text (paraphrase or
+    verbatim), and stay silent on unrelated content."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+
+    bio = "Overheard the merchant guild planning to raise taxes next season"
+    # Near-verbatim quote — clearly a mention
+    out1 = "I heard the merchant guild is planning to raise taxes next month."
+    assert director._is_bio_mentioned(bio, out1.lower()) is True
+    # Paraphrased but same subject — should still hit
+    out2 = "bess mentioned the merchant guild was planning to raise taxes soon."
+    assert director._is_bio_mentioned(bio, out2.lower()) is True
+    # Unrelated content — should NOT hit
+    out3 = "The blacksmith was hammering on an anvil while a wolf howled."
+    assert director._is_bio_mentioned(bio, out3.lower()) is False
+    # Incidental one-word overlap — should NOT hit
+    out4 = "The merchant is selling cloth today."
+    assert director._is_bio_mentioned(bio, out4.lower()) is False
+    print("  [PASS] is_bio_mentioned_detects_word_overlap")
+
+
+def test_is_bio_mentioned_rejects_short_items():
+    """Bio items with fewer than 3 content words can't support the
+    overlap heuristic reliably — they should never count as mentioned
+    to avoid false positives."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    assert director._is_bio_mentioned("Thin", "Thin") is False
+    assert director._is_bio_mentioned("One two", "one two three") is False
+    print("  [PASS] is_bio_mentioned_rejects_short_items")
+
+
+def test_record_bio_mentions_bumps_count_on_match():
+    """_record_bio_mentions should bump the count for a matched bio
+    item and leave unrelated items alone."""
+    restore = _isolate_state_file("bio_record")
+    try:
+        engine = _make_stub_engine()
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.personal_knowledge = [
+            "I suspect Mara is selling counterfeit steel",
+            "I lost my apprentice Tam in the forbidden forest last year",
+        ]
+        director = StoryDirector(engine)
+        output = ("Kael shouts for Tam in the forbidden forest, hoping for "
+                  "any sign of his lost apprentice.")
+        director._record_bio_mentions("kael", output)
+        counts = director._bio_mention_counts.get("kael", {})
+        # The Tam item should have been matched
+        tam_key = director._bio_item_key(
+            "I lost my apprentice Tam in the forbidden forest last year"
+        )
+        steel_key = director._bio_item_key(
+            "I suspect Mara is selling counterfeit steel"
+        )
+        assert counts.get(tam_key, 0) == 1, counts
+        # The counterfeit steel item should NOT have been matched
+        assert counts.get(steel_key, 0) == 0, counts
+    finally:
+        restore()
+    print("  [PASS] record_bio_mentions_bumps_count_on_match")
+
+
+def test_focus_npc_bio_rotates_heavily_mentioned_to_bottom():
+    """When a goal has been mentioned at or above the cooldown
+    threshold, _build_focus_npc_bio excludes it entirely until other
+    goals catch up — hiding the over-used goal so the model literally
+    can't see it. If excluded leaves the section empty, we fall back
+    to showing the least-mentioned items so the bio never goes blank."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("bio_rotate")
+    try:
+        engine = _make_stub_engine()
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.identity = {"name": "Kael", "role": "blacksmith",
+                         "personality": "Gruff."}
+        _attach_goals(engine, "kael", [
+            {"id": "find_tam", "description": "Find my lost apprentice Tam in the forest", "priority": 10},
+            {"id": "expose_mara", "description": "Prove Mara is selling fake steel", "priority": 6},
+            {"id": "teach_pip", "description": "Teach Pip to become a smith", "priority": 3},
+        ])
+        director = StoryDirector(engine)
+
+        # Fresh bio — highest priority should come first (p10 before p6).
+        # Top-2 cap means p3 gets dropped from the display.
+        bio1 = director._build_focus_npc_bio("kael")
+        assert "[p10]" in bio1
+        assert "[p6]" in bio1
+        assert bio1.index("[p10]") < bio1.index("[p6]")
+
+        # Now simulate heavy mention of the p10 goal. With cooldown
+        # threshold = 2, a count of 5 means p10 gets EXCLUDED entirely
+        # from the bio — the model shouldn't see it at all.
+        tam_key = director._bio_item_key(
+            "Find my lost apprentice Tam in the forest"
+        )
+        director._bio_mention_counts["kael"] = {tam_key: 5}
+
+        bio2 = director._build_focus_npc_bio("kael")
+        assert "[p10]" not in bio2, (
+            "expected heavily-mentioned p10 goal to be excluded entirely\n"
+            + bio2
+        )
+        # p6 and p3 should now both be eligible, with top-2 cap showing
+        # both (priority order preserved within fresh items)
+        assert "[p6]" in bio2
+        assert "[p3]" in bio2
+        assert bio2.index("[p6]") < bio2.index("[p3]"), (
+            "fresh items should still respect priority order\n" + bio2
+        )
+    finally:
+        restore()
+    print("  [PASS] focus_npc_bio_rotates_heavily_mentioned_to_bottom")
+
+
+def test_bio_cooldown_falls_back_when_all_items_exceed_threshold():
+    """If every item in a section is above the cooldown threshold,
+    _build_focus_npc_bio must fall back to showing the least-mentioned
+    items rather than emitting an empty section."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("bio_fallback")
+    try:
+        engine = _make_stub_engine()
+        bess = engine.pie.npc_knowledge.get("bess")
+        bess.identity = {"name": "Bess", "role": "innkeeper",
+                         "personality": "Warm and gossipy."}
+        bess.personal_knowledge = [
+            "Overheard the merchant guild planning to raise taxes",
+            "Knows a secret passage beneath the inn",
+        ]
+        director = StoryDirector(engine)
+
+        # Bump both pk items past the cooldown threshold
+        k1 = director._bio_item_key("Overheard the merchant guild planning to raise taxes")
+        k2 = director._bio_item_key("Knows a secret passage beneath the inn")
+        director._bio_mention_counts["bess"] = {k1: 5, k2: 3}
+
+        bio = director._build_focus_npc_bio("bess")
+        assert bio is not None
+        # Fallback should still show both items — the LESS-mentioned
+        # one (count 3) ahead of the more-mentioned (count 5)
+        pk_section = bio.split("Private knowledge")[1]
+        idx_secret = pk_section.index("secret passage")
+        idx_guild = pk_section.index("merchant guild")
+        assert idx_secret < idx_guild, (
+            "fallback should order by ascending mention count\n" + bio
+        )
+    finally:
+        restore()
+    print("  [PASS] bio_cooldown_falls_back_when_all_items_exceed_threshold")
+
+
+def test_focus_npc_bio_pk_rotates_by_mention_count():
+    """Personal knowledge items should also rotate — least-mentioned
+    first, list order as tiebreaker."""
+    restore = _isolate_state_file("bio_pk_rotate")
+    try:
+        engine = _make_stub_engine()
+        bess = engine.pie.npc_knowledge.get("bess")
+        bess.identity = {"name": "Bess", "role": "innkeeper",
+                         "personality": "Warm and gossipy."}
+        bess.personal_knowledge = [
+            "Overheard the merchant guild planning to raise taxes next season",
+            "Knows a secret passage beneath the inn leading to cellar tunnels",
+            "Her late husband built the inn twenty years ago",
+            "Remembers the last tax collector who vanished on the north road",
+        ]
+        director = StoryDirector(engine)
+
+        # Fresh bio — list order preserved
+        bio1 = director._build_focus_npc_bio("bess")
+        # First pk line should be the merchant guild one
+        assert "merchant guild" in bio1.split("Private knowledge")[1].split("\n")[1]
+
+        # Bump the merchant guild mention to 3
+        guild_key = director._bio_item_key(bess.personal_knowledge[0])
+        director._bio_mention_counts["bess"] = {guild_key: 3}
+
+        bio2 = director._build_focus_npc_bio("bess")
+        # The merchant guild item should now be LAST in the pk list
+        # (or dropped if top-4 truncation kicks in)
+        pk_section = bio2.split("Private knowledge")[1]
+        pk_lines = [ln for ln in pk_section.split("\n") if ln.strip().startswith("-")]
+        assert pk_lines, pk_section
+        first_pk = pk_lines[0]
+        assert "merchant guild" not in first_pk, (
+            "expected heavily-mentioned merchant guild to be demoted\n" + bio2
+        )
+    finally:
+        restore()
+    print("  [PASS] focus_npc_bio_pk_rotates_by_mention_count")
+
+
+def test_focus_npc_bio_header_contains_paraphrase_instruction():
+    """The bio header must explicitly tell the model to paraphrase —
+    this counters the verbatim phrasing clone we saw in the rotation
+    run (Bess's 'merchant guild planning to raise taxes' near-quote)."""
+    engine = _make_stub_engine()
+    kael = engine.pie.npc_knowledge.get("kael")
+    kael.identity = {"name": "Kael", "role": "blacksmith",
+                     "personality": "Gruff."}
+    kael.personal_knowledge = ["I lost my apprentice Tam in the Silverwood."]
+    director = StoryDirector(engine)
+    bio = director._build_focus_npc_bio("kael")
+    assert bio is not None
+    assert "PARAPHRASE" in bio.upper(), bio
+    print("  [PASS] focus_npc_bio_header_contains_paraphrase_instruction")
+
+
+def test_bio_mention_counts_persist_across_instances():
+    """Mention counts should round-trip through state.json so the
+    rotation effect survives a director restart."""
+    restore = _isolate_state_file("bio_persist")
+    try:
+        engine = _make_stub_engine()
+        director1 = StoryDirector(engine)
+        director1._bio_mention_counts = {
+            "kael": {"find tam in the forest": 2, "expose mara": 1},
+            "bess": {"merchant guild taxes": 3},
+        }
+        director1._save_state()
+
+        director2 = StoryDirector(engine)
+        assert director2._bio_mention_counts == director1._bio_mention_counts
+    finally:
+        restore()
+    print("  [PASS] bio_mention_counts_persist_across_instances")
+
+
 # ── Example rotation tests ──────────────────────────────────────
 
 def test_pick_examples_excludes_focus_npc():
@@ -1900,6 +2133,16 @@ def main():
     test_world_snapshot_roster_includes_top_goal()
     test_prompt_contains_bio_block_for_focus_npc()
     test_prompt_skips_bio_block_when_npc_is_bare()
+
+    print("\nStory Director — intra-bio rotation tests")
+    test_is_bio_mentioned_detects_word_overlap()
+    test_is_bio_mentioned_rejects_short_items()
+    test_record_bio_mentions_bumps_count_on_match()
+    test_focus_npc_bio_rotates_heavily_mentioned_to_bottom()
+    test_bio_cooldown_falls_back_when_all_items_exceed_threshold()
+    test_focus_npc_bio_pk_rotates_by_mention_count()
+    test_focus_npc_bio_header_contains_paraphrase_instruction()
+    test_bio_mention_counts_persist_across_instances()
 
     print("\nStory Director — example rotation tests")
     test_pick_examples_excludes_focus_npc()

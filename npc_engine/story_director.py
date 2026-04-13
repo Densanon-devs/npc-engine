@@ -119,6 +119,26 @@ _ARC_BEAT_SKELETON = (
     "resolve — show the aftermath and let the thread close cleanly",
 )
 
+# Once a bio item has been mentioned this many times by a focus
+# worker, it drops out of the bio block entirely until other items
+# catch up. Set low enough (2) that cooldown kicks in within 2-3 NPC
+# visits even on small bios — large enough that a single sub-action's
+# paraphrase doesn't immediately hide the item the model is using.
+_BIO_COOLDOWN_THRESHOLD = 2
+
+# Common English stopwords to strip from bio-mention detection. Short
+# list — we want to avoid false positives from generic structural
+# words, not build a linguistically accurate stopword set.
+_BIO_STOPWORDS = frozenset({
+    "the", "and", "that", "this", "with", "from", "have", "his", "her",
+    "she", "him", "them", "they", "their", "there", "these", "those",
+    "when", "what", "which", "where", "will", "would", "could", "should",
+    "been", "being", "into", "onto", "about", "after", "before", "over",
+    "under", "some", "such", "just", "only", "also", "than", "then",
+    "more", "most", "many", "much", "very", "like", "does", "doing",
+    "know", "knows", "knew",
+})
+
 class ContradictionChecker:
     """
     Wraps a small NLI cross-encoder to classify a (premise, hypothesis)
@@ -717,10 +737,25 @@ class StoryDirector:
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
         self._examples: list[dict] = []
+        # Per-NPC per-bio-item mention counts. The focus NPC bio block
+        # rotates by mention count ascending, so items that have already
+        # been quoted repeatedly fall to the bottom and fresh items rise
+        # to the top. Keyed as {npc_id: {item_key: count}}.
+        self._bio_mention_counts: dict[str, dict[str, int]] = {}
+        # Cache of each NPC's ORIGINAL (YAML-sourced) bio items at
+        # director init time. NPCKnowledge.personal_knowledge is mutable
+        # — the dispatch layer appends Director-generated facts to it —
+        # so if we read it live, we'd end up treating the model's own
+        # outputs as bio items and bumping mention counts on them. The
+        # snapshot fixes this: bio tracking always operates on the
+        # original character data, while plot continuity lives in the
+        # ledger and recent_decisions.
+        self._original_bios: dict[str, list[tuple[str, str]]] = {}
         self.ledger = FactLedger(LEDGER_FILE)
         self.arc_planner = ArcPlanner(ARCS_FILE)
         self._load_assets()
         self._load_state()
+        self._snapshot_original_bios()
 
     # ── Lifecycle ───────────────────────────────────────────────
 
@@ -750,6 +785,13 @@ class StoryDirector:
             self.recent_decisions = state.get("recent_decisions", [])[-5:]
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
+            raw_counts = state.get("bio_mention_counts", {}) or {}
+            if isinstance(raw_counts, dict):
+                self._bio_mention_counts = {
+                    str(k): {str(ik): int(iv) for ik, iv in (v or {}).items()}
+                    for k, v in raw_counts.items()
+                    if isinstance(v, dict)
+                }
         except Exception as e:
             logger.warning(f"Story Director failed to load state: {e}")
 
@@ -761,6 +803,7 @@ class StoryDirector:
             "recent_decisions": self.recent_decisions[-5:],
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
+            "bio_mention_counts": self._bio_mention_counts,
         }
         STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
@@ -935,6 +978,10 @@ class StoryDirector:
                 )
                 if warning is not None:
                     dispatch_result["similarity_warning"] = warning
+                # Bump bio-mention counts for whatever bio items the
+                # model just quoted or paraphrased. Drives intra-bio
+                # rotation on the next tick that focuses on this NPC.
+                self._record_bio_mentions(focus_npc, ledger_text)
 
         if retried:
             dispatch_result["retried_after_contradiction"] = True
@@ -1421,6 +1468,104 @@ class StoryDirector:
             trust = getattr(trust_cap, "level", None)
         return mood, trust
 
+    @staticmethod
+    def _bio_item_key(text: str) -> str:
+        """Stable dict key for a bio item — lowercased, whitespace-normalized,
+        length-bounded so tiny phrasing drift doesn't create duplicates."""
+        import re
+        return re.sub(r"\s+", " ", text.strip().lower())[:200]
+
+    @staticmethod
+    def _bio_content_words(text: str) -> list[str]:
+        """Extract content words (>3 chars, not stopwords) from a bio
+        item for the mention-overlap heuristic."""
+        import re
+        return [
+            w for w in (m.lower() for m in re.findall(r"[A-Za-z']+", text))
+            if len(w) > 3 and w not in _BIO_STOPWORDS
+        ]
+
+    def _is_bio_mentioned(self, bio_item: str, output_lower: str) -> bool:
+        """
+        Heuristic: treat a bio item as "mentioned" when at least 2 of
+        its content words appear in the output AND those hits cover
+        at least 40% of the bio item's content words. The 2-hit floor
+        catches short-but-distinctive bio items (e.g. *"Serves the
+        best stew"* → "best stew" alone is a clone signal), while the
+        40% ratio suppresses false positives from incidental one-word
+        overlap on longer items.
+        """
+        if not bio_item or not output_lower:
+            return False
+        words = self._bio_content_words(bio_item)
+        if len(words) < 2:
+            return False
+        hits = sum(1 for w in words if w in output_lower)
+        # Two absolute hits + 40% ratio. The ratio matters more on
+        # long items (7-word bio needs 3 hits to qualify); the absolute
+        # floor matters on short items (3-word bio needs 2 hits).
+        return hits >= 2 and hits >= max(2, int(round(len(words) * 0.4)))
+
+    def _collect_bio_items_live(self, npc_id: str) -> list[tuple[str, str]]:
+        """
+        Read the NPC's current bio items straight from the live
+        NPCKnowledge state. Used ONCE at director init to snapshot the
+        original character data. Not called from the hot path — use
+        ``_original_bios[npc_id]`` everywhere else.
+        """
+        npc = self.engine.pie.npc_knowledge.get(npc_id)
+        if npc is None:
+            return []
+        out: list[tuple[str, str]] = []
+        for g in self._peek_npc_goals(npc_id):
+            desc = str(g.get("description", "")).strip()
+            if desc:
+                out.append(("goal", desc))
+        for pk in (getattr(npc, "personal_knowledge", None) or []):
+            t = str(pk).strip()
+            if t:
+                out.append(("pk", t))
+        for wf in (getattr(npc, "world_facts", None) or []):
+            t = str(wf).strip()
+            if t:
+                out.append(("wf", t))
+        return out
+
+    def _snapshot_original_bios(self) -> None:
+        """
+        Cache every NPC's current bio items as the 'original' set. Used
+        by _build_focus_npc_bio and _record_bio_mentions so later
+        Director-generated facts (which get appended to NPCKnowledge by
+        the dispatch layer) don't contaminate bio tracking.
+        """
+        try:
+            profiles = self.engine.pie.npc_knowledge.profiles
+        except AttributeError:
+            profiles = {}
+        for npc_id in profiles:
+            self._original_bios[npc_id] = self._collect_bio_items_live(npc_id)
+
+    def _record_bio_mentions(self, focus_npc: Optional[str],
+                              output_text: Optional[str]) -> None:
+        """
+        After a worker dispatches content, scan the output text for
+        matches against the focus NPC's ORIGINAL bio items (YAML only,
+        not Director-appended facts) and bump mention counts. Drives
+        intra-bio rotation: the next tick that focuses on this NPC
+        will see less of whatever the model just quoted.
+        """
+        if not focus_npc or not output_text:
+            return
+        items = self._original_bios.get(focus_npc, [])
+        if not items:
+            return
+        output_lower = output_text.lower()
+        counts = self._bio_mention_counts.setdefault(focus_npc, {})
+        for _kind, text in items:
+            if self._is_bio_mentioned(text, output_lower):
+                key = self._bio_item_key(text)
+                counts[key] = counts.get(key, 0) + 1
+
     def _peek_npc_goals(self, npc_id: str) -> list[dict]:
         """
         Non-destructive read of an NPC's goals list from the capability
@@ -1444,13 +1589,60 @@ class StoryDirector:
         writing for. Gives the Director motivations, secrets, and
         personality to work with instead of just (role, mood, trust).
 
-        Returns None when the NPC has no data beyond what's already in
-        the roster — callers should skip the block entirely in that
-        case rather than emit an empty header.
+        Rotation rules:
+
+        - Items are sourced from ``_original_bios`` (YAML-only), NOT
+          from the live NPCKnowledge. This prevents Director-generated
+          facts (which the dispatch layer appends to
+          ``NPCKnowledge.personal_knowledge``) from polluting bio
+          tracking.
+        - Items with mention count >= ``_BIO_COOLDOWN_THRESHOLD`` are
+          excluded from the section so the model literally cannot see
+          them until other items catch up. If exclusion leaves a
+          section empty, we fall back to showing the least-mentioned
+          items so the bio never goes blank for a section that exists.
+        - Remaining items are sorted by mention count ascending (with
+          priority / list-order as tiebreaker) and truncated to the
+          top-N caps below.
+
+        Top-N caps (tight on purpose — forces rotation to actually
+        hide items on small bios):
+
+        - Top 2 goals (was 3)
+        - Top 3 personal_knowledge items (was 4)
+        - Top 2 world_facts (was 3)
+
+        Returns None when the NPC has no original bio data — callers
+        should skip the block entirely in that case.
         """
         npc = self.engine.pie.npc_knowledge.get(focus_npc)
         if npc is None:
             return None
+
+        originals = self._original_bios.get(focus_npc, [])
+        if not originals:
+            return None
+
+        counts = self._bio_mention_counts.get(focus_npc, {})
+
+        def mention_count(text: str) -> int:
+            return counts.get(self._bio_item_key(text), 0)
+
+        def apply_cooldown(
+            indexed: list[tuple[int, str]],
+        ) -> list[tuple[int, str]]:
+            """Drop items at or above the cooldown threshold. Fall
+            back to the least-mentioned items if exclusion would leave
+            the section empty."""
+            fresh = [
+                pair for pair in indexed
+                if mention_count(pair[1]) < _BIO_COOLDOWN_THRESHOLD
+            ]
+            if fresh:
+                return fresh
+            # Everything's been over-mentioned — show the freshest
+            # anyway so the block isn't empty
+            return sorted(indexed, key=lambda p: mention_count(p[1]))
 
         lines: list[str] = []
 
@@ -1459,43 +1651,68 @@ class StoryDirector:
         if personality:
             lines.append(f"Personality: {str(personality)[:180]}")
 
-        # Priority-sorted goals — the heart of the bio. This is the
-        # single biggest jump in material the Director gets, because
-        # goals describe what the NPC WANTS rather than what they are.
+        # Goals from the original snapshot. Need the priority alongside
+        # the description, so we pull goals fresh via _peek_npc_goals
+        # (goals are static — they don't mutate like pk does — so
+        # using the live goals cap is safe).
         goals = self._peek_npc_goals(focus_npc)
         if goals:
+            indexed = [
+                (i, str(g.get("description", "")).strip())
+                for i, g in enumerate(goals)
+                if str(g.get("description", "")).strip()
+            ]
+            indexed = apply_cooldown(indexed)
+            # Priority lookup: build a {description: goal} map
+            goal_by_desc = {str(g.get("description", "")).strip(): g for g in goals}
+            indexed.sort(key=lambda pair: (
+                mention_count(pair[1]),
+                -int(goal_by_desc.get(pair[1], {}).get("priority", 0) or 0),
+                pair[0],
+            ))
             goal_lines: list[str] = []
-            for g in goals[:3]:
-                desc = str(g.get("description", "")).strip()
-                if not desc:
-                    continue
+            for _idx, desc in indexed[:2]:
+                g = goal_by_desc.get(desc, {})
                 prio = g.get("priority", "?")
                 goal_lines.append(f"  [p{prio}] {desc[:140]}")
             if goal_lines:
                 lines.append("Driving goals:")
                 lines.extend(goal_lines)
 
-        # Personal knowledge = secrets, private memories, things the
-        # NPC knows that aren't public. The richest seed for emergent
-        # plotting. The Director sees these but should build AROUND
-        # them rather than stating them literally in public content.
-        pk = getattr(npc, "personal_knowledge", None) or []
-        if pk:
+        # Personal knowledge — pulled from ORIGINALS, not live state
+        pk_items = [text for kind, text in originals if kind == "pk"]
+        if pk_items:
+            pk_indexed = [(i, t) for i, t in enumerate(pk_items)]
+            pk_indexed = apply_cooldown(pk_indexed)
+            pk_indexed.sort(key=lambda pair: (mention_count(pair[1]), pair[0]))
             lines.append("Private knowledge (build AROUND these, do not state literally):")
-            for fact in list(pk)[:4]:
-                lines.append(f"  - {str(fact)[:160]}")
+            for _idx, fact in pk_indexed[:3]:
+                lines.append(f"  - {fact[:160]}")
 
-        # A few world facts to ground the NPC's perspective on Ashenvale
-        wf = getattr(npc, "world_facts", None) or []
-        if wf:
+        # World facts — same rotation pattern, from ORIGINALS
+        wf_items = [text for kind, text in originals if kind == "wf"]
+        if wf_items:
+            wf_indexed = [(i, t) for i, t in enumerate(wf_items)]
+            wf_indexed = apply_cooldown(wf_indexed)
+            wf_indexed.sort(key=lambda pair: (mention_count(pair[1]), pair[0]))
             lines.append("Their view of the world:")
-            for fact in list(wf)[:3]:
-                lines.append(f"  - {str(fact)[:160]}")
+            for _idx, fact in wf_indexed[:2]:
+                lines.append(f"  - {fact[:160]}")
 
         if not lines:
             return None
 
-        return f"=== FOCUS NPC BIO: {focus_npc} ===\n" + "\n".join(lines)
+        # Paraphrase instruction up top. Verbatim phrasing clone was a
+        # measurable failure mode on 3B (Bess's "merchant guild
+        # planning to raise taxes" appeared near-verbatim across 5/8
+        # ticks). This line tells the model to use these as raw
+        # material, not as a script.
+        header = (
+            f"=== FOCUS NPC BIO: {focus_npc} ===\n"
+            "(Use these as raw material — PARAPHRASE in your own "
+            "words, do not quote verbatim.)\n"
+        )
+        return header + "\n".join(lines)
 
     # ── Prompt assembly ─────────────────────────────────────────
 

@@ -1065,6 +1065,143 @@ strips everything, kind diversity, and an integration check that
 
 ---
 
+## Intra-bio rotation (breaking the per-NPC copy loop)
+
+### The gap
+
+Example rotation broke the few-shot copy loop but surfaced a new
+smaller one: each NPC's *top bio items* became the new gravitational
+attractor. Bess's merchant-guild-taxes pk item was quoted
+near-verbatim across 5 of 8 Bess-focus ticks in the rotation run.
+The fix was to rotate WITHIN a single NPC's bio so the model stops
+seeing the same pk item every time it focuses on that NPC.
+
+### The fix
+
+Four things together:
+
+1. **Bio-item mention tracking.** Every time a worker dispatches
+   content, `_record_bio_mentions` scans the dispatched text for
+   word-overlap against the focus NPC's bio items and bumps a
+   per-item mention counter. Keyed by `(npc_id, item_text)` and
+   persisted in `state.json`.
+
+2. **Original-bio snapshot.** `NPCKnowledge.personal_knowledge` is
+   *mutable* — the dispatch layer for `add_knowledge` appends
+   Director-generated facts straight into it. The first version of
+   mention tracking read bios live, which meant it was treating the
+   model's own outputs as bio items (the `state.json` dump for a
+   bench run was full of fragments like *"i heard whispers from
+   the merchant guild"* — those were the model's ticks, not the
+   YAML). Fix: snapshot every NPC's bio items at director init into
+   `_original_bios` and use that for both the bio block and the
+   mention tracker. The live `NPCKnowledge` still evolves for the
+   dialogue layer, but Story Director's bio view is frozen to the
+   character sheet.
+
+3. **Hard cooldown exclusion.** Items with `mention_count >= 2`
+   are dropped entirely from the bio until other items catch up.
+   Previously rotation just *reordered* — which didn't help when
+   the top-N cap was generous enough to show everything. The
+   exclusion forces the model to look at fresh material. If
+   exclusion strips a section to empty, we fall back to showing
+   the least-mentioned items so no section ever blanks out.
+
+4. **Tightened top-N caps.** Top 2 goals (was 3), top 3 pk (was 4),
+   top 2 wf (was 3). With small bios (~2-4 items per section),
+   the prior caps showed everything. Tight caps give rotation
+   room to actually hide items.
+
+Plus a paraphrase instruction in the bio header:
+*"(Use these as raw material — PARAPHRASE in your own words,
+do not quote verbatim.)"*. Soft nudge to discourage literal cloning.
+
+### The word-overlap heuristic
+
+`_is_bio_mentioned(bio_item, output_lower)` returns True when at
+least 2 content words (>3 chars, not stopwords) from the bio item
+appear in the output AND those hits cover >= 40% of the bio's
+content words. The 2-hit floor catches short-but-distinctive items
+like *"Serves the best stew"* (only 3 content words, clone signal
+is "best stew"). The 40% ratio rejects incidental one-word overlap
+on long items.
+
+Stopwords are a short list (`the, and, with, from, have, she,
+their, know...`) — enough to kill the obvious false positives,
+not a linguistically complete set.
+
+### Empirical verification (3B, 15 × 3 actions)
+
+Compared against the prior three runs. Key metric: Bess's fixation
+on her top pk item dropped from **62% → 25%**.
+
+| Metric | arcs | bio | rotation | biorot v2 |
+|---|---|---|---|---|
+| Bess merchant-guild fixation | 0/8 | 3/8 | **5/8** | **2/8** |
+| Tam apprentice (Kael p10) | 0 | 0 | 4 | 3 |
+| Cellar tunnels (Bess p9) | 0 | 1 | 1 | 1 |
+| Metal identification (Kael pk) | 0 | 0 | 0 | **NEW ✨** |
+| Bitter well (Noah p8) | 0 | 4 | 5 | 5 |
+| Vocabulary (unique content words) | 204 | 221 | 260 | 247 |
+
+**Kael's dwarf metallurgy backstory finally surfaced.** T4 in the
+biorot v2 run: *"A tax collector's body was found on the north
+road. Kael, known for his metal identification skills, could help
+identify the body."* That's his pk item *"Can identify any metal
+by sound — a dwarf technique"* showing up for the first time
+across all four 3B runs. Previously buried under the hammers or
+Tam threads; rotation made room.
+
+**Bess's content diversified from 1 theme to 4.** Her 8 focus ticks
+now split: 3 on a "hot soup scene" (new emergent invention), 1 on
+her cellar-tunnels p9 goal (*"Bess has a hidden passage beneath
+her inn. She wants to know if you can lead her to it"* — first
+quest about her goal), 2 on merchant guild taxes (capped by
+cooldown after the 2nd mention), 2 on an emergent "Roderick
+investigating Bess's dealings" thread (cross-character).
+
+**State.json now contains only YAML-sourced items.** The snapshot
+fix is measurable: after a bench run, every key in
+`bio_mention_counts` is a real bio item from the NPC YAML. Before
+the fix the dict was full of fragments like *"i've heard whispers
+from the merchant guild..."* — the model's own outputs being
+tracked as bio.
+
+### What this did NOT fix
+
+The model now has a *new* fixation mode: **its own recent outputs**.
+In the biorot v2 run, Bess's T1 "dropping a hot soup tray" invention
+reappeared at T13 and T15 — the model riffed on its own prior
+emergent content rather than its bio. This is separate from bio
+rotation — it's closer to the ALREADY DONE block's job (which is
+supposed to catch self-repetition but is matching too loosely).
+Moved to the next-steps list as a separate item.
+
+Vocabulary also dipped slightly (260 → 247) because the cooldown
+exclusion hides some bio content the model would have otherwise
+riffed on. The tradeoff is worth it — the *distribution* of content
+across themes is meaningfully better even with a small vocab hit.
+
+### Tests
+
+7 offline unit tests cover the mention detector (word overlap
+detection, rejection of too-short items), the recorder (bump on
+match, ignore unrelated), the cooldown exclusion (demotion on heavy
+mention), the empty-section fallback, the pk rotation, the
+paraphrase header, and persistence round-trip. The snapshot fix
+changed the test fixture behavior — tests now construct their NPCs
+BEFORE instantiating `StoryDirector` so `_snapshot_original_bios`
+catches the test data. All 63 tests pass.
+
+### Tuning knobs
+
+- `_BIO_COOLDOWN_THRESHOLD = 2` (excluded from bio once mentioned 2+ times)
+- Top 2 goals / top 3 pk / top 2 wf in the bio block
+- 2-hit + 40%-ratio floor for mention detection
+- `_BIO_STOPWORDS` — short list, not a complete stopword set
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -1138,6 +1275,11 @@ prompt template and three action types. By the end it's:
   excludes focus-NPC examples so the bio can escape the few-shot
   copy loop — this is what unlocked emergent plots like Kael's
   search for Tam)
+- **Intra-bio rotation** (per-item mention tracking, original-bio
+  snapshot to avoid contamination from Director-added facts,
+  cooldown exclusion that drops items from the prompt once
+  mentioned enough — this broke the "each NPC quotes its top bio
+  item verbatim" copy loop)
 - **A REST surface** (`/story/tick`, `/story/state`, `/story/player_action`)
 
 Every single piece exists because an empirical run produced a failure
@@ -1157,31 +1299,36 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Rotate within a bio (stop per-NPC fixation)
+### 1. Own-output fixation (the new inner loop)
 
-**The gap:** The rotation work (commit `TBD`) broke the few-shot
-copy loop but revealed a new smaller one: Bess's 8 ticks in the
-rotation run concentrated 5/8 mentions on her top personal_knowledge
-item (*"merchant guild planning to raise taxes"*), often with
-near-verbatim phrasing. Each focus NPC's content now orbits its
-top bio items the way it used to orbit the few-shot example.
+**The gap:** After intra-bio rotation shipped, a new failure mode
+appeared in the 3B bench: Bess's T1 emergent invention (*"dropping
+a tray of hot soup"*) reappeared at T13 and T15 with slight
+phrasing variations. The model is no longer copying few-shots or
+bio items — it's copying *its own recent outputs*. ALREADY DONE is
+supposed to catch this via the "do not repeat" block, but it's
+matching too loosely — text variations slip through.
 
 **Design sketch:**
-- Track per-NPC "bio item mention count" in the director's state.
-- In `_build_focus_npc_bio`, rotate which 3 goals / 4 pk items get
-  shown based on mention count (least-mentioned first).
-- Add a "PARAPHRASE, don't quote" instruction inside the bio block
-  so the model doesn't reuse bio text verbatim.
-- Optionally: truncate pk items to short clauses so the model can't
-  just lift full sentences.
+- Add a `_recent_output_phrases` rolling buffer (last ~15 dispatch
+  texts).
+- Before dispatching, embed the candidate against the recent buffer
+  using the existing FactLedger embedder. If cosine > 0.8 against
+  any of the last 10-15 outputs, retry the worker with an explicit
+  "You already wrote this: [prior], pick a different angle" preamble.
+- Alternatively: hash the first 6 content words of each recent
+  output and reject a new candidate whose first 6 content words
+  overlap with >= 4 of them.
 
-**Where to start:** `_build_focus_npc_bio` in
-`npc_engine/story_director.py`. Add a `_bio_mention_count` dict to
-the director, bump it each time a bio item appears in a worker
-output (heuristic: substring match), and sort bio items by
-mentions-ascending before trimming to top 3/4.
+**Where to start:** `_run_single_action` already has a pre-dispatch
+retry path for contradictions. Add a second pre-dispatch check for
+self-repetition right alongside it. Same pattern as
+`_precheck_contradiction` → `_precheck_self_repetition`.
 
-**Risk:** Low — purely additive to the bio block selection.
+**Risk:** Low. The retry pattern already exists. Main risk is
+false positives — the detector could reject content that's
+legitimately building on a prior thread. Mitigate by only rejecting
+when the NPC TARGET matches AND the similarity is high.
 
 ### 2. Auto-diversify examples.yaml library
 
