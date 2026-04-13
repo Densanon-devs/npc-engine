@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -40,6 +41,7 @@ LORE_FILE = DATA_DIR / "ashenvale_lore.md"
 EXAMPLES_FILE = DATA_DIR / "examples.yaml"
 STATE_FILE = DATA_DIR / "state.json"
 LEDGER_FILE = DATA_DIR / "fact_ledger.json"
+ARCS_FILE = DATA_DIR / "arcs.json"
 
 # Cosine-similarity threshold above which the FactLedger surfaces a
 # warning. all-MiniLM-L6-v2 is paraphrase-tuned, so:
@@ -74,6 +76,48 @@ _ACTION_KIND_ROTATION = ("event", "quest", "fact")
 # Maximum concurrent active/available quests on one NPC — past this, we
 # skip 'quest' in rotation so a focus NPC doesn't accumulate unfinished work.
 _MAX_QUESTS_PER_NPC = 2
+
+# ── Narrative arc tuning ────────────────────────────────────────
+# Minimum ledger entries before the planner will try to cluster. Below
+# this, there isn't enough material to find a dense theme.
+_ARC_PROPOSAL_MIN_LEDGER_ENTRIES = 4
+
+# Ticks to wait between proposal attempts. Even if the ledger grows, we
+# don't want the planner re-scoring every single tick — clustering is
+# O(n²) and a stable arc should outlive a few ticks of new content.
+_ARC_PROPOSAL_COOLDOWN_TICKS = 5
+
+# Cosine similarity above which two ledger entries are considered part
+# of the same theme cluster. Looser than the FactLedger's 0.6 because
+# we're detecting thematic overlap, not duplicates.
+_ARC_CLUSTER_SIMILARITY = 0.55
+
+# Only look at the most recent N ledger entries when clustering — older
+# entries produce stale arcs.
+_ARC_CLUSTER_LOOKBACK = 20
+
+# Number of focus-NPC touches required to advance one beat. Tuned
+# empirically against Qwen 2.5 3B at actions_per_tick=3 — at the
+# original value of 2, the touch counter advanced beats faster than
+# the LLM could pace content (T14's physical-confrontation scene
+# landed during beat 4/"resolve" instead of beat 3/"confront").
+# At 4, beats advance every ~2-3 ticks for 3B rotation cadence,
+# which matches the natural arc of set-up → escalation → climax
+# → aftermath the model writes. See FINDINGS.md "tuning notes".
+_ARC_BEAT_ADVANCE_THRESHOLD = 4
+
+# Maximum focus NPCs per arc — bigger than this and the arc loses
+# coherence (every NPC "touches" it).
+_ARC_MAX_FOCUS_NPCS = 4
+
+# The fixed 4-beat skeleton every arc follows. Descriptive strings so
+# they slot directly into the prompt without re-wording.
+_ARC_BEAT_SKELETON = (
+    "seed — introduce the tension or hint at it without resolving anything",
+    "escalate — deepen the stakes with a new wrinkle or complication",
+    "confront — force a scene where the tension comes to a head",
+    "resolve — show the aftermath and let the thread close cleanly",
+)
 
 class ContradictionChecker:
     """
@@ -357,6 +401,272 @@ class FactLedger:
             logger.error(f"FactLedger save failed: {e}")
 
 
+@dataclass
+class NarrativeArc:
+    """
+    A multi-tick story thread the Director commits to. Arcs give a session
+    shape beyond round-robin local decisions: a theme, a cast, and a fixed
+    4-beat progression (seed → escalate → confront → resolve).
+
+    Arcs are proposed deterministically from the FactLedger — the planner
+    clusters recent entries by embedding similarity and commits the densest
+    cluster as an arc. The theme and focus NPCs are derived from that
+    cluster, so the arc is always grounded in content the Director has
+    already produced.
+    """
+
+    id: str
+    theme: str
+    focus_npcs: list[str]
+    beat_goals: list[str]
+    current_beat: int = 0
+    status: str = "active"  # active | resolved | abandoned
+    started_at_tick: int = 0
+    last_advanced_at_tick: int = 0
+
+    @property
+    def current_beat_label(self) -> str:
+        """Short label for the current beat (the word before the em-dash)."""
+        goal = self.current_beat_goal
+        if goal is None:
+            return "done"
+        return goal.split(" — ", 1)[0]
+
+    @property
+    def current_beat_goal(self) -> Optional[str]:
+        if 0 <= self.current_beat < len(self.beat_goals):
+            return self.beat_goals[self.current_beat]
+        return None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.current_beat >= len(self.beat_goals)
+
+
+class ArcPlanner:
+    """
+    Owns the narrative arcs, proposes new ones from the ledger, and
+    advances them as the story progresses.
+
+    Deterministic proposal (v1): greedy-cluster the recent FactLedger
+    entries by cosine similarity. The densest cluster becomes an arc —
+    theme = the center entry's text, focus_npcs = the unique NPC ids
+    across the cluster. Fixed 4-beat skeleton, touch-counter advancement.
+
+    No LLM call is made during proposal or advancement — the planner is
+    pure Python. A future v2 could add an LLM-theming pass for richer
+    theme strings, but the clusters themselves are already grounded in
+    Director-written content so themes are never "made up from nothing."
+    """
+
+    def __init__(self, storage_path: Path):
+        self.storage_path = storage_path
+        self.arcs: list[NarrativeArc] = []
+        self.active_arc_id: Optional[str] = None
+        self._last_proposal_attempt_tick: int = 0
+        self._load()
+
+    # ── Public API ──────────────────────────────────────────────
+
+    def active(self) -> Optional[NarrativeArc]:
+        """Return the currently-active arc, or None."""
+        if not self.active_arc_id:
+            return None
+        for arc in self.arcs:
+            if arc.id == self.active_arc_id and arc.status == "active":
+                return arc
+        # Stale id — clear it
+        self.active_arc_id = None
+        return None
+
+    def maybe_propose(self, ledger: "FactLedger", available_npcs: list[str],
+                       current_tick: int) -> Optional[NarrativeArc]:
+        """
+        Attempt to propose a new arc if there's no active one and the
+        cooldown has elapsed. Returns the new arc (and sets it active) or
+        ``None`` if nothing was proposed.
+        """
+        if self.active() is not None:
+            return None
+        if current_tick - self._last_proposal_attempt_tick < _ARC_PROPOSAL_COOLDOWN_TICKS:
+            return None
+        self._last_proposal_attempt_tick = current_tick
+
+        arc = self._propose_from_ledger(ledger, available_npcs, current_tick)
+        if arc is not None:
+            self.arcs.append(arc)
+            self.active_arc_id = arc.id
+            logger.info(
+                f"ArcPlanner proposed arc {arc.id}: '{arc.theme[:60]}' "
+                f"(focus={arc.focus_npcs})"
+            )
+        self.save()
+        return arc
+
+    def advance_if_beat_met(self, recent_decisions: list[dict],
+                             current_tick: int) -> bool:
+        """
+        Count focus-NPC touches in ``recent_decisions`` since the current
+        beat started. If the threshold is met, bump the beat. Resolve the
+        arc when the final beat completes. Returns True when a beat
+        advanced (including resolution).
+        """
+        arc = self.active()
+        if arc is None:
+            return False
+
+        touches = 0
+        for d in recent_decisions:
+            tick_num = d.get("tick", 0)
+            if tick_num <= arc.last_advanced_at_tick:
+                continue
+            actions_in_decision: list[dict] = []
+            if isinstance(d.get("action"), dict):
+                actions_in_decision.append(d["action"])
+            for sub in d.get("sub_actions", []) or []:
+                if isinstance(sub, dict) and isinstance(sub.get("action"), dict):
+                    actions_in_decision.append(sub["action"])
+            for act in actions_in_decision:
+                for key in ("npc_id", "target"):
+                    val = act.get(key)
+                    if isinstance(val, str) and val in arc.focus_npcs:
+                        touches += 1
+                        break  # don't double-count one action
+
+        if touches < _ARC_BEAT_ADVANCE_THRESHOLD:
+            return False
+
+        arc.current_beat += 1
+        arc.last_advanced_at_tick = current_tick
+        logger.info(
+            f"ArcPlanner advanced {arc.id} to beat {arc.current_beat} "
+            f"({arc.current_beat_label})"
+        )
+        if arc.is_complete:
+            arc.status = "resolved"
+            self.active_arc_id = None
+            logger.info(f"ArcPlanner resolved {arc.id}")
+        self.save()
+        return True
+
+    def stats(self) -> dict:
+        active = self.active()
+        return {
+            "arc_count": len(self.arcs),
+            "active_arc_id": self.active_arc_id,
+            "active_theme": active.theme if active else None,
+            "active_beat": active.current_beat_label if active else None,
+            "last_proposal_attempt_tick": self._last_proposal_attempt_tick,
+        }
+
+    def reset(self) -> None:
+        self.arcs = []
+        self.active_arc_id = None
+        self._last_proposal_attempt_tick = 0
+        if self.storage_path.exists():
+            try:
+                self.storage_path.unlink()
+            except Exception:
+                pass
+
+    # ── Internals ───────────────────────────────────────────────
+
+    def _propose_from_ledger(self, ledger: "FactLedger",
+                              available_npcs: list[str],
+                              current_tick: int) -> Optional[NarrativeArc]:
+        """
+        Greedy clustering over the most recent ledger entries. Pick the
+        entry with the most high-similarity neighbors as the cluster
+        center, then collect its neighbors. Theme = center entry's text,
+        focus NPCs = unique NPC ids in the cluster filtered against
+        ``available_npcs``.
+        """
+        if len(ledger.entries) < _ARC_PROPOSAL_MIN_LEDGER_ENTRIES:
+            return None
+        np = ledger.np
+        if np is None:
+            return None
+
+        recent = ledger.entries[-_ARC_CLUSTER_LOOKBACK:]
+        try:
+            embeddings = np.array([e["embedding"] for e in recent])
+            # Pairwise cosine — entries are already L2-normalized on encode
+            sims = embeddings @ embeddings.T
+            # Zero the diagonal so self-similarity doesn't dominate
+            for i in range(len(sims)):
+                sims[i][i] = 0.0
+            neighbor_counts = (sims >= _ARC_CLUSTER_SIMILARITY).sum(axis=1)
+            best_idx = int(neighbor_counts.argmax())
+            if int(neighbor_counts[best_idx]) == 0:
+                return None
+            cluster_indices = [best_idx] + [
+                i for i in range(len(sims))
+                if i != best_idx and sims[best_idx][i] >= _ARC_CLUSTER_SIMILARITY
+            ]
+        except Exception as e:
+            logger.error(f"ArcPlanner cluster failed: {e}")
+            return None
+
+        cluster_entries = [recent[i] for i in cluster_indices]
+        theme = str(cluster_entries[0].get("text") or "")[:160]
+        if not theme:
+            return None
+
+        # Focus NPCs: unique ids in cluster, in order of first appearance,
+        # filtered to the currently-available roster. Dropping "all" and
+        # anything not in the world keeps the arc grounded.
+        focus_npcs: list[str] = []
+        seen: set[str] = set()
+        avail = set(available_npcs)
+        for e in cluster_entries:
+            nid = e.get("npc_id") or ""
+            if nid and nid in avail and nid not in seen:
+                seen.add(nid)
+                focus_npcs.append(nid)
+        if not focus_npcs:
+            return None
+        focus_npcs = focus_npcs[:_ARC_MAX_FOCUS_NPCS]
+
+        arc_id = f"arc_t{current_tick}_{int(time.time())}"
+        return NarrativeArc(
+            id=arc_id,
+            theme=theme,
+            focus_npcs=focus_npcs,
+            beat_goals=list(_ARC_BEAT_SKELETON),
+            current_beat=0,
+            status="active",
+            started_at_tick=current_tick,
+            last_advanced_at_tick=current_tick,
+        )
+
+    def _load(self) -> None:
+        if not self.storage_path.exists():
+            return
+        try:
+            data = json.loads(self.storage_path.read_text(encoding="utf-8"))
+            self.arcs = [NarrativeArc(**a) for a in data.get("arcs", [])]
+            self.active_arc_id = data.get("active_arc_id")
+            self._last_proposal_attempt_tick = int(data.get("last_proposal_attempt_tick", 0))
+        except Exception as e:
+            logger.warning(f"ArcPlanner load failed: {e}")
+            self.arcs = []
+            self.active_arc_id = None
+
+    def save(self) -> None:
+        try:
+            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            self.storage_path.write_text(
+                json.dumps({
+                    "arcs": [asdict(a) for a in self.arcs],
+                    "active_arc_id": self.active_arc_id,
+                    "last_proposal_attempt_tick": self._last_proposal_attempt_tick,
+                }, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            logger.error(f"ArcPlanner save failed: {e}")
+
+
 def _extract_first_json_object(text: str) -> Optional[str]:
     """
     Find the first balanced JSON object in ``text`` by scanning braces.
@@ -408,6 +718,7 @@ class StoryDirector:
         self._lore_text: str = ""
         self._examples: list[dict] = []
         self.ledger = FactLedger(LEDGER_FILE)
+        self.arc_planner = ArcPlanner(ARCS_FILE)
         self._load_assets()
         self._load_state()
 
@@ -482,6 +793,14 @@ class StoryDirector:
         snapshot = self._world_snapshot()
         plan = self._architect_plan(actions_per_tick)
 
+        # Try to propose a narrative arc BEFORE workers run so their
+        # prompts can reference it. No-op if there's already an active
+        # arc or the ledger is too thin — proposal is cooldown-gated.
+        available_npcs = list(self.engine.pie.npc_knowledge.profiles.keys())
+        self.arc_planner.maybe_propose(
+            self.ledger, available_npcs, current_tick=self.tick_count + 1,
+        )
+
         if not plan:
             # No NPCs to focus on — return a minimal noop response
             self.tick_count += 1
@@ -533,6 +852,13 @@ class StoryDirector:
             ]
         self.recent_decisions.append(decision_record)
         self.recent_decisions = self.recent_decisions[-5:]
+
+        # After the tick is recorded, check if the active arc's beat has
+        # met its touch threshold and should advance (or resolve).
+        self.arc_planner.advance_if_beat_met(
+            self.recent_decisions, current_tick=self.tick_count,
+        )
+
         self._save_state()
 
         if actions_per_tick == 1:
@@ -679,6 +1005,7 @@ class StoryDirector:
             "lore_loaded": bool(self._lore_text),
             "example_count": len(self._examples),
             "ledger": self.ledger.stats(),
+            "arc_planner": self.arc_planner.stats(),
         }
 
     def record_player_action(self, text: str,
@@ -1057,6 +1384,23 @@ class StoryDirector:
             parts.append("=== EXAMPLES ===\n\n".join([""] + ex_blocks).strip())
 
         parts.append("=== CURRENT WORLD STATE ===\n" + snapshot)
+
+        # Active narrative arc — soft guidance about the theme and current
+        # beat. Python still forces focus + kind below; the arc block just
+        # tells the LLM *what kind of beat* to write. Placed before FOCUS
+        # NPC so the forced-focus block still holds the recency-bias slot.
+        active_arc = self.arc_planner.active()
+        if active_arc is not None and active_arc.current_beat_goal:
+            arc_lines = [
+                "=== ACTIVE NARRATIVE ARC ===",
+                f"Theme: {active_arc.theme}",
+                f"Cast: {', '.join(active_arc.focus_npcs)}",
+                f"Current beat ({active_arc.current_beat + 1}/{len(active_arc.beat_goals)}): "
+                f"{active_arc.current_beat_goal}",
+                "If this tick's focus NPC fits the cast, advance the beat. "
+                "If not, write something the cast can react to next tick.",
+            ]
+            parts.append("\n".join(arc_lines))
 
         # Forced focus NPC + action kind — Python made both choices.
         # Placed immediately before ACTION: so recency bias favors them

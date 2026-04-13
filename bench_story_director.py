@@ -113,6 +113,7 @@ def boot_engine(model_path: Path, reset: bool):
         for runtime_file in (
             NPC_ROOT / "data" / "story_director" / "state.json",
             NPC_ROOT / "data" / "story_director" / "fact_ledger.json",
+            NPC_ROOT / "data" / "story_director" / "arcs.json",
         ):
             if runtime_file.exists():
                 try:
@@ -264,6 +265,7 @@ def main():
         dialogue_events_log: list[dict] = []
         dialogue_total_time = 0.0
         similarity_warnings: list[dict] = []
+        arc_events: list[dict] = []  # (tick, event, arc_id, detail)
 
         for i in range(args.ticks):
             tick_num = i + 1
@@ -311,6 +313,11 @@ def main():
 
             print(f"\n=== TICK {tick_num} ===")
             before = _snapshot_world(engine)
+            arc_before = engine.story_director.arc_planner.active()
+            arc_before_snap = (
+                None if arc_before is None
+                else (arc_before.id, arc_before.current_beat, arc_before.status)
+            )
             t0 = time.monotonic()
             result = engine.story_director.tick(
                 max_tokens=args.max_tokens,
@@ -319,6 +326,51 @@ def main():
             )
             elapsed = time.monotonic() - t0
             timings.append(elapsed)
+
+            arc_after = engine.story_director.arc_planner.active()
+            # Detect arc lifecycle transitions so we can eyeball whether
+            # the planner is actually doing anything over a session.
+            if arc_before_snap is None and arc_after is not None:
+                print(f"  [ARC] PROPOSED {arc_after.id}")
+                print(f"        theme: {arc_after.theme[:100]}")
+                print(f"        cast:  {arc_after.focus_npcs}")
+                print(f"        beat:  {arc_after.current_beat + 1}/"
+                      f"{len(arc_after.beat_goals)} "
+                      f"({arc_after.current_beat_label})")
+                arc_events.append({
+                    "tick": tick_num, "event": "proposed",
+                    "arc_id": arc_after.id, "theme": arc_after.theme,
+                    "focus_npcs": arc_after.focus_npcs,
+                })
+            elif arc_before_snap is not None and arc_after is None:
+                # Resolved in this tick — look up which arc it was
+                resolved = next(
+                    (a for a in engine.story_director.arc_planner.arcs
+                     if a.id == arc_before_snap[0]),
+                    None,
+                )
+                status = resolved.status if resolved else "unknown"
+                print(f"  [ARC] RESOLVED {arc_before_snap[0]} (status={status})")
+                arc_events.append({
+                    "tick": tick_num, "event": "resolved",
+                    "arc_id": arc_before_snap[0], "status": status,
+                })
+            elif (arc_before_snap is not None and arc_after is not None
+                  and arc_before_snap[1] != arc_after.current_beat):
+                print(f"  [ARC] BEAT {arc_before_snap[1] + 1} -> "
+                      f"{arc_after.current_beat + 1} "
+                      f"({arc_after.current_beat_label})")
+                arc_events.append({
+                    "tick": tick_num, "event": "beat_advanced",
+                    "arc_id": arc_after.id,
+                    "from_beat": arc_before_snap[1],
+                    "to_beat": arc_after.current_beat,
+                })
+            elif arc_after is not None:
+                # Same arc, same beat — just print a quiet status line
+                print(f"  [ARC] {arc_after.id} beat "
+                      f"{arc_after.current_beat + 1}/{len(arc_after.beat_goals)} "
+                      f"({arc_after.current_beat_label})")
 
             # Multi-action ticks return a sub_actions list; single-action
             # ticks return action/dispatch at the top level. Normalize.
@@ -448,6 +500,35 @@ def main():
                   f"threshold: {ledger_stats['threshold']}")
         except Exception:
             pass
+
+        # Arc planner summary
+        try:
+            planner = engine.story_director.arc_planner
+            print(f"Arcs proposed: {len(planner.arcs)}")
+            for a in planner.arcs:
+                beat_label = a.current_beat_label
+                total = len(a.beat_goals)
+                if a.is_complete:
+                    beat_str = f"{total}/{total} (done)"
+                else:
+                    beat_str = f"{a.current_beat + 1}/{total} ({beat_label})"
+                print(f"  {a.id}  status={a.status}  beat={beat_str}")
+                print(f"    theme: {a.theme[:120]}")
+                print(f"    cast:  {a.focus_npcs}")
+            if arc_events:
+                print(f"Arc events ({len(arc_events)}):")
+                for ev in arc_events:
+                    if ev["event"] == "proposed":
+                        print(f"  T{ev['tick']} PROPOSED {ev['arc_id']} "
+                              f"cast={ev['focus_npcs']} theme={ev['theme'][:60]}")
+                    elif ev["event"] == "beat_advanced":
+                        print(f"  T{ev['tick']} BEAT {ev['from_beat'] + 1} -> "
+                              f"{ev['to_beat'] + 1}  arc={ev['arc_id']}")
+                    elif ev["event"] == "resolved":
+                        print(f"  T{ev['tick']} RESOLVED {ev['arc_id']} "
+                              f"status={ev['status']}")
+        except Exception as e:
+            print(f"  (arc planner reporting failed: {e})")
 
         if dialogue_events_log:
             print(f"Dialogue turns: {len(dialogue_events_log)}  "

@@ -612,6 +612,216 @@ discards the first response and dispatches the second.
 
 ---
 
+## Multi-tick narrative arcs
+
+Every tick up to this point has been locally coherent but
+*structurally independent*. The Director reacts, rotates, and varies
+action kinds — but it doesn't plan a *shape* across ticks. A SAO-style
+Cardinal plans arcs that span rising action, a climax, and a
+resolution. This section is the first layer of that.
+
+### The insight
+
+Arcs don't need an LLM. The FactLedger already has everything the
+planner needs — every fact-shaped injection is embedded and stored
+with the NPC id that received it. A deterministic clustering pass
+over recent ledger entries surfaces the densest thematic cluster, and
+that cluster *is* the arc: theme = the center entry's text, cast = the
+unique NPC ids in the cluster.
+
+This preserves the Python-plans-LLM-writes split at a wider scope.
+Where the single-tick planner picks *who* and *what kind*, the arc
+planner picks *what story thread is worth committing to*. Neither
+layer asks the LLM to plan — planning stays deterministic, the LLM
+stays a content writer.
+
+### Data model
+
+```python
+@dataclass
+class NarrativeArc:
+    id: str
+    theme: str                      # drawn from the cluster's center entry
+    focus_npcs: list[str]           # cast, in order of first appearance
+    beat_goals: list[str]           # fixed 4-beat skeleton
+    current_beat: int = 0
+    status: str = "active"          # active | resolved | abandoned
+    started_at_tick: int = 0
+    last_advanced_at_tick: int = 0
+```
+
+The beat skeleton is fixed and generic:
+- **seed** — introduce the tension or hint at it without resolving anything
+- **escalate** — deepen the stakes with a new wrinkle or complication
+- **confront** — force a scene where the tension comes to a head
+- **resolve** — show the aftermath and let the thread close cleanly
+
+Generic phrasing is deliberate: any theme the cluster produces can be
+told through those four beats. Per-arc custom beats would require
+another LLM call and more state — defer.
+
+### Proposal (greedy clustering)
+
+On each tick, `ArcPlanner.maybe_propose()` runs if (a) there's no
+active arc and (b) at least `_ARC_PROPOSAL_COOLDOWN_TICKS` ticks have
+elapsed since the last attempt. The algorithm:
+
+1. Take the last `_ARC_CLUSTER_LOOKBACK=20` ledger entries.
+2. Build the pairwise cosine similarity matrix (entries are already
+   L2-normalized on encode, so it's one matrix multiply).
+3. For each entry, count neighbors above
+   `_ARC_CLUSTER_SIMILARITY=0.55` (looser than the 0.6 contradiction
+   threshold — we're detecting thematic overlap, not duplicates).
+4. Pick the entry with the most neighbors as the cluster center.
+5. The cluster is the center + all its above-threshold neighbors.
+6. Theme = the center entry's text (truncated to 160 chars).
+7. Focus NPCs = unique ids across the cluster, in order of first
+   appearance, capped at `_ARC_MAX_FOCUS_NPCS=4`, filtered to the
+   currently-available roster.
+
+Nothing in this pipeline needs a model. Ledger entries already have
+embeddings, numpy does the math, the theme text was written by the
+LLM in a prior tick. The planner is pure orchestration.
+
+### Beat advancement (touch counter)
+
+`advance_if_beat_met()` walks `recent_decisions`, counts how many
+actions since `last_advanced_at_tick` targeted a focus NPC (via
+`npc_id` or `target` field), and bumps `current_beat` when the count
+reaches `_ARC_BEAT_ADVANCE_THRESHOLD=2`. When `current_beat` passes
+the last beat, `status = "resolved"` and `active_arc_id` is cleared —
+the next eligible tick will propose a fresh arc.
+
+Counter-based advancement is coarse. A better heuristic would measure
+*progress toward the beat goal* (e.g., semantic similarity between
+new content and the goal string). That's a v2 concern — the touch
+counter is enough to keep arcs moving at a predictable pace (one beat
+per 2 tick-visits ≈ one arc per 8-10 focused ticks).
+
+### Prompt integration
+
+`_build_prompt` adds an `=== ACTIVE NARRATIVE ARC ===` block between
+the world snapshot and the forced-focus block:
+
+```
+=== ACTIVE NARRATIVE ARC ===
+Theme: {theme}
+Cast: {focus_npcs}
+Current beat (2/4): escalate — deepen the stakes with a new wrinkle
+If this tick's focus NPC fits the cast, advance the beat. If not,
+write something the cast can react to next tick.
+```
+
+The guidance is soft — the arc block is *before* the forced-focus
+block, so Python still owns which NPC and which action kind this
+tick fires. The arc just tells the model *what the beat should feel
+like* when the focus NPC happens to be in the cast. If the rotation
+lands on an NPC outside the cast, the arc block still nudges the
+model to plant something the cast can react to next tick — keeping
+the thread alive across non-cast ticks.
+
+### Persistence
+
+Arcs live in `data/story_director/arcs.json` (gitignored) alongside
+`state.json` and `fact_ledger.json`. On load, the planner restores
+the full arc list, the active arc id, and the proposal cooldown
+counter — so a cold restart doesn't lose the thread.
+
+### What this gives you
+
+- **Session-level structure.** Previously you got coherent local
+  decisions. Now you get story threads that have a beginning, a
+  middle, and an end, with an explicit beat to write toward.
+- **Grounded themes.** The planner can never "invent" a theme — it
+  can only commit to text the LLM already wrote. So arcs always feel
+  like they emerge from the world rather than being imposed on it.
+- **Zero new latency.** No extra LLM calls. The cluster pass on a
+  20-entry ledger is ~50μs of numpy matmul. The only cost is the
+  tick-time arithmetic to count touches.
+- **Resilient across restarts.** Arc state is persistent; the
+  Director picks up the active beat on the next tick after a reboot.
+
+### What it still can't do
+
+- **Multi-arc concurrency.** One active arc at a time. A Cardinal
+  would run 2-3 threads in parallel (e.g., the player's main quest +
+  a background faction tension). Enabling this requires the prompt
+  to pick *which* active arc each tick advances — an extra decision
+  the current architect doesn't make.
+- **Semantic beat progress.** The touch counter doesn't know if the
+  *content* written during those touches actually advanced the beat.
+  A tick that names the NPC but doesn't address the theme still
+  counts. Upgrading to "embed the tick's new content, measure
+  similarity to the current beat goal, only count if above
+  threshold" would be a tighter signal.
+- **LLM-proposed themes.** v1 pulls themes from the cluster center's
+  raw text. A larger model could summarize the cluster into a crisp
+  one-line theme ("Mara's smuggling ring", rather than the raw event
+  text that seeded it). Cheap (one call per arc proposal) and
+  deferrable.
+- **Abandonment.** If the rotation never lands on a cast NPC, an arc
+  sits stuck at its current beat forever. An abandonment heuristic
+  (e.g., no touches for N ticks → `status = "abandoned"`) would close
+  stale threads so new arcs can form.
+
+### Tuning notes from empirical runs
+
+The arc planner's knobs were picked against a 15-tick Qwen 2.5 3B
+session at `actions_per_tick=3`. Observations that drove the final
+values:
+
+**Beat advance threshold = 4.** At the original value of 2, beat
+advancement *raced ahead of LLM content pacing*. In the first 3B run
+the touch counter said "beat 4/resolve" by T13, but the actual
+physical-confrontation scene (*"Kael storms into the blacksmith's
+workshop, hammer in hand, and accuses Mara of stealing"*) didn't
+land until T14 — a tick *after* the planner had already moved past
+the "confront" beat. Raising to 4 matches the counter to 3B's
+rotation cadence: with a 2-NPC cast touched roughly every 2 ticks in
+multi-action mode, each beat now spans 2-3 ticks, which gives the LLM
+room to set up → escalate → pay off before the next beat goal shows
+up in the prompt.
+
+**Content concentration = 73% on 3B.** In the same session, 33 of 45
+sub-actions mentioned the arc cast or theme keywords — despite
+focus-NPC rotation continuing to touch every NPC in the world. This
+is the arc block doing its job: non-cast NPCs write *about* the
+cast's story thread (pip overhears mara, bess notices suspicious
+behavior, noah receives cryptic letters, roderick investigates), so
+the cast's arc spills organically across the social graph.
+
+**Cluster similarity = 0.55** (looser than the FactLedger's 0.6
+contradiction threshold). Picked to catch thematic overlap without
+pulling in merely-adjacent content. With 0.5 or lower the cluster
+absorbs unrelated NPCs; with 0.65+ the cluster can't form on 3B's
+more-varied content.
+
+**Proposal cooldown = 5 ticks.** Long enough that a resolved arc
+doesn't immediately re-propose the same theme (cluster is still
+dominant right after resolution). Short enough that a growing ledger
+has room to produce a distinct theme before the next attempt.
+
+**Minimum ledger entries = 4.** First proposal fires at T2-T3 on
+3-worker ticks (ledger grows by 3/tick). Lower and proposals fire on
+too-thin clusters; higher wastes early-session ticks.
+
+**Session-length guidance.** A 4-beat arc on Qwen 2.5 3B at
+`actions_per_tick=3` takes ~11 ticks to fully resolve (propose at
+T3-T5, advance every 2-3 ticks, resolve at T13-T15). Sessions
+shorter than 13 ticks will leave the last arc mid-resolution — not
+a bug, just cadence math. For 0.5B the cadence is faster (~8 ticks
+per arc) because its rotation touches the cast more densely.
+
+### Tests
+
+8 offline unit tests cover proposal, skip conditions, advancement,
+resolution, prompt injection, persistence, and cooldown gating. They
+run without sentence-transformers by stuffing fake embeddings
+(2-D unit vectors with known cosine similarities) directly into the
+ledger — fast, deterministic, and independent of model availability.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -677,6 +887,8 @@ prompt template and three action types. By the end it's:
 - **A persistent tick state** (decisions, player actions, ledger)
 - **A semantic ledger** (every injection embedded + similarity-checked)
 - **A dialogue auto-feed loop** (every player turn observed)
+- **A multi-tick arc planner** (deterministic cluster → theme + 4-beat
+  skeleton, touch-counter advancement, zero new LLM calls)
 - **A REST surface** (`/story/tick`, `/story/state`, `/story/player_action`)
 
 Every single piece exists because an empirical run produced a failure
@@ -696,47 +908,7 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Multi-tick narrative arcs (the biggest remaining piece)
-
-**The gap:** Each tick is currently independent. The architect plans
-for *one* tick; nothing plans across ticks. SAO Cardinal plans arcs
-that span dozens of ticks and have an overall narrative shape (rising
-action → climax → resolution). Right now we get coherent local
-decisions but no story-level structure.
-
-**Design sketch:**
-- New `NarrativeArc` dataclass: `{id, theme, focus_npcs, beat_goals,
-  current_beat, status}` — e.g., `theme="Mara smuggling investigation"`,
-  `focus_npcs=["mara", "roderick", "kael"]`,
-  `beat_goals=["seed suspicion", "find evidence", "confrontation",
-  "resolution"]`, `current_beat=0`.
-- New `ArcPlanner` class. On every Nth tick (say, every 5), Python
-  reads recent ledger entries + recent_decisions and picks a theme
-  worth committing to. Could be deterministic (highest-similarity
-  cluster from the ledger) or LLM-driven (Qwen 3B summarizes recent
-  beats and proposes an arc).
-- Each tick's `_build_prompt` adds an `=== ACTIVE ARC ===` block
-  naming the current arc and the current beat goal. Workers write
-  content that advances the beat.
-- Arcs auto-advance: when the current beat's goal is met (heuristic:
-  the focus NPC is targeted N times with thematically-similar
-  content), bump `current_beat`. When all beats complete, mark
-  `status=resolved` and start a new arc.
-- Persist arcs to `data/story_director/arcs.json`.
-
-**Where to start:** `npc_engine/story_director.py`. Add `NarrativeArc`
-+ `ArcPlanner` + plumbing in `_build_prompt`. The cleanest extension
-point is right after `_pick_action_kind` in `tick()`: query the
-planner for the active arc, inject it into the prompt.
-
-**Test approach:** Same pattern as the rest — unit tests with stub
-engine + scripted responses, then run the bench with arcs enabled
-and verify multi-tick coherence.
-
-**Risk:** the LLM-driven arc planner adds another LLM call per N
-ticks. Cheap if the cadence is 1 plan call per 5 ticks. Worth it.
-
-### 2. NPC dialogue identity bleed
+### 1. NPC dialogue identity bleed
 
 **The gap:** In bench dialogue tests, Noah called the player "Mara"
 and Mara called the player "Kael". This is in the npc-engine
@@ -755,7 +927,7 @@ flag for retry.
 done as a focused npc-engine fix on its own branch, then merge
 forward.
 
-### 3. Real parallel workers
+### 2. Real parallel workers
 
 **The gap:** Multi-action ticks run sub-actions sequentially because
 llama-cpp-python isn't thread-safe for one base model. On a 3-action
@@ -779,7 +951,7 @@ is the single function that needs to become async-aware. The
 working memory). Option B requires understanding PIE's queue
 priorities. Option C is the cleanest but adds operational complexity.
 
-### 4. Co-reference resolution in the FactLedger
+### 3. Co-reference resolution in the FactLedger
 
 **The gap:** Embedding similarity misses linked entities when names
 differ. *"The elder is hiding something"* and *"Noah won't talk
@@ -804,7 +976,7 @@ director (it doesn't change at runtime).
 
 **Risk:** Low — purely additive to the embedding path.
 
-### 5. Auto-augmentor generation for narrative examples
+### 4. Auto-augmentor generation for narrative examples
 
 **The gap:** The 0.5B path's content is more literal than the 3B path
 because it copies few-shot examples verbatim. The fix is more curated
@@ -833,6 +1005,25 @@ Then a new `generate_story_augmentors.py` script in the repo root.
 **Risk:** Medium — needs careful human review of generated examples
 to avoid drift away from the lore bible's tone.
 
+### 5. Narrative arc polish (v2 items)
+
+The deterministic arc planner shipped in v1 leaves a few things on
+the table that would be worth coming back to once multi-tick arcs
+have been exercised in real sessions:
+
+- **Multi-arc concurrency**: one active arc at a time right now.
+  Cardinal would run 2-3 threads in parallel. Requires the prompt
+  to pick *which* active arc each tick advances.
+- **Semantic beat progress**: touch counter is coarse — a tick
+  naming the NPC but not advancing the theme still counts. Replace
+  with "embed the tick's new content, measure similarity to the
+  current beat goal, only count if above threshold."
+- **LLM-proposed themes**: v1 pulls themes straight from cluster
+  center text. A one-call-per-proposal LLM summarization pass
+  would produce crisper one-line themes.
+- **Abandonment**: stale arcs with no recent cast touches should
+  flip to `status = "abandoned"` so new arcs can form.
+
 ### 6. Smaller items worth doing
 
 - **Acting on contradiction** beyond retry: when the retry ALSO
@@ -844,10 +1035,11 @@ to avoid drift away from the lore bible's tone.
   Add a heuristic: only feed if the dialogue contains substance
   (length >= N, or matches a "meaningful" keyword set).
 - **Token budget management**: `_build_prompt` concatenates lore +
-  examples + snapshot + ALREADY DONE + FOCUS + ACTION. As ledger
-  grows and recent_decisions accumulate, the prompt gets long. Add
-  a token budget split (e.g., 40% lore + examples, 30% snapshot,
-  20% history, 10% directive) with truncation.
+  examples + snapshot + ALREADY DONE + FOCUS + ACTION + ACTIVE
+  NARRATIVE ARC. As ledger grows and recent_decisions accumulate,
+  the prompt gets long. Add a token budget split (e.g., 40% lore +
+  examples, 30% snapshot, 20% history, 10% directive) with
+  truncation.
 
 ---
 
@@ -856,20 +1048,21 @@ to avoid drift away from the lore bible's tone.
 ```
 npc-engine/
 ├── npc_engine/
-│   ├── story_director.py     # The service class + FactLedger
+│   ├── story_director.py     # Director + FactLedger + NarrativeArc + ArcPlanner
 │   ├── engine.py             # +14 LOC: instantiate + dialogue auto-feed
 │   └── server.py             # +43 LOC: 3 new REST endpoints
 ├── tests/
-│   └── test_story_director.py  # 35 tests (33 offline + integration)
+│   └── test_story_director.py  # 43 tests (42 offline + integration)
 ├── data/
 │   └── story_director/
 │       ├── ashenvale_lore.md     # ~30 lines of setting bible
 │       ├── examples.yaml         # 5 few-shot world-state→action pairs
 │       ├── FINDINGS.md           # this file
 │       ├── state.json            # gitignored runtime state
-│       └── fact_ledger.json      # gitignored ledger (200-entry cap)
+│       ├── fact_ledger.json      # gitignored ledger (200-entry cap)
+│       └── arcs.json             # gitignored narrative arc state
 ├── bench_story_director.py   # Model comparison + scripted sessions
-└── .gitignore                # +9 LOC: runtime files, traces, backups
+└── .gitignore                # runtime files, traces, backups
 ```
 
 ## Reproduction

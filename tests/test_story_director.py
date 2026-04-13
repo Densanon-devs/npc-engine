@@ -40,6 +40,7 @@ sys.path.insert(0, str(PIE_ROOT))
 from npc_engine.knowledge import NPCKnowledge, Quest  # noqa: E402
 from npc_engine.story_director import (  # noqa: E402
     StoryDirector, FactLedger, ContradictionChecker,
+    ArcPlanner, NarrativeArc,
 )
 
 
@@ -161,16 +162,18 @@ def _make_stub_engine(responses=None):
 
 
 def _isolate_state_file(tag: str):
-    """Redirect StoryDirector's STATE_FILE *and* LEDGER_FILE to per-test
-    temp paths so offline tests don't scribble on the real runtime
-    files. Returns a restore fn that puts the originals back and
-    deletes the temp files."""
+    """Redirect StoryDirector's STATE_FILE, LEDGER_FILE, and ARCS_FILE to
+    per-test temp paths so offline tests don't scribble on the real
+    runtime files. Returns a restore fn that puts the originals back
+    and deletes the temp files."""
     import npc_engine.story_director as sd_mod
     original_state = sd_mod.STATE_FILE
     original_ledger = sd_mod.LEDGER_FILE
+    original_arcs = sd_mod.ARCS_FILE
     tmp_state = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_state.json"
     tmp_ledger = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_ledger.json"
-    for p in (tmp_state, tmp_ledger):
+    tmp_arcs = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_arcs.json"
+    for p in (tmp_state, tmp_ledger, tmp_arcs):
         if p.exists():
             try:
                 p.unlink()
@@ -178,11 +181,13 @@ def _isolate_state_file(tag: str):
                 pass
     sd_mod.STATE_FILE = tmp_state
     sd_mod.LEDGER_FILE = tmp_ledger
+    sd_mod.ARCS_FILE = tmp_arcs
 
     def restore():
         sd_mod.STATE_FILE = original_state
         sd_mod.LEDGER_FILE = original_ledger
-        for p in (tmp_state, tmp_ledger):
+        sd_mod.ARCS_FILE = original_arcs
+        for p in (tmp_state, tmp_ledger, tmp_arcs):
             if p.exists():
                 try:
                     p.unlink()
@@ -1251,6 +1256,323 @@ def test_integration_tick_mutates_world():
     print("  [PASS] integration_tick_mutates_world")
 
 
+# ── Narrative arc tests ─────────────────────────────────────────
+
+def _inject_fake_ledger_entries(ledger: FactLedger, entries: list[dict]):
+    """
+    Stuff pre-computed entries into a FactLedger for arc tests. Each
+    entry needs ``text``, ``npc_id``, ``kind``, ``tick``, and a
+    ``embedding`` list — the ArcPlanner reads these fields directly and
+    never touches the real embedder, so tests stay fast and deterministic.
+    """
+    import numpy as np
+    ledger._np = np
+    ledger._embedder = False  # make sure nobody lazy-loads a real one
+    ledger.entries = entries
+
+
+def _fake_embedding(similarity: float) -> list[float]:
+    """
+    Return a 2-D unit vector whose dot product with [1, 0] equals
+    ``similarity``. Useful for crafting clusters with known cosine
+    similarity to a base vector without loading a real embedder.
+    """
+    import math
+    angle = math.acos(max(-1.0, min(1.0, similarity)))
+    return [math.cos(angle), math.sin(angle)]
+
+
+def _base_embedding() -> list[float]:
+    return [1.0, 0.0]
+
+
+def test_arc_planner_proposes_from_clustered_ledger():
+    """A ledger with 3 mara-themed entries (high similarity) and 1
+    unrelated noah entry should produce an arc whose focus NPC is mara
+    and whose theme is drawn from the densest cluster."""
+    restore = _isolate_state_file("arc_propose")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        _inject_fake_ledger_entries(director.ledger, [
+            {"text": "Mara is hiding contraband under the floorboards.",
+             "embedding": _base_embedding(),
+             "npc_id": "bess", "kind": "fact", "tick": 1},
+            {"text": "Mara was seen near Kael's forge at night.",
+             "embedding": _fake_embedding(0.95),
+             "npc_id": "bess", "kind": "event", "tick": 2},
+            {"text": "Mara refused to answer questions about her shipments.",
+             "embedding": _fake_embedding(0.92),
+             "npc_id": "kael", "kind": "fact", "tick": 3},
+            # Unrelated noah entry — should NOT be pulled into the cluster
+            {"text": "Noah is reading old king's letters in his study.",
+             "embedding": [0.0, 1.0],
+             "npc_id": "noah", "kind": "event", "tick": 4},
+        ])
+        arc = director.arc_planner.maybe_propose(
+            director.ledger, ["kael", "bess", "noah"], current_tick=5,
+        )
+        assert arc is not None, "expected a proposal from the clustered ledger"
+        assert arc.status == "active"
+        assert "Mara" in arc.theme or "mara" in arc.theme.lower(), arc.theme
+        # The cluster is ledger-entry-labeled with bess+kael; noah should be
+        # excluded because its entry is outside the cluster
+        assert "noah" not in arc.focus_npcs, arc.focus_npcs
+        assert set(arc.focus_npcs).issubset({"bess", "kael"}), arc.focus_npcs
+        assert director.arc_planner.active() is arc
+    finally:
+        restore()
+    print("  [PASS] arc_planner_proposes_from_clustered_ledger")
+
+
+def test_arc_planner_skips_with_too_few_entries():
+    """Below the minimum-ledger-entries threshold, maybe_propose must
+    return None and not create an arc."""
+    restore = _isolate_state_file("arc_thin")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        _inject_fake_ledger_entries(director.ledger, [
+            {"text": "one", "embedding": _base_embedding(),
+             "npc_id": "mara", "kind": "fact", "tick": 1},
+            {"text": "two", "embedding": _fake_embedding(0.95),
+             "npc_id": "mara", "kind": "event", "tick": 2},
+        ])
+        arc = director.arc_planner.maybe_propose(
+            director.ledger, ["mara", "kael"], current_tick=3,
+        )
+        assert arc is None
+        assert director.arc_planner.active() is None
+        assert director.arc_planner.arcs == []
+    finally:
+        restore()
+    print("  [PASS] arc_planner_skips_with_too_few_entries")
+
+
+def test_arc_planner_skips_when_active_arc_exists():
+    """With an active arc, subsequent maybe_propose calls must be no-ops."""
+    restore = _isolate_state_file("arc_active_skip")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        existing = NarrativeArc(
+            id="arc_existing", theme="test", focus_npcs=["mara"],
+            beat_goals=list(director.arc_planner.arcs.__class__ and ()) or [
+                "seed — x", "escalate — x", "confront — x", "resolve — x",
+            ],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+        )
+        director.arc_planner.arcs.append(existing)
+        director.arc_planner.active_arc_id = existing.id
+        _inject_fake_ledger_entries(director.ledger, [
+            {"text": f"entry {i}", "embedding": _base_embedding(),
+             "npc_id": "mara", "kind": "fact", "tick": i}
+            for i in range(6)
+        ])
+        arc = director.arc_planner.maybe_propose(
+            director.ledger, ["mara", "kael"], current_tick=10,
+        )
+        assert arc is None
+        assert director.arc_planner.active() is existing
+        assert len(director.arc_planner.arcs) == 1
+    finally:
+        restore()
+    print("  [PASS] arc_planner_skips_when_active_arc_exists")
+
+
+def test_arc_planner_advances_beat_after_n_touches():
+    """When the focus NPC is touched >= threshold times since the last
+    advance, the current beat should bump by one. Below the threshold,
+    no advance. At or above, advance."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("arc_advance")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc = NarrativeArc(
+            id="arc_advance_test", theme="mara smuggling",
+            focus_npcs=["mara"],
+            beat_goals=["seed — x", "escalate — x", "confront — x", "resolve — x"],
+            current_beat=0, status="active",
+            started_at_tick=1, last_advanced_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_id = arc.id
+
+        # Below threshold — should NOT advance
+        below = [
+            {"tick": 2, "action": {"action": "event", "target": "mara", "event": "x"}},
+        ] * (sd_mod._ARC_BEAT_ADVANCE_THRESHOLD - 1)
+        for i, d in enumerate(below):
+            d["tick"] = 2 + i
+        advanced = director.arc_planner.advance_if_beat_met(below, current_tick=4)
+        assert advanced is False, "must not advance below threshold"
+        assert arc.current_beat == 0, arc.current_beat
+
+        # At threshold — SHOULD advance
+        recent = [
+            {"tick": 2 + i, "action": {"action": "event", "target": "mara", "event": "x"}}
+            for i in range(sd_mod._ARC_BEAT_ADVANCE_THRESHOLD)
+        ]
+        advanced = director.arc_planner.advance_if_beat_met(
+            recent, current_tick=1 + sd_mod._ARC_BEAT_ADVANCE_THRESHOLD + 1,
+        )
+        assert advanced is True
+        assert arc.current_beat == 1, arc.current_beat
+        assert arc.status == "active"
+    finally:
+        restore()
+    print("  [PASS] arc_planner_advances_beat_after_n_touches")
+
+
+def test_arc_planner_resolves_after_all_beats():
+    """When the final beat advances, the arc should flip to resolved
+    and the planner should clear active_arc_id."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("arc_resolve")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc = NarrativeArc(
+            id="arc_resolve_test", theme="mara smuggling",
+            focus_npcs=["mara"],
+            beat_goals=["seed — x", "escalate — x", "confront — x", "resolve — x"],
+            current_beat=3, status="active",
+            started_at_tick=1, last_advanced_at_tick=6,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_id = arc.id
+
+        threshold = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
+        recent = [
+            {"tick": 7 + i, "action": {"action": "event", "target": "mara", "event": "x"}}
+            for i in range(threshold)
+        ]
+        advanced = director.arc_planner.advance_if_beat_met(
+            recent, current_tick=7 + threshold,
+        )
+        assert advanced is True
+        assert arc.current_beat == 4
+        assert arc.is_complete
+        assert arc.status == "resolved"
+        assert director.arc_planner.active() is None
+        assert director.arc_planner.active_arc_id is None
+    finally:
+        restore()
+    print("  [PASS] arc_planner_resolves_after_all_beats")
+
+
+def test_prompt_contains_active_arc_block():
+    """When an arc is active, _build_prompt must include an ACTIVE
+    NARRATIVE ARC section with the theme and current beat goal."""
+    restore = _isolate_state_file("arc_prompt")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc = NarrativeArc(
+            id="arc_prompt_test", theme="Mara's smuggling ring",
+            focus_npcs=["mara", "kael"],
+            beat_goals=["seed — introduce suspicion", "escalate — x", "confront — x", "resolve — x"],
+            current_beat=0, status="active",
+            started_at_tick=1, last_advanced_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_id = arc.id
+
+        prompt = director._build_prompt("world snap", focus_npc="kael", action_kind="event")
+        assert "ACTIVE NARRATIVE ARC" in prompt, prompt
+        assert "Mara's smuggling ring" in prompt, prompt
+        assert "introduce suspicion" in prompt, prompt
+        # The forced focus block must STILL be the last guidance (recency
+        # bias belongs to focus/kind, not the arc).
+        arc_idx = prompt.index("ACTIVE NARRATIVE ARC")
+        focus_idx = prompt.index("FOCUS NPC")
+        assert arc_idx < focus_idx, "arc block must come before FOCUS NPC block"
+    finally:
+        restore()
+    print("  [PASS] prompt_contains_active_arc_block")
+
+
+def test_arc_planner_persists_and_reloads():
+    """Saving and reloading should preserve arcs, active_arc_id, and
+    the cooldown tick counter."""
+    restore = _isolate_state_file("arc_persist")
+    try:
+        import npc_engine.story_director as sd_mod
+        planner1 = ArcPlanner(sd_mod.ARCS_FILE)
+        planner1.arcs.append(NarrativeArc(
+            id="arc_p1", theme="theme one",
+            focus_npcs=["mara", "kael"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=2, status="active",
+            started_at_tick=3, last_advanced_at_tick=7,
+        ))
+        planner1.active_arc_id = "arc_p1"
+        planner1._last_proposal_attempt_tick = 9
+        planner1.save()
+
+        planner2 = ArcPlanner(sd_mod.ARCS_FILE)
+        assert len(planner2.arcs) == 1
+        restored = planner2.arcs[0]
+        assert restored.id == "arc_p1"
+        assert restored.focus_npcs == ["mara", "kael"]
+        assert restored.current_beat == 2
+        assert restored.last_advanced_at_tick == 7
+        assert planner2.active_arc_id == "arc_p1"
+        assert planner2._last_proposal_attempt_tick == 9
+        assert planner2.active() is restored
+    finally:
+        restore()
+    print("  [PASS] arc_planner_persists_and_reloads")
+
+
+def test_arc_planner_cooldown_prevents_immediate_reproposal():
+    """After a proposal (or attempted proposal), the planner must sit
+    out for _ARC_PROPOSAL_COOLDOWN_TICKS before trying again — even if
+    the ledger grows substantially."""
+    restore = _isolate_state_file("arc_cooldown")
+    try:
+        import npc_engine.story_director as sd_mod
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        _inject_fake_ledger_entries(director.ledger, [
+            {"text": "entry a", "embedding": _base_embedding(),
+             "npc_id": "mara", "kind": "fact", "tick": 1},
+            {"text": "entry b", "embedding": _fake_embedding(0.95),
+             "npc_id": "mara", "kind": "event", "tick": 2},
+            {"text": "entry c", "embedding": _fake_embedding(0.9),
+             "npc_id": "kael", "kind": "fact", "tick": 3},
+            {"text": "entry d", "embedding": _fake_embedding(0.92),
+             "npc_id": "kael", "kind": "event", "tick": 4},
+        ])
+        arc1 = director.arc_planner.maybe_propose(
+            director.ledger, ["mara", "kael"], current_tick=5,
+        )
+        assert arc1 is not None
+        # Resolve the first arc so the "no active arc" guard doesn't fire
+        arc1.status = "resolved"
+        director.arc_planner.active_arc_id = None
+
+        # Immediately try again at tick 6 — cooldown has NOT elapsed
+        arc2 = director.arc_planner.maybe_propose(
+            director.ledger, ["mara", "kael"], current_tick=6,
+        )
+        assert arc2 is None, "cooldown must block immediate re-proposal"
+
+        # After cooldown elapses, a new proposal should succeed
+        arc3 = director.arc_planner.maybe_propose(
+            director.ledger,
+            ["mara", "kael"],
+            current_tick=5 + sd_mod._ARC_PROPOSAL_COOLDOWN_TICKS,
+        )
+        assert arc3 is not None
+        assert arc3.id != arc1.id
+    finally:
+        restore()
+    print("  [PASS] arc_planner_cooldown_prevents_immediate_reproposal")
+
+
 # ── Runner ──────────────────────────────────────────────────────
 
 def main():
@@ -1304,6 +1626,16 @@ def main():
     test_dispatch_fact_world_and_personal()
     test_full_tick_loop_with_stubbed_model()
     test_tick_persists_state_between_instances()
+
+    print("\nStory Director — narrative arc tests")
+    test_arc_planner_proposes_from_clustered_ledger()
+    test_arc_planner_skips_with_too_few_entries()
+    test_arc_planner_skips_when_active_arc_exists()
+    test_arc_planner_advances_beat_after_n_touches()
+    test_arc_planner_resolves_after_all_beats()
+    test_prompt_contains_active_arc_block()
+    test_arc_planner_persists_and_reloads()
+    test_arc_planner_cooldown_prevents_immediate_reproposal()
 
     print("\nStory Director — integration smoke test")
     test_integration_tick_mutates_world()
