@@ -25,6 +25,7 @@ npc-engine/
 │   ├── cli.py                   # Interactive CLI
 │   ├── server.py                # FastAPI REST server
 │   ├── knowledge.py             # NPC knowledge sheets, quests, events
+│   ├── story_director.py        # Cardinal-style overseer + FactLedger
 │   ├── capabilities/            # 6 modular NPC capabilities
 │   │   ├── base.py              # Capability ABC + Registry decorator
 │   │   ├── scratchpad.py        # Remember facts about player (~60 tokens)
@@ -47,6 +48,12 @@ npc-engine/
 │   │   ├── npc_profiles/        # One YAML per NPC
 │   │   └── examples/            # Dialogue examples (shared + per-NPC)
 │   └── port_blackwater/         # Demo world (3 NPCs, pirate port)
+├── data/story_director/         # Story Director assets + runtime
+│   ├── ashenvale_lore.md        # Setting bible (lore + narrative rules)
+│   ├── examples.yaml            # Few-shot world-state→action pairs
+│   ├── FINDINGS.md              # Empirical findings from build iterations
+│   ├── state.json               # gitignored: tick state, recent decisions
+│   └── fact_ledger.json         # gitignored: embedded fact history
 ├── sdks/                        # Game engine integrations
 │   ├── unity/                   # C# async/await, NPCEngineClient/Server (9 files)
 │   ├── godot/                   # GDScript signals+await, autoload singleton (6 files)
@@ -60,7 +67,9 @@ npc-engine/
 ├── modules/                     # Legacy NPC modules (npc_kael, npc_noah)
 ├── tests/
 │   ├── test_all.py              # Full integration tests (8 test groups)
+│   ├── test_story_director.py   # 35 tests (offline + integration smoke)
 │   └── test_port_blackwater.py  # Port Blackwater scenario tests
+├── bench_story_director.py      # Story Director model comparison + sessions
 ├── dist/
 │   ├── Dockerfile               # Python 3.11 + llama-cpp-python
 │   └── docker-compose.yml       # Mounts PIE models + world data
@@ -84,6 +93,11 @@ python -m npc_engine.server --port 9000
 # Tests
 python tests/test_all.py                                    # Full suite (8 test groups)
 python tests/test_port_blackwater.py                        # Port Blackwater tests
+python tests/test_story_director.py                         # Story Director (35 tests)
+
+# Story Director bench (model comparison, scripted sessions)
+python bench_story_director.py --ticks 10 --reset --model qwen_3b
+python bench_story_director.py --ticks 10 --reset --model qwen_3b --dialogue-script
 
 # Docker
 docker-compose -f dist/docker-compose.yml up                # Requires PIE as sibling dir
@@ -101,6 +115,7 @@ Player Input
     → Post-generation:
       → GossipPropagator.propagate()  — extract facts, walk social graph, inject to NPCs
       → ReputationRipple.process()    — propagate trust changes through connections
+      → story_director.record_player_action()  — auto-feed dialogue to overseer
   → Return Response
 ```
 
@@ -179,6 +194,57 @@ trust_ripple:
 - Gossip: `npc_engine/social/propagation.py` + config `gossip_rules`
 - Trust ripple: `npc_engine/social/reputation.py` + config `trust_ripple`
 - Social graph: `npc_engine/social/network.py`
+
+## Story Director — Cardinal-style overseer
+
+A world-level narrative AI that watches the world, generates new
+quests, drops world facts, and reacts to player behavior. **Not a
+Capability** — capabilities are per-NPC dialogue hooks; the Director
+is a top-level service owned by `NPCEngine`.
+
+### Architectural pattern: Python plans, LLM writes
+
+Every model up to 3B fails at *deciding* which NPC and action kind to
+fire on each tick. They fixate on one plot thread, default to `event`
+forever, and abuse `target: "all"`. The fix is to take those decisions
+out of the model's hands:
+
+| Layer | Owner | Job |
+|---|---|---|
+| Focus NPC | Python (`_pick_focus_npc`) | Pending player target wins; else round-robin least-recently-touched |
+| Action kind | Python (`_pick_action_kind`) | Round-robin `event/quest/fact`; skip quest if NPC has 2+ open quests |
+| Story content | LLM (single call) | Given focus NPC + action kind, write the actual story beat |
+| Schema enforcement | Python (`_enforce_*` methods) | Override at dispatch if model deviated |
+| Fact persistence | `FactLedger` | Embed every injection, surface similarity warnings |
+
+This split is the entire reason the Director works on local 3B models.
+Without it, Qwen 2.5 3B fixates on one plot thread for 8/10 ticks.
+With it, you get balanced action kinds, 6 unique NPC targets in 10
+ticks, and 4/4 player reactivity.
+
+### Story Director endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /story/tick` | Advance the world by one overseer decision |
+| `GET /story/state` | Tick count, recent decisions, ledger stats |
+| `POST /story/player_action` | Record a player action (text + optional npc target + trust delta) |
+
+### Adding new lore
+
+Edit `data/story_director/ashenvale_lore.md` (compact setting bible
+with standing tensions + narrative rules) and `examples.yaml` (few-shot
+world-state→action pairs). Both are reloaded on engine init.
+
+### Picking a model
+
+| Model | Use when |
+|---|---|
+| `qwen2.5-3b-instruct-q4_k_m.gguf` | **Production.** Coherent narrative arcs, perfect schema, ~2.5s/tick |
+| `qwen2.5-0.5b-instruct-q4_k_m.gguf` | Latency-critical. Structurally identical at half the latency, more literal content |
+| `Llama-3.2-1B-*` | **Don't.** Refuses JSON output entirely on this task |
+
+See `data/story_director/FINDINGS.md` for the full empirical journey.
 
 ### SDK development
 - Unity: `sdks/unity/` — C# async/await pattern, `NPCEngineClient.cs`

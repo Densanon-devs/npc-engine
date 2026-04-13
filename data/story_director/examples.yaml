@@ -1,0 +1,63 @@
+# Few-shot examples for the Story Director.
+# Each example pairs a compact world-state summary with a single action the
+# overseer would take. Keep them diverse: mix quest / event / fact actions.
+# Keep strings short — small models copy structure better when examples are lean.
+
+examples:
+  - world_state: |
+      Kael (blacksmith, mood: angry, trust of player: 35) lost three hammers last week.
+      Rumors say Mara was seen near his forge at night. No active quests from Kael.
+    action:
+      action: quest
+      reason: "Kael's standing tension with Mara hasn't produced a quest hook yet."
+      npc_id: kael
+      quest:
+        id: missing_hammers
+        name: "The Missing Hammers"
+        description: "Kael suspects someone has been stealing from his forge. Find out who."
+        reward: "A forged blade of your choosing."
+        objectives:
+          - "Investigate the forge at night and identify the thief."
+
+  - world_state: |
+      Elara (healer) returned from the Silverwood looking pale. Bess has not seen her
+      in days. Global events this week: none.
+    action:
+      action: event
+      reason: "The Silverwood rule says make it the source of trouble; ripple it to everyone."
+      target: all
+      event: "Elara stumbled out of the Silverwood white-faced and silent. Something is wrong in the deep trees."
+
+  - world_state: |
+      Roderick (guard captain, mood: frustrated) has no proof against Mara. Player
+      has completed two quests for Noah. Trust with Roderick: 55.
+    action:
+      action: fact
+      reason: "Player has earned enough trust to become Roderick's confidant on the Mara suspicion."
+      npc_id: guard_roderick
+      fact: "I am watching Mara the merchant. I think she smuggles more than fabric, but I have no proof yet."
+      fact_type: personal
+
+  - world_state: |
+      Bess (innkeeper) heard travelers say the tax collector's body was found on the
+      north road. No quests from Bess. Player is in the tavern asking for news.
+    action:
+      action: quest
+      reason: "Strong news hook + gossip-hub NPC is the natural quest origin."
+      npc_id: bess
+      quest:
+        id: tax_collector_body
+        name: "The Road North"
+        description: "A tax collector's body was found on the north road. Bess wants to know who did it before the king sends more soldiers."
+        reward: "Free room and board for a season, and Bess owes you a favor."
+        objectives:
+          - "Travel the north road and find out who killed the tax collector."
+
+  - world_state: |
+      Pip (street urchin) overheard something in Mara's shop. No event yet injected.
+      Mara's trust with player: 40. No active quests from Pip.
+    action:
+      action: event
+      reason: "Pip is a listener — use him to surface a rumor without committing to a full quest yet."
+      target: pip
+      event: "Pip overheard Mara whispering with a stranger about a shipment hidden under the floorboards."

@@ -12,6 +12,15 @@ build/
 # NPC state (runtime-generated, per-user)
 data/worlds/*/npc_state/
 
+# Story Director runtime state (tick counter, recent decisions)
+data/story_director/state.json
+data/story_director/fact_ledger.json
+data/story_director/_tmp_*.json
+
+# Story Director bench outputs
+tick_trace_*.json
+data/worlds/*/player_quests.yaml.bak
+
 # Models (too large for git)
 models/
 

@@ -203,6 +203,15 @@ def create_app():
         npc_id: str
         gate_id: str                # ID from the NPC's knowledge_gate config
 
+    class StoryTickRequest(BaseModel):
+        max_tokens: Optional[int] = 400
+        temperature: Optional[float] = 0.7
+
+    class PlayerActionRequest(BaseModel):
+        text: str
+        target: Optional[str] = None
+        trust_delta: Optional[int] = None
+
     @app.post("/quests/accept")
     async def quest_accept(req: QuestAcceptRequest):
         """Player accepts a quest. Updates tracker and NPC state."""
@@ -261,6 +270,40 @@ def create_app():
         result = engine.unlock_knowledge_gate(req.npc_id, req.gate_id)
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
+        return result
+
+    # ── Story Director (world-level overseer) ───────────────
+
+    @app.post("/story/tick")
+    async def story_tick(req: StoryTickRequest):
+        """Advance the world story by one overseer decision."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.tick(
+            max_tokens=req.max_tokens or 400,
+            temperature=req.temperature if req.temperature is not None else 0.7,
+        )
+
+    @app.get("/story/state")
+    async def story_state():
+        """Get the Story Director's current state (tick count, recent decisions)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_state()
+
+    @app.post("/story/player_action")
+    async def story_player_action(req: PlayerActionRequest):
+        """Record something the player did so the Director reacts next tick."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.record_player_action(
+            req.text, target=req.target, trust_delta=req.trust_delta,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
         return result
 
     @app.get("/health")

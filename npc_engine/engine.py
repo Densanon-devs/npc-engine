@@ -65,6 +65,9 @@ class NPCEngine:
         # Few-shot loader
         self.few_shot_loader: FewShotLoader | None = None
 
+        # Story Director (world-level narrative overseer, set up in initialize())
+        self.story_director = None
+
     def initialize(self) -> None:
         """Initialize PIE engine, register capabilities, inject examples, load social graph."""
         # Register npc-engine's capabilities into PIE's registry
@@ -96,6 +99,17 @@ class NPCEngine:
             )
         else:
             logger.info("No social graph configured — gossip disabled")
+
+        # Story Director — world-level narrative overseer.
+        # Must be last: needs base_model loaded (via pie.initialize()) and
+        # NPC profiles available for world snapshots.
+        from npc_engine.story_director import StoryDirector
+        self.story_director = StoryDirector(self)
+        logger.info(
+            f"Story Director ready "
+            f"(examples={len(self.story_director._examples)}, "
+            f"lore={'yes' if self.story_director._lore_text else 'no'})"
+        )
 
     def process(self, user_input: str, npc_id: str = None) -> str:
         """
@@ -161,6 +175,20 @@ class NPCEngine:
         # Post-generation: trust ripple
         if self.reputation_ripple and self.pie.capability_managers:
             self.reputation_ripple.process(self.pie.capability_managers)
+
+        # Dialogue auto-feed — let the Story Director observe player
+        # dialogue turns so it reacts on the next tick. No-op if the
+        # director isn't initialized or active_npc is unknown. We swallow
+        # any errors here — the dialogue path must not fail because the
+        # overseer can't record.
+        if self.story_director is not None and active_npc and user_input:
+            try:
+                self.story_director.record_player_action(
+                    text=f"Player said to {active_npc}: {user_input}",
+                    target=active_npc,
+                )
+            except Exception as e:
+                logger.debug(f"Story Director dialogue auto-feed failed: {e}")
 
         return response
 
