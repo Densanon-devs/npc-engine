@@ -110,6 +110,13 @@ _ARC_BEAT_ADVANCE_THRESHOLD = 4
 # coherence (every NPC "touches" it).
 _ARC_MAX_FOCUS_NPCS = 4
 
+# Maximum concurrent active arcs. A Cardinal-style overseer should run
+# 2-3 plot threads in parallel (e.g., main quest + background faction
+# tension + slow-burn mystery). At 3 the planner can hold a diverse
+# thread set without bloating the prompt with arc blocks — each
+# worker only sees the ONE arc relevant to its focus NPC.
+_MAX_CONCURRENT_ARCS = 3
+
 # The fixed 4-beat skeleton every arc follows. Descriptive strings so
 # they slot directly into the prompt without re-wording.
 _ARC_BEAT_SKELETON = (
@@ -533,10 +540,18 @@ class ArcPlanner:
     Owns the narrative arcs, proposes new ones from the ledger, and
     advances them as the story progresses.
 
+    Tracks up to ``_MAX_CONCURRENT_ARCS`` active arcs in parallel.
+    Each worker sees only the ONE arc relevant to its focus NPC (via
+    ``arc_for_focus``) — so the prompt never bloats with multiple arc
+    blocks, but the session can hold multiple plot threads alive at
+    once.
+
     Deterministic proposal (v1): greedy-cluster the recent FactLedger
     entries by cosine similarity. The densest cluster becomes an arc —
     theme = the center entry's text, focus_npcs = the unique NPC ids
     across the cluster. Fixed 4-beat skeleton, touch-counter advancement.
+    NPCs already covered by an active arc's cast are excluded from new
+    proposals so the same thread doesn't spawn a duplicate arc.
 
     No LLM call is made during proposal or advancement — the planner is
     pure Python. A future v2 could add an LLM-theming pass for richer
@@ -547,111 +562,156 @@ class ArcPlanner:
     def __init__(self, storage_path: Path):
         self.storage_path = storage_path
         self.arcs: list[NarrativeArc] = []
-        self.active_arc_id: Optional[str] = None
+        self.active_arc_ids: list[str] = []
         self._last_proposal_attempt_tick: int = 0
         self._load()
 
     # ── Public API ──────────────────────────────────────────────
 
-    def active(self) -> Optional[NarrativeArc]:
-        """Return the currently-active arc, or None."""
-        if not self.active_arc_id:
+    def active_arcs(self) -> list[NarrativeArc]:
+        """
+        Return every currently-active arc. Filters out resolved arcs
+        and drops stale ids from ``active_arc_ids`` so the list stays
+        consistent.
+        """
+        result: list[NarrativeArc] = []
+        still_active: list[str] = []
+        arc_by_id = {a.id: a for a in self.arcs}
+        for arc_id in self.active_arc_ids:
+            arc = arc_by_id.get(arc_id)
+            if arc is not None and arc.status == "active":
+                result.append(arc)
+                still_active.append(arc_id)
+        if still_active != self.active_arc_ids:
+            self.active_arc_ids = still_active
+        return result
+
+    def arc_for_focus(self, focus_npc: Optional[str]) -> Optional[NarrativeArc]:
+        """
+        Pick the one arc this worker's prompt should reference, given
+        its forced focus NPC. If the NPC is in multiple active arc
+        casts, prefer the arc with the fewest touches since its last
+        advance (the weakest thread, so each tick can help the
+        neglected one).
+        """
+        if not focus_npc:
             return None
-        for arc in self.arcs:
-            if arc.id == self.active_arc_id and arc.status == "active":
-                return arc
-        # Stale id — clear it
-        self.active_arc_id = None
-        return None
+        candidates = [
+            a for a in self.active_arcs() if focus_npc in a.focus_npcs
+        ]
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+        # Weakest-thread preference — helps starved arcs catch up
+        return min(candidates, key=lambda a: a.touches_since_last_advance)
 
     def maybe_propose(self, ledger: "FactLedger", available_npcs: list[str],
                        current_tick: int) -> Optional[NarrativeArc]:
         """
-        Attempt to propose a new arc if there's no active one and the
-        cooldown has elapsed. Returns the new arc (and sets it active) or
-        ``None`` if nothing was proposed.
+        Attempt to propose a new arc if there's headroom under the
+        concurrent-arc cap and the cooldown has elapsed. Returns the
+        new arc (and appends it to ``active_arc_ids``) or ``None`` if
+        nothing was proposed.
         """
-        if self.active() is not None:
+        active_now = self.active_arcs()
+        if len(active_now) >= _MAX_CONCURRENT_ARCS:
             return None
         if current_tick - self._last_proposal_attempt_tick < _ARC_PROPOSAL_COOLDOWN_TICKS:
             return None
         self._last_proposal_attempt_tick = current_tick
 
-        arc = self._propose_from_ledger(ledger, available_npcs, current_tick)
+        # Exclude NPCs already in active arc casts so a proposal
+        # can't spawn a duplicate thread on the same cast.
+        used_npcs: set[str] = set()
+        for arc in active_now:
+            used_npcs.update(arc.focus_npcs)
+        eligible_npcs = [nid for nid in available_npcs if nid not in used_npcs]
+        if not eligible_npcs:
+            return None
+
+        arc = self._propose_from_ledger(ledger, eligible_npcs, current_tick,
+                                         exclude_npcs=used_npcs)
         if arc is not None:
             self.arcs.append(arc)
-            self.active_arc_id = arc.id
+            self.active_arc_ids.append(arc.id)
             logger.info(
                 f"ArcPlanner proposed arc {arc.id}: '{arc.theme[:60]}' "
-                f"(focus={arc.focus_npcs})"
+                f"(focus={arc.focus_npcs}, concurrent={len(self.active_arc_ids)}"
+                f"/{_MAX_CONCURRENT_ARCS})"
             )
         self.save()
         return arc
 
     def record_cast_touch(self, npc_id: Optional[str]) -> None:
         """
-        Bump the active arc's touch counter if ``npc_id`` is in its
-        cast. Called from ``StoryDirector._run_single_action`` after
-        every successful non-noop dispatch — that way every piece of
-        cast-directed content counts, regardless of whether
-        ``recent_decisions`` retains it.
+        Bump the touch counter on every active arc whose cast
+        contains ``npc_id``. Called from
+        ``StoryDirector._run_single_action`` after every successful
+        non-noop dispatch. Proposal excludes NPCs already in active
+        casts, so in normal operation an NPC is in at most one
+        active arc's cast — but we iterate defensively in case a
+        future change allows cast overlap.
         """
         if not npc_id:
             return
-        arc = self.active()
-        if arc is None:
-            return
-        if npc_id not in arc.focus_npcs:
-            return
-        arc.touches_since_last_advance += 1
+        for arc in self.active_arcs():
+            if npc_id in arc.focus_npcs:
+                arc.touches_since_last_advance += 1
 
-    def advance_if_beat_met(self, current_tick: int) -> bool:
+    def advance_if_beat_met(self, current_tick: int) -> int:
         """
-        Advance the current beat when the active arc has accumulated
-        enough cast touches since the last advance. Resolve the arc
-        when the final beat completes. Returns True when a beat
-        advanced (including resolution).
-
-        Touches are tracked directly on the arc via
-        ``touches_since_last_advance`` — earlier versions walked
-        ``recent_decisions`` and couldn't fit enough touches to
-        advance single-NPC arcs because that buffer is capped at 5
-        ticks.
+        Iterate active arcs and advance each one that has met its
+        touch threshold. Returns the number of arcs that advanced
+        this call (0, 1, or more). Resolved arcs are removed from
+        ``active_arc_ids``.
         """
-        arc = self.active()
-        if arc is None:
-            return False
-
-        if arc.touches_since_last_advance < _ARC_BEAT_ADVANCE_THRESHOLD:
-            return False
-
-        arc.current_beat += 1
-        arc.last_advanced_at_tick = current_tick
-        arc.touches_since_last_advance = 0
-        logger.info(
-            f"ArcPlanner advanced {arc.id} to beat {arc.current_beat} "
-            f"({arc.current_beat_label})"
-        )
-        if arc.is_complete:
-            arc.status = "resolved"
-            self.active_arc_id = None
-            logger.info(f"ArcPlanner resolved {arc.id}")
-        self.save()
-        return True
+        advanced_count = 0
+        # Iterate over a snapshot — the loop mutates active_arc_ids
+        # via active_arcs() cleanup and direct removals.
+        for arc in list(self.active_arcs()):
+            if arc.touches_since_last_advance < _ARC_BEAT_ADVANCE_THRESHOLD:
+                continue
+            arc.current_beat += 1
+            arc.last_advanced_at_tick = current_tick
+            arc.touches_since_last_advance = 0
+            advanced_count += 1
+            logger.info(
+                f"ArcPlanner advanced {arc.id} to beat {arc.current_beat} "
+                f"({arc.current_beat_label})"
+            )
+            if arc.is_complete:
+                arc.status = "resolved"
+                if arc.id in self.active_arc_ids:
+                    self.active_arc_ids.remove(arc.id)
+                logger.info(f"ArcPlanner resolved {arc.id}")
+        if advanced_count > 0:
+            self.save()
+        return advanced_count
 
     def stats(self) -> dict:
-        active = self.active()
+        active = self.active_arcs()
         return {
             "arc_count": len(self.arcs),
-            "active_arc_id": self.active_arc_id,
-            "active_theme": active.theme if active else None,
-            "active_beat": active.current_beat_label if active else None,
+            "active_arc_ids": list(self.active_arc_ids),
+            "active_count": len(active),
+            "active_summaries": [
+                {
+                    "id": a.id,
+                    "theme": a.theme[:80],
+                    "cast": a.focus_npcs,
+                    "beat": a.current_beat_label,
+                    "beat_index": a.current_beat,
+                    "touches": a.touches_since_last_advance,
+                }
+                for a in active
+            ],
             "last_proposal_attempt_tick": self._last_proposal_attempt_tick,
         }
 
     def reset(self) -> None:
         self.arcs = []
-        self.active_arc_id = None
+        self.active_arc_ids = []
         self._last_proposal_attempt_tick = 0
         if self.storage_path.exists():
             try:
@@ -663,13 +723,21 @@ class ArcPlanner:
 
     def _propose_from_ledger(self, ledger: "FactLedger",
                               available_npcs: list[str],
-                              current_tick: int) -> Optional[NarrativeArc]:
+                              current_tick: int,
+                              exclude_npcs: Optional[set[str]] = None) -> Optional[NarrativeArc]:
         """
         Greedy clustering over the most recent ledger entries. Pick the
-        entry with the most high-similarity neighbors as the cluster
-        center, then collect its neighbors. Theme = center entry's text,
+        entry with the most high-similarity neighbors (among entries
+        whose NPC is NOT in ``exclude_npcs``) as the cluster center,
+        then collect its neighbors. Theme = center entry's text,
         focus NPCs = unique NPC ids in the cluster filtered against
         ``available_npcs``.
+
+        ``exclude_npcs`` is how multi-arc proposal prevents a new arc
+        from forming around NPCs already covered by an active arc's
+        cast. Without this filter, the densest cluster would keep
+        being whatever plot thread is most saturated, and proposals
+        would duplicate each other.
         """
         if len(ledger.entries) < _ARC_PROPOSAL_MIN_LEDGER_ENTRIES:
             return None
@@ -677,7 +745,17 @@ class ArcPlanner:
         if np is None:
             return None
 
-        recent = ledger.entries[-_ARC_CLUSTER_LOOKBACK:]
+        excluded = set(exclude_npcs or ())
+        # Pull recent entries but skip any whose NPC is already covered
+        # by an active arc — clustering then runs only over "unused"
+        # content.
+        recent = [
+            e for e in ledger.entries[-_ARC_CLUSTER_LOOKBACK:]
+            if e.get("npc_id") and e.get("npc_id") not in excluded
+        ]
+        if len(recent) < _ARC_PROPOSAL_MIN_LEDGER_ENTRIES:
+            return None
+
         try:
             embeddings = np.array([e["embedding"] for e in recent])
             # Pairwise cosine — entries are already L2-normalized on encode
@@ -703,14 +781,16 @@ class ArcPlanner:
             return None
 
         # Focus NPCs: unique ids in cluster, in order of first appearance,
-        # filtered to the currently-available roster. Dropping "all" and
-        # anything not in the world keeps the arc grounded.
+        # filtered to the currently-available roster AND not in the
+        # excluded set. Dropping "all" and anything not in the world
+        # keeps the arc grounded.
         focus_npcs: list[str] = []
         seen: set[str] = set()
         avail = set(available_npcs)
         for e in cluster_entries:
             nid = e.get("npc_id") or ""
-            if nid and nid in avail and nid not in seen:
+            if (nid and nid in avail and nid not in seen
+                    and nid not in excluded):
                 seen.add(nid)
                 focus_npcs.append(nid)
         if not focus_npcs:
@@ -735,12 +815,21 @@ class ArcPlanner:
         try:
             data = json.loads(self.storage_path.read_text(encoding="utf-8"))
             self.arcs = [NarrativeArc(**a) for a in data.get("arcs", [])]
-            self.active_arc_id = data.get("active_arc_id")
+            # Prefer the new list field; fall back to the legacy
+            # single-arc field so state.json files from pre-multiarc
+            # sessions still load cleanly.
+            if "active_arc_ids" in data:
+                self.active_arc_ids = [
+                    str(x) for x in (data.get("active_arc_ids") or [])
+                ]
+            else:
+                legacy = data.get("active_arc_id")
+                self.active_arc_ids = [str(legacy)] if legacy else []
             self._last_proposal_attempt_tick = int(data.get("last_proposal_attempt_tick", 0))
         except Exception as e:
             logger.warning(f"ArcPlanner load failed: {e}")
             self.arcs = []
-            self.active_arc_id = None
+            self.active_arc_ids = []
 
     def save(self) -> None:
         try:
@@ -748,7 +837,7 @@ class ArcPlanner:
             self.storage_path.write_text(
                 json.dumps({
                     "arcs": [asdict(a) for a in self.arcs],
-                    "active_arc_id": self.active_arc_id,
+                    "active_arc_ids": list(self.active_arc_ids),
                     "last_proposal_attempt_tick": self._last_proposal_attempt_tick,
                 }, indent=2, ensure_ascii=False),
                 encoding="utf-8",
@@ -1972,7 +2061,14 @@ class StoryDirector:
         # beat. Python still forces focus + kind below; the arc block just
         # tells the LLM *what kind of beat* to write. Placed before FOCUS
         # NPC so the forced-focus block still holds the recency-bias slot.
-        active_arc = self.arc_planner.active()
+        #
+        # With multi-arc support, we inject the ONE arc whose cast
+        # contains the current focus NPC (via ``arc_for_focus``). If the
+        # worker's focus NPC isn't in any active cast, no arc block is
+        # shown — the worker just writes to the forced focus without a
+        # narrative theme. This keeps prompt size bounded as more arcs
+        # run in parallel.
+        active_arc = self.arc_planner.arc_for_focus(focus_npc)
         if active_arc is not None and active_arc.current_beat_goal:
             arc_lines = [
                 "=== ACTIVE NARRATIVE ARC ===",
@@ -1980,8 +2076,7 @@ class StoryDirector:
                 f"Cast: {', '.join(active_arc.focus_npcs)}",
                 f"Current beat ({active_arc.current_beat + 1}/{len(active_arc.beat_goals)}): "
                 f"{active_arc.current_beat_goal}",
-                "If this tick's focus NPC fits the cast, advance the beat. "
-                "If not, write something the cast can react to next tick.",
+                "This tick's focus NPC is in the cast. Advance the beat.",
             ]
             parts.append("\n".join(arc_lines))
 

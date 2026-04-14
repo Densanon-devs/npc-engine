@@ -1336,7 +1336,7 @@ def test_arc_planner_proposes_from_clustered_ledger():
         # excluded because its entry is outside the cluster
         assert "noah" not in arc.focus_npcs, arc.focus_npcs
         assert set(arc.focus_npcs).issubset({"bess", "kael"}), arc.focus_npcs
-        assert director.arc_planner.active() is arc
+        assert arc in director.arc_planner.active_arcs()
     finally:
         restore()
     print("  [PASS] arc_planner_proposes_from_clustered_ledger")
@@ -1359,29 +1359,32 @@ def test_arc_planner_skips_with_too_few_entries():
             director.ledger, ["mara", "kael"], current_tick=3,
         )
         assert arc is None
-        assert director.arc_planner.active() is None
+        assert director.arc_planner.active_arcs() == []
         assert director.arc_planner.arcs == []
     finally:
         restore()
     print("  [PASS] arc_planner_skips_with_too_few_entries")
 
 
-def test_arc_planner_skips_when_active_arc_exists():
-    """With an active arc, subsequent maybe_propose calls must be no-ops."""
-    restore = _isolate_state_file("arc_active_skip")
+def test_arc_planner_caps_at_max_concurrent_arcs():
+    """With _MAX_CONCURRENT_ARCS active arcs, maybe_propose must not
+    create a new one. Once the cap is reached, the planner holds
+    steady until one of the active arcs resolves."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("arc_cap")
     try:
         engine = _make_stub_engine()
         director = StoryDirector(engine)
-        existing = NarrativeArc(
-            id="arc_existing", theme="test", focus_npcs=["mara"],
-            beat_goals=list(director.arc_planner.arcs.__class__ and ()) or [
-                "seed — x", "escalate — x", "confront — x", "resolve — x",
-            ],
-            current_beat=0, status="active",
-            started_at_tick=0, last_advanced_at_tick=0,
-        )
-        director.arc_planner.arcs.append(existing)
-        director.arc_planner.active_arc_id = existing.id
+        # Fill the planner to the concurrent cap
+        for i in range(sd_mod._MAX_CONCURRENT_ARCS):
+            arc = NarrativeArc(
+                id=f"arc_{i}", theme=f"theme {i}", focus_npcs=[f"npc_{i}"],
+                beat_goals=["seed — x", "escalate — x", "confront — x", "resolve — x"],
+                current_beat=0, status="active",
+                started_at_tick=0, last_advanced_at_tick=0,
+            )
+            director.arc_planner.arcs.append(arc)
+            director.arc_planner.active_arc_ids.append(arc.id)
         _inject_fake_ledger_entries(director.ledger, [
             {"text": f"entry {i}", "embedding": _base_embedding(),
              "npc_id": "mara", "kind": "fact", "tick": i}
@@ -1390,12 +1393,218 @@ def test_arc_planner_skips_when_active_arc_exists():
         arc = director.arc_planner.maybe_propose(
             director.ledger, ["mara", "kael"], current_tick=10,
         )
-        assert arc is None
-        assert director.arc_planner.active() is existing
-        assert len(director.arc_planner.arcs) == 1
+        assert arc is None, "proposal must be blocked at cap"
+        assert len(director.arc_planner.active_arcs()) == sd_mod._MAX_CONCURRENT_ARCS
     finally:
         restore()
-    print("  [PASS] arc_planner_skips_when_active_arc_exists")
+    print("  [PASS] arc_planner_caps_at_max_concurrent_arcs")
+
+
+def test_arc_planner_proposal_excludes_npcs_in_active_casts():
+    """maybe_propose must not form a new arc on NPCs already in an
+    active arc's cast. Otherwise the densest cluster would keep
+    being the saturated thread and proposals would duplicate."""
+    restore = _isolate_state_file("arc_exclude_used")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        # Active arc already owns bess
+        existing = NarrativeArc(
+            id="arc_bess", theme="bess thread", focus_npcs=["bess"],
+            beat_goals=["seed — x", "escalate — x", "confront — x", "resolve — x"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+        )
+        director.arc_planner.arcs.append(existing)
+        director.arc_planner.active_arc_ids.append(existing.id)
+
+        # Seed the ledger with a bess-dominated cluster (which would
+        # otherwise be the densest) plus a kael cluster of at least
+        # _ARC_PROPOSAL_MIN_LEDGER_ENTRIES entries so the filtered
+        # recent list can still clear the proposal threshold.
+        _inject_fake_ledger_entries(director.ledger, [
+            # 3 bess entries — dense but excluded
+            {"text": "bess a", "embedding": _base_embedding(),
+             "npc_id": "bess", "kind": "fact", "tick": 1},
+            {"text": "bess b", "embedding": _fake_embedding(0.95),
+             "npc_id": "bess", "kind": "fact", "tick": 2},
+            {"text": "bess c", "embedding": _fake_embedding(0.92),
+             "npc_id": "bess", "kind": "event", "tick": 3},
+            # 4 kael entries — clustered around a different angle
+            # from bess so the NPC filter leaves a dense cluster
+            {"text": "kael hammers stolen", "embedding": [0.2, 0.98],
+             "npc_id": "kael", "kind": "event", "tick": 4},
+            {"text": "kael suspects mara", "embedding": [0.25, 0.97],
+             "npc_id": "kael", "kind": "fact", "tick": 5},
+            {"text": "kael investigates", "embedding": [0.22, 0.975],
+             "npc_id": "kael", "kind": "event", "tick": 6},
+            {"text": "kael finds clue", "embedding": [0.18, 0.984],
+             "npc_id": "kael", "kind": "fact", "tick": 7},
+        ])
+        arc = director.arc_planner.maybe_propose(
+            director.ledger, ["bess", "kael"], current_tick=10,
+        )
+        # The new proposal must not be about bess (excluded) — it
+        # should form around kael instead
+        assert arc is not None, "should still propose, excluding bess"
+        assert "bess" not in arc.focus_npcs, arc.focus_npcs
+        assert "kael" in arc.focus_npcs, arc.focus_npcs
+        # Both arcs should now be active
+        assert len(director.arc_planner.active_arcs()) == 2
+    finally:
+        restore()
+    print("  [PASS] arc_planner_proposal_excludes_npcs_in_active_casts")
+
+
+def test_arc_for_focus_returns_matching_arc():
+    """arc_for_focus(npc) returns the one active arc whose cast
+    contains ``npc`` — or None if none do."""
+    restore = _isolate_state_file("arc_for_focus")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc_a = NarrativeArc(
+            id="arc_a", theme="a", focus_npcs=["bess", "mara"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=3,
+        )
+        arc_b = NarrativeArc(
+            id="arc_b", theme="b", focus_npcs=["kael"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=0,
+        )
+        director.arc_planner.arcs.extend([arc_a, arc_b])
+        director.arc_planner.active_arc_ids.extend(["arc_a", "arc_b"])
+
+        # bess is in arc_a only
+        assert director.arc_planner.arc_for_focus("bess") is arc_a
+        # kael is in arc_b only
+        assert director.arc_planner.arc_for_focus("kael") is arc_b
+        # noah is in neither
+        assert director.arc_planner.arc_for_focus("noah") is None
+        # None / empty
+        assert director.arc_planner.arc_for_focus(None) is None
+        assert director.arc_planner.arc_for_focus("") is None
+    finally:
+        restore()
+    print("  [PASS] arc_for_focus_returns_matching_arc")
+
+
+def test_arc_for_focus_prefers_weakest_thread_on_overlap():
+    """If an NPC is in multiple active arc casts (defensive path —
+    proposal normally excludes overlap), prefer the arc with the
+    fewest touches since its last advance. That lets starved arcs
+    catch up."""
+    restore = _isolate_state_file("arc_weakest")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        strong = NarrativeArc(
+            id="arc_strong", theme="strong", focus_npcs=["bess"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=5,  # accumulating fast
+        )
+        weak = NarrativeArc(
+            id="arc_weak", theme="weak", focus_npcs=["bess"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=0,  # starved
+        )
+        director.arc_planner.arcs.extend([strong, weak])
+        director.arc_planner.active_arc_ids.extend(["arc_strong", "arc_weak"])
+        assert director.arc_planner.arc_for_focus("bess") is weak
+    finally:
+        restore()
+    print("  [PASS] arc_for_focus_prefers_weakest_thread_on_overlap")
+
+
+def test_record_cast_touch_bumps_all_matching_arcs():
+    """record_cast_touch iterates ALL active arcs whose cast contains
+    the NPC, not just one. This is defensive — proposal normally
+    excludes overlap — but if a future change introduces overlap we
+    want both arcs to accumulate touches correctly."""
+    restore = _isolate_state_file("arc_bump_all")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc_a = NarrativeArc(
+            id="arc_a", theme="a", focus_npcs=["bess", "mara"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+        )
+        arc_b = NarrativeArc(
+            id="arc_b", theme="b", focus_npcs=["bess"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+        )
+        director.arc_planner.arcs.extend([arc_a, arc_b])
+        director.arc_planner.active_arc_ids.extend(["arc_a", "arc_b"])
+
+        director.arc_planner.record_cast_touch("bess")
+        assert arc_a.touches_since_last_advance == 1
+        assert arc_b.touches_since_last_advance == 1
+
+        # Touching mara bumps only arc_a
+        director.arc_planner.record_cast_touch("mara")
+        assert arc_a.touches_since_last_advance == 2
+        assert arc_b.touches_since_last_advance == 1
+    finally:
+        restore()
+    print("  [PASS] record_cast_touch_bumps_all_matching_arcs")
+
+
+def test_advance_if_beat_met_advances_multiple_arcs():
+    """When several active arcs have met the threshold, a single
+    advance_if_beat_met call advances all of them."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("arc_advance_many")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        threshold = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
+        arc_a = NarrativeArc(
+            id="arc_a", theme="a", focus_npcs=["bess"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=threshold,
+        )
+        arc_b = NarrativeArc(
+            id="arc_b", theme="b", focus_npcs=["kael"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=threshold,
+        )
+        arc_c_below = NarrativeArc(
+            id="arc_c", theme="c", focus_npcs=["noah"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=0, last_advanced_at_tick=0,
+            touches_since_last_advance=threshold - 1,
+        )
+        director.arc_planner.arcs.extend([arc_a, arc_b, arc_c_below])
+        director.arc_planner.active_arc_ids.extend(["arc_a", "arc_b", "arc_c"])
+
+        advanced = director.arc_planner.advance_if_beat_met(current_tick=5)
+        assert advanced == 2
+        assert arc_a.current_beat == 1
+        assert arc_b.current_beat == 1
+        assert arc_c_below.current_beat == 0  # below threshold
+        assert arc_a.touches_since_last_advance == 0
+        assert arc_b.touches_since_last_advance == 0
+    finally:
+        restore()
+    print("  [PASS] advance_if_beat_met_advances_multiple_arcs")
 
 
 def test_arc_planner_advances_beat_after_n_touches():
@@ -1415,14 +1624,14 @@ def test_arc_planner_advances_beat_after_n_touches():
             started_at_tick=1, last_advanced_at_tick=1,
         )
         director.arc_planner.arcs.append(arc)
-        director.arc_planner.active_arc_id = arc.id
+        director.arc_planner.active_arc_ids.append(arc.id)
 
         threshold = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
 
         # Below threshold — should NOT advance
         arc.touches_since_last_advance = threshold - 1
         advanced = director.arc_planner.advance_if_beat_met(current_tick=5)
-        assert advanced is False, "must not advance below threshold"
+        assert advanced == 0, "must not advance below threshold"
         assert arc.current_beat == 0, arc.current_beat
         assert arc.touches_since_last_advance == threshold - 1, (
             "below-threshold call should not reset the counter"
@@ -1431,7 +1640,7 @@ def test_arc_planner_advances_beat_after_n_touches():
         # At threshold — SHOULD advance and counter resets
         arc.touches_since_last_advance = threshold
         advanced = director.arc_planner.advance_if_beat_met(current_tick=6)
-        assert advanced is True
+        assert advanced == 1
         assert arc.current_beat == 1, arc.current_beat
         assert arc.status == "active"
         assert arc.touches_since_last_advance == 0, "counter must reset on advance"
@@ -1456,7 +1665,7 @@ def test_arc_planner_record_cast_touch_bumps_counter():
             started_at_tick=1, last_advanced_at_tick=1,
         )
         director.arc_planner.arcs.append(arc)
-        director.arc_planner.active_arc_id = arc.id
+        director.arc_planner.active_arc_ids.append(arc.id)
 
         # Touch cast NPCs — counter bumps
         director.arc_planner.record_cast_touch("mara")
@@ -1485,7 +1694,7 @@ def test_arc_planner_record_cast_touch_ignores_inactive_arcs():
         director = StoryDirector(engine)
         # No active arc
         director.arc_planner.record_cast_touch("mara")
-        assert director.arc_planner.active() is None
+        assert director.arc_planner.active_arcs() == []
 
         # Add a resolved arc
         resolved = NarrativeArc(
@@ -1495,7 +1704,7 @@ def test_arc_planner_record_cast_touch_ignores_inactive_arcs():
             started_at_tick=1, last_advanced_at_tick=10,
         )
         director.arc_planner.arcs.append(resolved)
-        director.arc_planner.active_arc_id = None
+        director.arc_planner.active_arc_ids = []
         director.arc_planner.record_cast_touch("mara")
         # Resolved arc's counter stays at 0
         assert resolved.touches_since_last_advance == 0
@@ -1506,7 +1715,7 @@ def test_arc_planner_record_cast_touch_ignores_inactive_arcs():
 
 def test_arc_planner_resolves_after_all_beats():
     """When the final beat advances, the arc should flip to resolved
-    and the planner should clear active_arc_id."""
+    and its id should be removed from active_arc_ids."""
     import npc_engine.story_director as sd_mod
     restore = _isolate_state_file("arc_resolve")
     try:
@@ -1520,16 +1729,16 @@ def test_arc_planner_resolves_after_all_beats():
             started_at_tick=1, last_advanced_at_tick=6,
         )
         director.arc_planner.arcs.append(arc)
-        director.arc_planner.active_arc_id = arc.id
+        director.arc_planner.active_arc_ids.append(arc.id)
 
         arc.touches_since_last_advance = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
         advanced = director.arc_planner.advance_if_beat_met(current_tick=10)
-        assert advanced is True
+        assert advanced == 1
         assert arc.current_beat == 4
         assert arc.is_complete
         assert arc.status == "resolved"
-        assert director.arc_planner.active() is None
-        assert director.arc_planner.active_arc_id is None
+        assert director.arc_planner.active_arcs() == []
+        assert arc.id not in director.arc_planner.active_arc_ids
     finally:
         restore()
     print("  [PASS] arc_planner_resolves_after_all_beats")
@@ -1550,7 +1759,7 @@ def test_prompt_contains_active_arc_block():
             started_at_tick=1, last_advanced_at_tick=1,
         )
         director.arc_planner.arcs.append(arc)
-        director.arc_planner.active_arc_id = arc.id
+        director.arc_planner.active_arc_ids.append(arc.id)
 
         prompt = director._build_prompt("world snap", focus_npc="kael", action_kind="event")
         assert "ACTIVE NARRATIVE ARC" in prompt, prompt
@@ -1567,7 +1776,7 @@ def test_prompt_contains_active_arc_block():
 
 
 def test_arc_planner_persists_and_reloads():
-    """Saving and reloading should preserve arcs, active_arc_id, and
+    """Saving and reloading should preserve arcs, active_arc_ids, and
     the cooldown tick counter."""
     restore = _isolate_state_file("arc_persist")
     try:
@@ -1580,7 +1789,7 @@ def test_arc_planner_persists_and_reloads():
             current_beat=2, status="active",
             started_at_tick=3, last_advanced_at_tick=7,
         ))
-        planner1.active_arc_id = "arc_p1"
+        planner1.active_arc_ids = ["arc_p1"]
         planner1._last_proposal_attempt_tick = 9
         planner1.save()
 
@@ -1591,9 +1800,9 @@ def test_arc_planner_persists_and_reloads():
         assert restored.focus_npcs == ["mara", "kael"]
         assert restored.current_beat == 2
         assert restored.last_advanced_at_tick == 7
-        assert planner2.active_arc_id == "arc_p1"
+        assert planner2.active_arc_ids == ["arc_p1"]
         assert planner2._last_proposal_attempt_tick == 9
-        assert planner2.active() is restored
+        assert restored in planner2.active_arcs()
     finally:
         restore()
     print("  [PASS] arc_planner_persists_and_reloads")
@@ -1622,9 +1831,11 @@ def test_arc_planner_cooldown_prevents_immediate_reproposal():
             director.ledger, ["mara", "kael"], current_tick=5,
         )
         assert arc1 is not None
-        # Resolve the first arc so the "no active arc" guard doesn't fire
+        # Resolve the first arc so the concurrent-cap guard doesn't
+        # block the re-propose attempts below. Use the full resolve
+        # path: flip status and drop the id from active_arc_ids.
         arc1.status = "resolved"
-        director.arc_planner.active_arc_id = None
+        director.arc_planner.active_arc_ids = []
 
         # Immediately try again at tick 6 — cooldown has NOT elapsed
         arc2 = director.arc_planner.maybe_propose(
@@ -2638,7 +2849,12 @@ def main():
     print("\nStory Director — narrative arc tests")
     test_arc_planner_proposes_from_clustered_ledger()
     test_arc_planner_skips_with_too_few_entries()
-    test_arc_planner_skips_when_active_arc_exists()
+    test_arc_planner_caps_at_max_concurrent_arcs()
+    test_arc_planner_proposal_excludes_npcs_in_active_casts()
+    test_arc_for_focus_returns_matching_arc()
+    test_arc_for_focus_prefers_weakest_thread_on_overlap()
+    test_record_cast_touch_bumps_all_matching_arcs()
+    test_advance_if_beat_met_advances_multiple_arcs()
     test_arc_planner_advances_beat_after_n_touches()
     test_arc_planner_record_cast_touch_bumps_counter()
     test_arc_planner_record_cast_touch_ignores_inactive_arcs()

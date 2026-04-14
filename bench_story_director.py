@@ -313,11 +313,14 @@ def main():
 
             print(f"\n=== TICK {tick_num} ===")
             before = _snapshot_world(engine)
-            arc_before = engine.story_director.arc_planner.active()
-            arc_before_snap = (
-                None if arc_before is None
-                else (arc_before.id, arc_before.current_beat, arc_before.status)
-            )
+            # Snapshot all active arcs before the tick so we can diff
+            # the set and show proposals / beat advances / resolutions
+            # per arc. With multi-arc support, we may see multiple arcs
+            # in flight and multiple events per tick.
+            arc_before_snap = {
+                a.id: (a.current_beat, a.status)
+                for a in engine.story_director.arc_planner.active_arcs()
+            }
             t0 = time.monotonic()
             result = engine.story_director.tick(
                 max_tokens=args.max_tokens,
@@ -327,50 +330,63 @@ def main():
             elapsed = time.monotonic() - t0
             timings.append(elapsed)
 
-            arc_after = engine.story_director.arc_planner.active()
-            # Detect arc lifecycle transitions so we can eyeball whether
-            # the planner is actually doing anything over a session.
-            if arc_before_snap is None and arc_after is not None:
-                print(f"  [ARC] PROPOSED {arc_after.id}")
-                print(f"        theme: {arc_after.theme[:100]}")
-                print(f"        cast:  {arc_after.focus_npcs}")
-                print(f"        beat:  {arc_after.current_beat + 1}/"
-                      f"{len(arc_after.beat_goals)} "
-                      f"({arc_after.current_beat_label})")
-                arc_events.append({
-                    "tick": tick_num, "event": "proposed",
-                    "arc_id": arc_after.id, "theme": arc_after.theme,
-                    "focus_npcs": arc_after.focus_npcs,
-                })
-            elif arc_before_snap is not None and arc_after is None:
-                # Resolved in this tick — look up which arc it was
-                resolved = next(
-                    (a for a in engine.story_director.arc_planner.arcs
-                     if a.id == arc_before_snap[0]),
-                    None,
-                )
-                status = resolved.status if resolved else "unknown"
-                print(f"  [ARC] RESOLVED {arc_before_snap[0]} (status={status})")
-                arc_events.append({
-                    "tick": tick_num, "event": "resolved",
-                    "arc_id": arc_before_snap[0], "status": status,
-                })
-            elif (arc_before_snap is not None and arc_after is not None
-                  and arc_before_snap[1] != arc_after.current_beat):
-                print(f"  [ARC] BEAT {arc_before_snap[1] + 1} -> "
-                      f"{arc_after.current_beat + 1} "
-                      f"({arc_after.current_beat_label})")
-                arc_events.append({
-                    "tick": tick_num, "event": "beat_advanced",
-                    "arc_id": arc_after.id,
-                    "from_beat": arc_before_snap[1],
-                    "to_beat": arc_after.current_beat,
-                })
-            elif arc_after is not None:
-                # Same arc, same beat — just print a quiet status line
-                print(f"  [ARC] {arc_after.id} beat "
-                      f"{arc_after.current_beat + 1}/{len(arc_after.beat_goals)} "
-                      f"({arc_after.current_beat_label})")
+            arc_after = {
+                a.id: a
+                for a in engine.story_director.arc_planner.active_arcs()
+            }
+
+            # New arcs — proposed this tick
+            for arc_id, arc in arc_after.items():
+                if arc_id not in arc_before_snap:
+                    print(f"  [ARC] PROPOSED {arc.id}")
+                    print(f"        theme: {arc.theme[:100]}")
+                    print(f"        cast:  {arc.focus_npcs}")
+                    print(f"        beat:  {arc.current_beat + 1}/"
+                          f"{len(arc.beat_goals)} ({arc.current_beat_label})")
+                    arc_events.append({
+                        "tick": tick_num, "event": "proposed",
+                        "arc_id": arc.id, "theme": arc.theme,
+                        "focus_npcs": arc.focus_npcs,
+                    })
+
+            # Resolved arcs — in before snapshot, not in after
+            for arc_id in arc_before_snap:
+                if arc_id not in arc_after:
+                    resolved = next(
+                        (a for a in engine.story_director.arc_planner.arcs
+                         if a.id == arc_id),
+                        None,
+                    )
+                    status = resolved.status if resolved else "unknown"
+                    print(f"  [ARC] RESOLVED {arc_id} (status={status})")
+                    arc_events.append({
+                        "tick": tick_num, "event": "resolved",
+                        "arc_id": arc_id, "status": status,
+                    })
+
+            # Beat advances on still-active arcs
+            for arc_id, arc in arc_after.items():
+                if arc_id in arc_before_snap:
+                    prior_beat = arc_before_snap[arc_id][0]
+                    if prior_beat != arc.current_beat:
+                        print(f"  [ARC] {arc_id} BEAT {prior_beat + 1} -> "
+                              f"{arc.current_beat + 1} "
+                              f"({arc.current_beat_label})")
+                        arc_events.append({
+                            "tick": tick_num, "event": "beat_advanced",
+                            "arc_id": arc.id,
+                            "from_beat": prior_beat,
+                            "to_beat": arc.current_beat,
+                        })
+
+            # Quiet status line for every currently-active arc
+            if arc_after:
+                status_parts = [
+                    f"{a.id} beat {a.current_beat + 1}/{len(a.beat_goals)} "
+                    f"({a.current_beat_label})"
+                    for a in arc_after.values()
+                ]
+                print(f"  [ARC] {' | '.join(status_parts)}")
 
             # Multi-action ticks return a sub_actions list; single-action
             # ticks return action/dispatch at the top level. Normalize.
@@ -504,7 +520,9 @@ def main():
         # Arc planner summary
         try:
             planner = engine.story_director.arc_planner
-            print(f"Arcs proposed: {len(planner.arcs)}")
+            active_count = len(planner.active_arcs())
+            print(f"Arcs proposed: {len(planner.arcs)}  "
+                  f"active at end: {active_count}")
             for a in planner.arcs:
                 beat_label = a.current_beat_label
                 total = len(a.beat_goals)

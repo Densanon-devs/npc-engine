@@ -1472,6 +1472,172 @@ All 75 tests green.
 
 ---
 
+## Multi-arc concurrency (Cardinal-class plot weaving)
+
+### The gap
+
+Through every session commit from arcs through arc-touch, the
+planner tracked **one active arc at a time**. Even with the touch
+counter fix unlocking reliable advancement, the Director could
+only hold one plot thread. A Cardinal-style overseer should run
+multiple threads in parallel — a main quest, a background
+faction tension, a slow-burn mystery — and let each advance on its
+own schedule. Single-arc means one plot at a time; whatever
+thread the initial cluster caught at T5 was the only one that
+grew for the whole session, and every NPC outside that cast
+wrote generic content.
+
+### The fix
+
+Four changes to `ArcPlanner`:
+
+1. **List of active arcs.** `active_arc_id: Optional[str]` →
+   `active_arc_ids: list[str]`. `active()` (single) → `active_arcs()`
+   (list). State file gains `active_arc_ids` with backward-compat
+   fallback to the old `active_arc_id` field.
+
+2. **Per-worker arc selection.** New `arc_for_focus(focus_npc)`
+   returns the one arc whose cast contains `focus_npc`, or None.
+   When an NPC is somehow in multiple casts (defensive —
+   proposal normally excludes overlap), prefer the arc with the
+   fewest `touches_since_last_advance` (the weakest thread, so
+   each relevant worker helps the neglected arc catch up).
+   `_build_prompt` uses this instead of `active()` so the arc
+   block reflects the right arc per-worker, and no arc block is
+   injected when the focus NPC isn't in any cast.
+
+3. **Proposal excludes NPCs already in active casts.**
+   `maybe_propose` filters ledger entries to only those whose
+   NPCs are NOT covered by an active arc before clustering.
+   Without this, the densest cluster keeps being whatever plot
+   thread is already saturated, and proposals duplicate. The
+   `_MAX_CONCURRENT_ARCS = 3` cap gates at the top level.
+
+4. **Multi-arc touches and advancement.** `record_cast_touch`
+   iterates active arcs and bumps every one whose cast contains
+   the NPC. `advance_if_beat_met` iterates active arcs and
+   advances each that has met its threshold in a single call,
+   returning the count of arcs advanced (was a bool). Resolved
+   arcs drop out of `active_arc_ids`.
+
+### Empirical verification (3B, 20 × 3 actions)
+
+```
+Metric                     arctouch (15t)  multiarc (20t)
+Concurrent arcs (max)                   1               3
+Arcs proposed                           1               3
+Arc advances (total)                    1               4
+Unique vocab words                    318             361
+Self-rep retries                        3               7
+Wall-clock total                       92s            296s
+Mean per-tick                         6.2s          14.8s
+```
+
+**Three concurrent arcs ran to partial completion:**
+
+| Arc | Cast | Proposed | Advances |
+|---|---|---|---|
+| arc_t5 | `[bess]` | T5 | T11 (seed→escalate), T19 (escalate→confront) |
+| arc_t10 | `[guard_roderick]` | T10 | T16 (seed→escalate) |
+| arc_t15 | `[kael, pip]` | T15 | T18 (seed→escalate) |
+
+**Pip got his own arc for the first time.** Across every prior
+3B run Pip was a bystander — rotation touched him occasionally
+but his content was generic because no arc cast included him.
+In multiarc he appeared in arc_t15 and the prompt gave him
+beat-specific guidance, producing 6 consecutive ticks of
+coherent investigation content:
+
+- T3: glimpses a hooded figure near the village well
+- T6: quest — "wants to prove Mara is guilty of smuggling"
+- T9: cautiously approaches the merchant's warehouse
+- T12: "Mara has a new informant in the village"
+- T15: seeing Mara meet a shadowy figure in the Silverwood
+- T18: watching Mara, overhearing her
+
+That's a classic detective beat sequence: suspicion →
+commitment → approach → corroboration → evidence → surveillance.
+None of it was in any prior run because Pip was never cast-relevant.
+
+**Roderick's parallel arc** is the strange-lights/Silverwood
+shadows vigilance thread that first surfaced in the
+example-rotation bench. In multiarc it's now a full arc with
+9 focus ticks of escalating paranoia:
+
+- T1: "strange lights in the forest near the Silverwood"
+- T4: "notices a shadow dart from the Silverwood"
+- T6: "body found on the road north...suspects it's related to
+  the missing tax collector"
+- T8: quest — "needs to organize a patrol"
+- T10-T20: tightening grip on sword, spotting shadows, noticing
+  a dark figure in the trees, deciding to send a guard
+
+**Bess's internal-tension arc** from prior runs also survived
+and got TWO beat advances in one session (T11 and T19), reaching
+beat 3 (confront) by end of session. This is the first arc in
+the whole session history that advanced to beat 3.
+
+Vocabulary hit 361 unique words — highest of the session (prior
+best was arctouch at 318, arcs baseline was 204).
+
+### Tradeoffs
+
+- **Wall-clock is 2.4x the single-arc case** (6.2s/tick →
+  14.8s/tick). Some of this is natural variance (per-tick timing
+  on CPU ranges wildly), but some is real: each worker now pays
+  a small cost for the arc_for_focus lookup and any arc block
+  they inject. For real-time game loops where ticks fire every
+  30+ seconds this is fine; for fast cadence it's the new
+  bottleneck.
+- **More self-rep retries** (3 → 7). With more arcs in flight,
+  more content references earlier content within-cast, so the
+  precheck fires more often. The per-tick budget still caps
+  worst-case latency.
+- **Arc proposal cooldown may be too slow for multi-arc.** The
+  5-tick cooldown was chosen for single-arc. With multi-arc
+  headroom for 3 concurrent, the planner could realistically
+  propose more often early in the session. Not a bug, just
+  conservative.
+- **Legacy state files load with a warning.** Old `state.json`
+  files from pre-multiarc sessions have `active_arc_id` singular;
+  the loader still reads them correctly via a fallback, but
+  anyone resuming a pre-multiarc session will see their single
+  arc become a list of one.
+
+### Tests
+
+8 new unit tests:
+
+- `test_arc_planner_caps_at_max_concurrent_arcs` — proposal
+  blocks at the cap
+- `test_arc_planner_proposal_excludes_npcs_in_active_casts` —
+  new arcs can't form on NPCs already in another arc's cast
+- `test_arc_for_focus_returns_matching_arc` — returns the arc
+  whose cast contains the NPC (or None)
+- `test_arc_for_focus_prefers_weakest_thread_on_overlap` — on
+  overlap, returns the arc with fewest touches (defensive)
+- `test_record_cast_touch_bumps_all_matching_arcs` — all
+  matching active arcs get their counter bumped
+- `test_advance_if_beat_met_advances_multiple_arcs` — returns
+  count, advances each eligible arc in one call
+
+Two existing tests updated to use `active_arc_ids` /
+`active_arcs()`. `test_arc_planner_skips_when_active_arc_exists`
+renamed to `test_arc_planner_caps_at_max_concurrent_arcs` since
+"single active arc" is no longer the relevant constraint. All
+83 offline tests green.
+
+### Tuning knobs
+
+- `_MAX_CONCURRENT_ARCS = 3` — soft cap on simultaneous active
+  arcs. Raise for more plot density at the cost of prompt
+  clarity; lower for simpler single-thread sessions.
+- `_ARC_PROPOSAL_COOLDOWN_TICKS` unchanged at 5 — but with
+  multi-arc headroom, it's worth considering raising this to 7
+  so arcs form more slowly and each has room to develop.
+
+---
+
 ## Arc touch counter fix (regression that was hiding in plain sight)
 
 ### The gap
@@ -1667,11 +1833,11 @@ prompt template and three action types. By the end it's:
 - **A persistent tick state** (decisions, player actions, ledger)
 - **A semantic ledger** (every injection embedded + similarity-checked)
 - **A dialogue auto-feed loop** (every player turn observed)
-- **A multi-tick arc planner** (deterministic cluster → theme + 4-beat
-  skeleton, per-arc touch counter with unbounded accumulation,
-  zero new LLM calls — arcs now advance reliably on single-NPC
-  casts, which unlocks a prompt-specificity-content-diversity
-  feedback loop)
+- **A multi-tick arc planner with concurrent arcs** (deterministic
+  cluster → theme + 4-beat skeleton, per-arc touch counter with
+  unbounded accumulation, up to 3 arcs running in parallel with
+  per-worker arc selection via `arc_for_focus`, proposal excludes
+  NPCs already in active casts, zero new LLM calls)
 - **NPC bio injection** (goals + personality + personal_knowledge +
   world_facts per focus NPC, one-line motive summary per roster NPC)
 - **Dynamic example rotation** (per-worker example picker that
@@ -1708,39 +1874,37 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Multi-arc concurrency (arcs running in parallel)
+### 1. Longer-session validation
 
-**The gap:** `ArcPlanner` tracks one active arc at a time. A
-Cardinal-style overseer would run 2-3 plot threads in parallel
-(e.g., the player's main quest + a background faction tension +
-a slow-burn mystery). When one arc resolves, the next proposes
-at the new densest ledger cluster — which may or may not be the
-theme the player is actually invested in.
+**The gap:** Every session bench has been 15-20 ticks, which is
+~3-4 arcs worth of content on a 20-tick run. Production sessions
+could be 50-100+ ticks. Open questions:
 
-**Design sketch:**
-- `ArcPlanner.active_arcs: list[NarrativeArc]` instead of a
-  single `active_arc_id`.
-- Each tick, pick WHICH active arc this tick advances based on
-  the focus NPC. If focus_npc is in arc A's cast, use A's beat
-  goal in the prompt. If it's in both A and B, prefer the one
-  with the fewer touches_since_last_advance (weakest thread).
-- Cap at 3 concurrent active arcs; new proposals go on hold when
-  the cap is reached.
-- Cluster analysis for proposals needs to exclude ledger entries
-  that are already covered by an active arc's cast (so the same
-  thread doesn't spawn a duplicate arc).
+- Does the concurrent-arc cap of 3 hold up? At 50 ticks with
+  arcs resolving in ~10-15 ticks each, the session could churn
+  through ~6-8 arcs — do they transition cleanly or accumulate
+  stale state?
+- Does `bio_mention_counts` state bloat? It grows unboundedly as
+  new NPCs surface and bio items get tracked.
+- Does the ledger saturate its 200-entry cap? What's the drop
+  pattern on longer sessions?
+- Does the arc advance rate stay consistent as the session grows,
+  or does something tick-count-related fall off?
 
-**Where to start:** `ArcPlanner` class in `story_director.py`.
-The cleanest migration is to make `active_arc_id` → list and
-update `active()` to return the most-relevant arc given a
-focus_npc context.
+**Design sketch:** No code changes yet. Run a 50-tick 3B
+session with `--dialogue-script` and inspect arc lifecycle,
+ledger size, bio mention accumulation. Identify any state that
+grows unboundedly and add a trim step.
 
-**Risk:** Medium. Multi-arc state management is significantly
-more complex than single-arc. Prompt token budget for multiple
-arc blocks is a concern — probably best to only inject the one
-arc the current worker's focus_npc is in.
+**Where to start:** Just run the bench. Then look at
+`state.json` and `arcs.json` after the session for growth
+signals.
+
+**Risk:** Low — observation first, fix later if needed.
 
 ### 2. Own-output fixation (done — see Self-repetition precheck section)
+
+### 3. Multi-arc concurrency (done — see Multi-arc concurrency section)
 
 **Done in commit 20fb7e7.** The pre-dispatch
 `_precheck_self_repetition` + NPC-restricted ledger check + noop
@@ -1777,7 +1941,7 @@ first), then `_pick_examples` to honor theme diversity.
 **Risk:** Medium — hand-curating 15+ good examples takes effort.
 Auto-generation risks drift from the lore bible's tone.
 
-### 3. NPC dialogue identity bleed (unchanged — still needs npc-engine work)
+### 4. NPC dialogue identity bleed (unchanged — still needs npc-engine work)
 
 **The gap:** In bench dialogue tests, Noah called the player "Mara"
 and Mara called the player "Kael". This is in the npc-engine
@@ -1796,7 +1960,7 @@ flag for retry.
 done as a focused npc-engine fix on its own branch, then merge
 forward.
 
-### 4. Real parallel workers
+### 5. Real parallel workers
 
 **The gap:** Multi-action ticks run sub-actions sequentially because
 llama-cpp-python isn't thread-safe for one base model. On a 3-action
@@ -1820,7 +1984,7 @@ is the single function that needs to become async-aware. The
 working memory). Option B requires understanding PIE's queue
 priorities. Option C is the cleanest but adds operational complexity.
 
-### 5. Co-reference resolution in the FactLedger
+### 6. Co-reference resolution in the FactLedger
 
 **The gap:** Embedding similarity misses linked entities when names
 differ. *"The elder is hiding something"* and *"Noah won't talk
@@ -1845,7 +2009,7 @@ director (it doesn't change at runtime).
 
 **Risk:** Low — purely additive to the embedding path.
 
-### 6. Auto-augmentor generation for narrative examples
+### 7. Auto-augmentor generation for narrative examples
 
 **The gap:** The 0.5B path's content is more literal than the 3B path
 because it copies few-shot examples verbatim. The fix is more curated
@@ -1874,7 +2038,7 @@ Then a new `generate_story_augmentors.py` script in the repo root.
 **Risk:** Medium — needs careful human review of generated examples
 to avoid drift away from the lore bible's tone.
 
-### 7. Narrative arc polish (v2 items)
+### 8. Narrative arc polish (v2 items)
 
 The deterministic arc planner shipped in v1 leaves a few things on
 the table that would be worth coming back to once multi-tick arcs
@@ -1893,7 +2057,7 @@ have been exercised in real sessions:
 - **Abandonment**: stale arcs with no recent cast touches should
   flip to `status = "abandoned"` so new arcs can form.
 
-### 8. Smaller items worth doing
+### 9. Smaller items worth doing
 
 - **Acting on contradiction** beyond retry: when the retry ALSO
   fails, fall back to a noop and log to a `narrative_conflicts.json`
