@@ -2458,6 +2458,37 @@ def test_contradiction_takes_precedence_over_self_repetition():
     print("  [PASS] contradiction_takes_precedence_over_self_repetition")
 
 
+# ── Narration mode tests ────────────────────────────────────────
+
+def test_narration_mode_defaults_to_prose():
+    """New directors default to prose for backward compatibility —
+    existing callers that never set narration_mode get the cinematic
+    output style."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    assert director.narration_mode == "prose"
+    prompt = director._build_prompt("snap", focus_npc="kael", action_kind="event")
+    assert "OUTPUT STYLE" not in prompt
+    print("  [PASS] narration_mode_defaults_to_prose")
+
+
+def test_narration_mode_terse_injects_output_style_block():
+    """Setting narration_mode='terse' injects an OUTPUT STYLE block
+    that instructs the model to produce short third-person statements."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.narration_mode = "terse"
+    prompt = director._build_prompt("snap", focus_npc="kael", action_kind="event")
+    assert "OUTPUT STYLE" in prompt
+    assert "under 25 words" in prompt
+    assert "NO internal monologue" in prompt
+    # The terse block should come before the forced-focus directive
+    style_idx = prompt.index("OUTPUT STYLE")
+    focus_idx = prompt.index("FOCUS NPC FOR THIS TICK")
+    assert style_idx < focus_idx
+    print("  [PASS] narration_mode_terse_injects_output_style_block")
+
+
 # ── Self-rep retry budget tests ─────────────────────────────────
 
 def test_self_rep_budget_resets_each_tick():
@@ -3021,6 +3052,10 @@ def main():
     test_self_repetition_retry_dispatches_second_response()
     test_self_repetition_retry_falls_back_to_original_on_noop()
     test_contradiction_takes_precedence_over_self_repetition()
+
+    print("\nStory Director — narration mode tests")
+    test_narration_mode_defaults_to_prose()
+    test_narration_mode_terse_injects_output_style_block()
 
     print("\nStory Director — self-rep retry budget tests")
     test_self_rep_budget_resets_each_tick()

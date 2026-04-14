@@ -994,6 +994,16 @@ class StoryDirector:
         # original character data, while plot continuity lives in the
         # ledger and recent_decisions.
         self._original_bios: dict[str, list[tuple[str, str]]] = {}
+        # Output narration style. "prose" (default, backward-compat)
+        # produces cinematic novel-style narration with internal
+        # monologue, quoted dialogue, and detailed action choreography.
+        # "terse" produces short third-person factual statements under
+        # 25 words that downstream NPC dialogue generation can cite
+        # verbatim without bloating its own prompt. Terse is the right
+        # default for game contexts where Director outputs feed NPC
+        # conversation state; prose is preserved for storytelling/demo
+        # contexts where the novelistic output is the product.
+        self.narration_mode: str = "prose"
         self.ledger = FactLedger(LEDGER_FILE)
         self.arc_planner = ArcPlanner(ARCS_FILE)
         self._load_assets()
@@ -2106,6 +2116,32 @@ class StoryDirector:
             "pick something DIFFERENT — do not repeat actions you have already "
             "taken, and do not reuse the same text or targets."
         )
+        if self.narration_mode == "terse":
+            # Game-ready mode: downstream NPC dialogue will cite these
+            # outputs, so keep them short, factual, and free of novel
+            # narration. The content field of each action should be a
+            # single third-person statement under 25 words — no
+            # internal monologue, no quoted dialogue, no action
+            # choreography, no adverbs. The model loves to narrate;
+            # we're actively fighting that tendency here. Placed
+            # right after the system directive so it's read before
+            # the schema and focus blocks.
+            parts.append(
+                "=== OUTPUT STYLE ===\n"
+                "Write the content field (event/fact/quest description) "
+                "as a SINGLE third-person statement under 25 words. "
+                "NO internal monologue. NO quoted dialogue in the "
+                "content. NO flowery prose, action choreography, or "
+                "adverbs like 'suddenly', 'quickly', 'nervously'. Just "
+                "the factual beat. Good examples:\n"
+                '  "Mara moved her inventory to the cellar last night."\n'
+                '  "Noah found Elena\'s old letter in the rose garden."\n'
+                '  "Roderick spotted strange lights near the north gate."\n'
+                "Bad example (too long, too prosaic):\n"
+                '  "Mara, hiding a furtive look in her eyes, suddenly '
+                "dropped a tray of hot soup, spilling it on her leg, "
+                'muttering a curse under her breath..."'
+            )
         if self._lore_text:
             parts.append("=== SETTING ===\n" + self._lore_text)
 

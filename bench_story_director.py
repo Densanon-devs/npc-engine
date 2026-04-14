@@ -246,6 +246,10 @@ def main():
                         help="Number of parallel sub-actions per tick (architect/worker). "
                              "Default 1 = single-action mode. >=2 = each tick plans N "
                              "distinct (focus, kind) slots and runs one LLM call per slot.")
+    parser.add_argument("--narration-mode", choices=["prose", "terse"], default="prose",
+                        help="Output style. 'prose' = cinematic novel narration (current "
+                             "default). 'terse' = short third-person facts under 25 words, "
+                             "optimized for downstream NPC dialogue context injection.")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
@@ -255,6 +259,8 @@ def main():
     print("-" * 72)
 
     engine, tmp_pie, tmp_npc = boot_engine(model_path, args.reset)
+    engine.story_director.narration_mode = args.narration_mode
+    print(f"Narration mode: {args.narration_mode}")
     try:
         outcomes = Counter()
         timings = []
