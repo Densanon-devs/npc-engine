@@ -2963,6 +2963,18 @@ def test_pick_examples_caps_at_three():
     print("  [PASS] pick_examples_caps_at_three")
 
 
+def test_pick_examples_terse_mode_caps_at_two():
+    """Terse mode trims the example budget from 3 picks to 2 — terse
+    examples are short enough that 2 cover target + alternate shape,
+    and the extra pick was pure prompt bloat."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.narration_mode = "terse"
+    picks = director._pick_examples(focus_npc="mara", action_kind="fact")
+    assert len(picks) <= 2, f"expected at most 2 picks in terse mode, got {len(picks)}"
+    print("  [PASS] pick_examples_terse_mode_caps_at_two")
+
+
 def test_pick_examples_falls_back_when_all_match_focus():
     """If the entire library is about the focus NPC (pathological but
     possible with a shrunk library), the picker returns all of them
@@ -3136,6 +3148,7 @@ def main():
     test_pick_examples_excludes_focus_npc()
     test_pick_examples_prefers_target_action_kind()
     test_pick_examples_caps_at_three()
+    test_pick_examples_terse_mode_caps_at_two()
     test_pick_examples_falls_back_when_all_match_focus()
     test_pick_examples_diversifies_action_kinds()
     test_prompt_excludes_focus_npc_examples()
