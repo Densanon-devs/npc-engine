@@ -2055,6 +2055,147 @@ def test_contradiction_takes_precedence_over_self_repetition():
     print("  [PASS] contradiction_takes_precedence_over_self_repetition")
 
 
+# ── Self-rep retry budget tests ─────────────────────────────────
+
+def test_self_rep_budget_resets_each_tick():
+    """The per-tick retry counter must start at 0 on every tick()
+    call so budgets don't leak between ticks."""
+    restore = _isolate_state_file("budget_reset")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "noop", "reason": "quiet"}',
+            '{"action": "noop", "reason": "still quiet"}',
+        ])
+        director = StoryDirector(engine)
+        # Pretend we burned the budget on a prior tick
+        director._self_rep_retries_this_tick = 5
+        director.tick()
+        # After tick() the counter should be 0 (no retries fired here)
+        assert director._self_rep_retries_this_tick == 0
+    finally:
+        restore()
+    print("  [PASS] self_rep_budget_resets_each_tick")
+
+
+def test_self_rep_budget_blocks_second_retry_in_same_tick():
+    """In a 2-action tick where both workers would retry for
+    self-repetition, only the first one gets through. The second
+    worker's retry is skipped and a skipped_self_rep_retry note
+    appears in the dispatch result."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("budget_block")
+    try:
+        engine = _make_stub_engine(responses=[
+            # Worker 1 first attempt (flagged), then retry (fresh)
+            '{"action": "event", "target": "bess", "event": "Bess scene A"}',
+            '{"action": "event", "target": "bess", "event": "Bess fresh after retry"}',
+            # Worker 2 first attempt (would be flagged too, but budget = 0 now)
+            '{"action": "event", "target": "kael", "event": "Kael scene A"}',
+        ])
+        director = StoryDirector(engine)
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
+        # Every precheck fires the same canned warning (we use
+        # matches_tick = 1 and the freshly-started director has
+        # tick_count = 0, so 0+1-1 = 0 ticks old — well inside the
+        # lookback window).
+        canned = {
+            "similarity": 0.88,
+            "matches_text": "Earlier scene",
+            "matches_npc": "bess",
+            "matches_kind": "event",
+            "matches_tick": 1,
+        }
+        # The precheck calls ledger.check twice per worker (once
+        # for contradiction, once for self-rep). Use a staged check
+        # that returns the canned warning while the precheck code
+        # is running on each worker.
+        def fake_check(_text, restrict_to_npc=None):
+            # matches_npc mirrors the worker's candidate NPC so the
+            # precheck fires for both workers
+            return {**canned, "matches_npc": restrict_to_npc or "bess"}
+        director.ledger.check = fake_check
+
+        result = director.tick(actions_per_tick=2)
+        subs = result["sub_actions"]
+        assert len(subs) == 2
+
+        # First worker: retried
+        assert subs[0]["dispatch"].get("retried_after_self_repetition") is True
+        # Second worker: NOT retried (budget exhausted), and has the
+        # skipped_self_rep_retry note on its dispatch
+        assert subs[1]["dispatch"].get("retried_after_self_repetition") is not True
+        assert "skipped_self_rep_retry" in subs[1]["dispatch"], subs[1]["dispatch"]
+        assert subs[1]["dispatch"]["skipped_self_rep_retry"]["reason"] == "budget_exhausted"
+
+        # Only 3 LLM calls total: worker1 initial + worker1 retry + worker2 initial
+        assert len(engine.pie.base_model.prompts) == 3, engine.pie.base_model.prompts
+    finally:
+        restore()
+    print("  [PASS] self_rep_budget_blocks_second_retry_in_same_tick")
+
+
+def test_contradiction_retry_not_budget_gated():
+    """Contradiction retries should fire regardless of the self-rep
+    budget — they're rare and more serious."""
+    restore = _isolate_state_file("budget_contra")
+    try:
+        engine = _make_stub_engine(responses=[
+            # Worker 1: first flagged as self-rep, retry succeeds
+            '{"action": "event", "target": "bess", "event": "Bess scene"}',
+            '{"action": "event", "target": "bess", "event": "Bess new scene"}',
+            # Worker 2: first flagged as CONTRADICTION, retry should fire
+            '{"action": "fact", "npc_id": "kael", "fact": "Kael contradiction"}',
+            '{"action": "fact", "npc_id": "kael", "fact": "Kael resolved"}',
+        ])
+        director = StoryDirector(engine)
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
+
+        selfrep_warning = {
+            "similarity": 0.88,
+            "matches_text": "Earlier Bess scene",
+            "matches_npc": "bess",
+            "matches_kind": "event",
+            "matches_tick": 1,
+            # no contradiction flag — this is self-rep only
+        }
+        contra_warning = {
+            "similarity": 0.70,
+            "matches_text": "Earlier Kael fact",
+            "matches_npc": "kael",
+            "matches_kind": "fact",
+            "matches_tick": 1,
+            "contradiction": True,
+            "nli": {"label": "contradiction", "confidence": 0.92,
+                    "is_contradiction": True, "scores": {}},
+        }
+        call_count = {"n": 0}
+        def staged_check(_text, restrict_to_npc=None):
+            call_count["n"] += 1
+            # Worker 1 gets selfrep_warning on both of its 2 calls
+            # (contradiction precheck + self-rep precheck). Worker 2
+            # gets contra_warning on its 1 call (contradiction precheck
+            # fires and stops the chain).
+            if call_count["n"] <= 2:
+                return selfrep_warning
+            return contra_warning
+        director.ledger.check = staged_check
+
+        result = director.tick(actions_per_tick=2)
+        subs = result["sub_actions"]
+        assert len(subs) == 2
+        # Worker 1: used the self-rep budget
+        assert subs[0]["dispatch"].get("retried_after_self_repetition") is True
+        # Worker 2: contradiction retry STILL fires despite self-rep
+        # budget being exhausted
+        assert subs[1]["dispatch"].get("retried_after_contradiction") is True
+        assert subs[1]["dispatch"].get("retried_after_self_repetition") is not True
+        # Four LLM calls total
+        assert len(engine.pie.base_model.prompts) == 4, engine.pie.base_model.prompts
+    finally:
+        restore()
+    print("  [PASS] contradiction_retry_not_budget_gated")
+
+
 # ── Intra-bio rotation tests ────────────────────────────────────
 
 def test_is_bio_mentioned_detects_word_overlap():
@@ -2467,6 +2608,11 @@ def main():
     test_self_repetition_retry_dispatches_second_response()
     test_self_repetition_retry_falls_back_to_original_on_noop()
     test_contradiction_takes_precedence_over_self_repetition()
+
+    print("\nStory Director — self-rep retry budget tests")
+    test_self_rep_budget_resets_each_tick()
+    test_self_rep_budget_blocks_second_retry_in_same_tick()
+    test_contradiction_retry_not_budget_gated()
 
     print("\nStory Director — intra-bio rotation tests")
     test_is_bio_mentioned_detects_word_overlap()

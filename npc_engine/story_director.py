@@ -136,6 +136,16 @@ _BIO_COOLDOWN_THRESHOLD = 2
 # itself rather than gossip propagation or organic continuation.
 _SELF_REPETITION_SIMILARITY = 0.70
 
+# Per-tick budget for self-repetition retries. Self-rep retries add
+# a full extra LLM call per trigger; on multi-action ticks this can
+# stack (the v4 3B bench had 3 ticks with 2 retries each, pushing
+# those ticks from ~10s to 20-30s). Budget=1 caps the worst-case
+# per-tick latency at "3 workers + 1 retry" worth of LLM calls
+# without losing the diversity gains (most retry-eligible ticks
+# only produce one retry anyway). Contradiction retries are NOT
+# budget-gated — they're rare and more serious.
+_MAX_SELF_REP_RETRIES_PER_TICK = 1
+
 # Only consider self-repetition against recent same-NPC entries.
 # Older matches are stale and may legitimately be echoed; cross-NPC
 # similarity is gossip propagation, not self-repetition.
@@ -784,6 +794,10 @@ class StoryDirector:
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
         self._examples: list[dict] = []
+        # Per-tick self-repetition retry counter. Reset at the start
+        # of every tick() call so subsequent workers in a multi-action
+        # tick share one budget. Keeps worst-case tick latency bounded.
+        self._self_rep_retries_this_tick: int = 0
         # Per-NPC per-bio-item mention counts. The focus NPC bio block
         # rotates by mention count ascending, so items that have already
         # been quoted repeatedly fall to the bottom and fresh items rise
@@ -879,6 +893,10 @@ class StoryDirector:
         """
         if actions_per_tick < 1:
             actions_per_tick = 1
+
+        # Reset the per-tick self-rep retry budget before any worker
+        # runs so multi-action workers share a single retry slot.
+        self._self_rep_retries_this_tick = 0
 
         snapshot = self._world_snapshot()
         plan = self._architect_plan(actions_per_tick)
@@ -988,6 +1006,7 @@ class StoryDirector:
         # entirely on the first few ticks before the ledger has anything.
         retried = False
         retry_reason: Optional[str] = None
+        dispatch_precheck_note: Optional[dict] = None
         precheck = self._precheck_contradiction(action)
         if precheck is not None:
             retried = True
@@ -1009,9 +1028,26 @@ class StoryDirector:
             # contradiction path didn't already retry. Both checks share
             # the retry budget — one is enough to keep latency bounded.
             selfrep = self._precheck_self_repetition(action)
+            if selfrep is not None and self._self_rep_retries_this_tick >= _MAX_SELF_REP_RETRIES_PER_TICK:
+                # Budget exhausted — skip the retry to cap worst-case
+                # per-tick latency. Record that we would have retried
+                # so callers can audit how often the budget kicks in.
+                dispatch_precheck_note = {
+                    "skipped_self_rep_retry": True,
+                    "reason": "budget_exhausted",
+                    "similarity": selfrep.get("similarity"),
+                    "matches_tick": selfrep.get("matches_tick"),
+                }
+                logger.info(
+                    f"Self-rep retry budget exhausted for this tick "
+                    f"(sim={selfrep.get('similarity')}); skipping"
+                )
+                selfrep = None
+
             if selfrep is not None:
                 retried = True
                 retry_reason = "self_repetition"
+                self._self_rep_retries_this_tick += 1
                 # Prescriptive retry nudge — "pick a different angle"
                 # was too open-ended on 3B and frequently produced
                 # noops. Listing concrete alternatives gives the model
@@ -1083,6 +1119,10 @@ class StoryDirector:
                 dispatch_result["retried_after_contradiction"] = True
             elif retry_reason == "self_repetition":
                 dispatch_result["retried_after_self_repetition"] = True
+        elif dispatch_precheck_note is not None:
+            # Budget was exhausted — surface the skipped retry so
+            # benches can count how often the budget kicks in.
+            dispatch_result["skipped_self_rep_retry"] = dispatch_precheck_note
 
         return {
             "focus_npc": focus_npc,
