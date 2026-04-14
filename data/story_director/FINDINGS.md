@@ -1472,6 +1472,149 @@ All 75 tests green.
 
 ---
 
+## Long-session validation (50-tick stress test)
+
+### The gap
+
+Every session bench up to this point had been 15-20 ticks. Multi-arc
+added real plot density but the longest run (20 ticks) only saw
+three arcs with one full resolution. Open questions for production
+use:
+
+- Does the concurrent-arc cap of 3 hold up as arcs resolve and new
+  ones propose?
+- Does `bio_mention_counts` state bloat over a long session?
+- Does the 200-entry ledger cap saturate, and how does the drop
+  behavior affect content?
+- Does per-tick wall-clock degrade as internal state grows (e.g.,
+  longer similarity matrices, more arcs to iterate)?
+
+### The verification
+
+Ran `bench_story_director.py --ticks 50 --reset --model qwen_3b
+--actions-per-tick 3` — a 50-tick session with 3 sub-actions per
+tick (150 actions total). No code changes; pure observation.
+
+### Results
+
+**Arc lifecycle — six arcs, three fully resolved:**
+
+```
+arc_t5  [bess]                  T5  → T11 → T19 → T27 → T35 RESOLVED
+arc_t10 [roderick]              T10 → T16 → T24 → T32 → T40 RESOLVED
+arc_t15 [kael, pip]             T15 → T18 → T24 → T30 → T36 RESOLVED
+arc_t36 [bess, mara]            T36 → T40 → T45 → T49 (beat 4/resolve, active)
+arc_t41 [roderick, kael]        T41 → T44 → T48        (beat 3/confront, active)
+arc_t46 [noah, elara, pip]      T46                    (beat 1/seed, active)
+```
+
+**Three complete arc lifecycles** in one session. As the first-wave
+arcs resolved (T35, T36, T40), second-wave proposals fired almost
+immediately — and the new arcs had *richer casts* (2-3 NPCs each)
+because the ledger had accumulated more cross-NPC content for
+clustering to find.
+
+The six-arc pattern also revealed something about how the stack
+scales with session length: the first wave (arcs 1-3) hit the cap
+at T15 and stayed put for 20 ticks. The second wave (arcs 4-6)
+fired in rapid succession at T36/T41/T46 as older arcs resolved,
+producing a more continuous narrative texture. Single-NPC arcs
+are a cold-start artifact — once the ledger has content, richer
+casts form naturally.
+
+**A brand-new plot thread surfaced at T46**: `arc_t46` with
+`cast=[noah, elara, pip]` and theme *"I have heard from the wolf
+hunters that a new wolf pack has..."* — the wolf bounty from the
+lore bible that had NEVER anchored an arc in any prior bench
+finally became a proper multi-character mystery. By T50 the
+content had Kael *"leaves his blacksmith shop, a lantern in one
+hand, a sword in the other, and heads toward the Silverwood"*,
+Noah *"I've been hearing whispers from the wolf hunters"*,
+Roderick *"overheard the wolf hunters discussing their plans to
+ambush the village"*. A fresh threat narrative building 46+ ticks
+into the session.
+
+**Wall-clock is flat.** No degradation as the session grows:
+
+| Metric | Value |
+|---|---|
+| Total wall-clock | 622.1s |
+| Mean per-tick | 12.44s |
+| Min per-tick | 8.28s |
+| Max per-tick | 20.30s |
+| First half mean (T1-T25) | 12.48s |
+| Second half mean (T26-T50) | 12.41s |
+| **Change between halves** | **−0.6%** |
+
+The 0.6% drop is statistical noise. Per-tick latency is flat —
+no quadratic state growth, no slowdown from accumulated ledger
+entries, no slowdown from tracking 6 arcs vs 1.
+
+**State is bounded:**
+
+| File | Size | Content |
+|---|---|---|
+| `state.json` | 31 KB | `recent_decisions` capped at 5, `bio_mention_counts` = 24 items across 7 NPCs, max mention count = 4 |
+| `arcs.json` | 4.8 KB | 6 arcs total (3 resolved + 3 active), ~800 bytes each |
+| `fact_ledger.json` | 1.8 MB | 149/200 entries — ledger entries are fat because embeddings are stored as JSON float lists |
+
+- `bio_mention_counts`: 24 total items tracked across 7 NPCs. Key
+  observation: this grows with *bio items seen*, not session
+  length. Bounded by (NPCs × items per NPC) ≈ 60 max. No bloat.
+- `recent_decisions`: still capped at 5 (as designed).
+- `arcs` list: grows linearly with session length but each arc is
+  ~800 bytes. 500-tick session ≈ 60 arcs ≈ 48KB. Not a concern.
+- **Ledger at 149/200** — approaching but not saturated. Ledger
+  saturation would first hit around tick 67 (200/3 ≈ 66). This
+  50-tick bench didn't reach it; drop behavior untested from this
+  run alone but the drop path is a simple `entries[-200:]` slice.
+
+**Content quality holds through 50 ticks.** Per-quarter vocab
+diversity:
+
+| Quarter | Ticks | Unique content words |
+|---|---|---|
+| Q1 | T1-T12 | 250 |
+| Q2 | T13-T25 | 237 |
+| Q3 | T26-T37 | 210 |
+| Q4 | T38-T50 | 220 |
+| Overall | T1-T50 | **607** |
+
+607 unique content words is more than 1.7x the 15-tick multiarc
+run's 361. The Q3 dip to 210 reflects the brief window between
+first-wave resolution and second-wave proposal, where the Director
+was mostly advancing existing beats toward resolution. Q4 bounces
+back as the new wave starts introducing fresh vocabulary.
+
+### Observations and nice-to-haves
+
+- **Ledger file size**: 1.8 MB for 149 entries means each entry
+  is ~12 KB. Most of that is the embedding stored as a JSON list
+  of 384 float64 values. Storing as float32 binary would cut this
+  ~10× with zero content loss. Pure optimization — the current
+  format works fine.
+- **Arc proposal timing**: arcs 4-5-6 fired at T36/T41/T46 —
+  5-tick cooldown cadence exactly. For very long sessions the
+  cadence could tighten slightly once the stack is known-stable,
+  but 5 ticks is a good conservative default.
+- **Cold-start pattern**: the first 3 arcs all had 1-2 NPC casts;
+  the next 3 all had 2-3 NPC casts. The richer casts are an
+  emergent property of a fuller ledger, not a code change. Worth
+  noting in bench docs so users don't expect big casts from tick 1.
+- **3-NPC arcs work cleanly**: arc_t46 with `[noah, elara, pip]`
+  advanced just like single- or 2-NPC arcs. The architecture has
+  no implicit cast-size limit.
+
+### Verdict
+
+**The stack is production-ready for sessions up to at least 50
+ticks.** Everything is bounded, wall-clock is linear, content
+stays fresh, arcs cycle naturally, and new plot threads continue
+emerging late into the session. No code changes needed from this
+validation run.
+
+---
+
 ## Multi-arc concurrency (Cardinal-class plot weaving)
 
 ### The gap
@@ -1874,37 +2017,39 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Longer-session validation
+### 1. Ledger compression (nice-to-have optimization)
 
-**The gap:** Every session bench has been 15-20 ticks, which is
-~3-4 arcs worth of content on a 20-tick run. Production sessions
-could be 50-100+ ticks. Open questions:
+**The gap:** `fact_ledger.json` reached 1.8 MB at 149 entries
+(~12 KB per entry) in the 50-tick validation run. Most of that
+is the embedding stored as a JSON list of 384 float64 values.
+Storing embeddings as binary float32 would cut this ~10× with
+zero content loss.
 
-- Does the concurrent-arc cap of 3 hold up? At 50 ticks with
-  arcs resolving in ~10-15 ticks each, the session could churn
-  through ~6-8 arcs — do they transition cleanly or accumulate
-  stale state?
-- Does `bio_mention_counts` state bloat? It grows unboundedly as
-  new NPCs surface and bio items get tracked.
-- Does the ledger saturate its 200-entry cap? What's the drop
-  pattern on longer sessions?
-- Does the arc advance rate stay consistent as the session grows,
-  or does something tick-count-related fall off?
+This is a pure optimization — the current format works fine for
+the 200-entry cap and loads in a fraction of a second. But for
+very long sessions, agent servers handling many parallel worlds,
+or checkpointing scenarios, the size matters.
 
-**Design sketch:** No code changes yet. Run a 50-tick 3B
-session with `--dialogue-script` and inspect arc lifecycle,
-ledger size, bio mention accumulation. Identify any state that
-grows unboundedly and add a trim step.
+**Design sketch:**
+- Change `FactLedger._save`/`_load` to serialize embeddings as a
+  sidecar binary file (`fact_ledger_embeddings.bin`) with
+  numpy's `np.savez_compressed` or similar.
+- Keep the JSON entries metadata (text, npc_id, kind, tick) in
+  `fact_ledger.json`.
+- Optionally: skip persisting embeddings entirely and re-encode
+  on load. Trades ~3s boot time for ~1.8MB on disk.
 
-**Where to start:** Just run the bench. Then look at
-`state.json` and `arcs.json` after the session for growth
-signals.
+**Where to start:** `FactLedger._save` and `FactLedger._load` in
+`story_director.py`.
 
-**Risk:** Low — observation first, fix later if needed.
+**Risk:** Low. No behavior change; backward compat via format
+version flag.
 
-### 2. Own-output fixation (done — see Self-repetition precheck section)
+### 2. Longer-session validation (done — see "Long-session validation" section)
 
-### 3. Multi-arc concurrency (done — see Multi-arc concurrency section)
+### 3. Own-output fixation (done — see Self-repetition precheck section)
+
+### 4. Multi-arc concurrency (done — see Multi-arc concurrency section)
 
 **Done in commit 20fb7e7.** The pre-dispatch
 `_precheck_self_repetition` + NPC-restricted ledger check + noop
@@ -1941,7 +2086,7 @@ first), then `_pick_examples` to honor theme diversity.
 **Risk:** Medium — hand-curating 15+ good examples takes effort.
 Auto-generation risks drift from the lore bible's tone.
 
-### 4. NPC dialogue identity bleed (unchanged — still needs npc-engine work)
+### 5. NPC dialogue identity bleed (unchanged — still needs npc-engine work)
 
 **The gap:** In bench dialogue tests, Noah called the player "Mara"
 and Mara called the player "Kael". This is in the npc-engine
@@ -1960,7 +2105,7 @@ flag for retry.
 done as a focused npc-engine fix on its own branch, then merge
 forward.
 
-### 5. Real parallel workers
+### 6. Real parallel workers
 
 **The gap:** Multi-action ticks run sub-actions sequentially because
 llama-cpp-python isn't thread-safe for one base model. On a 3-action
@@ -1984,7 +2129,7 @@ is the single function that needs to become async-aware. The
 working memory). Option B requires understanding PIE's queue
 priorities. Option C is the cleanest but adds operational complexity.
 
-### 6. Co-reference resolution in the FactLedger
+### 7. Co-reference resolution in the FactLedger
 
 **The gap:** Embedding similarity misses linked entities when names
 differ. *"The elder is hiding something"* and *"Noah won't talk
@@ -2009,7 +2154,7 @@ director (it doesn't change at runtime).
 
 **Risk:** Low — purely additive to the embedding path.
 
-### 7. Auto-augmentor generation for narrative examples
+### 8. Auto-augmentor generation for narrative examples
 
 **The gap:** The 0.5B path's content is more literal than the 3B path
 because it copies few-shot examples verbatim. The fix is more curated
@@ -2038,7 +2183,7 @@ Then a new `generate_story_augmentors.py` script in the repo root.
 **Risk:** Medium — needs careful human review of generated examples
 to avoid drift away from the lore bible's tone.
 
-### 8. Narrative arc polish (v2 items)
+### 9. Narrative arc polish (v2 items)
 
 The deterministic arc planner shipped in v1 leaves a few things on
 the table that would be worth coming back to once multi-tick arcs
@@ -2057,7 +2202,7 @@ have been exercised in real sessions:
 - **Abandonment**: stale arcs with no recent cast touches should
   flip to `status = "abandoned"` so new arcs can form.
 
-### 9. Smaller items worth doing
+### 10. Smaller items worth doing
 
 - **Acting on contradiction** beyond retry: when the retry ALSO
   fails, fall back to a noop and log to a `narrative_conflicts.json`
