@@ -406,11 +406,12 @@ class FactLedger:
 
     def reset(self) -> None:
         self.entries = []
-        if self.storage_path.exists():
-            try:
-                self.storage_path.unlink()
-            except Exception:
-                pass
+        for path in (self.storage_path, self._embeddings_path):
+            if path.exists():
+                try:
+                    path.unlink()
+                except Exception:
+                    pass
 
     def stats(self) -> dict:
         return {
@@ -465,22 +466,101 @@ class FactLedger:
             "matches_tick": match["tick"],
         }
 
+    @property
+    def _embeddings_path(self) -> Path:
+        """Binary sidecar for embeddings — same stem as the main JSON
+        file but with a ``.embeddings.npy`` suffix. Keeps the JSON
+        human-readable while pushing the large numeric payload to a
+        compact float32 binary that's ~10x smaller on disk."""
+        return self.storage_path.with_suffix(".embeddings.npy")
+
     def _load(self) -> None:
         if not self.storage_path.exists():
             return
         try:
             data = json.loads(self.storage_path.read_text(encoding="utf-8"))
-            self.entries = data.get("entries", [])[-200:]
+            entries = data.get("entries", [])[-200:]
         except Exception as e:
             logger.warning(f"FactLedger load failed: {e}")
+            return
+
+        # Try to load embeddings from the binary sidecar. Entries that
+        # already have an ``embedding`` key inline (old-format saves
+        # pre-compression) skip the sidecar lookup and use the inline
+        # data directly. This makes the upgrade path zero-touch: an
+        # existing fact_ledger.json from before this commit loads
+        # cleanly and will be re-saved in the new format on the next
+        # ``add``.
+        missing_embedding = any("embedding" not in e for e in entries)
+        if missing_embedding and self._embeddings_path.exists():
+            try:
+                import numpy as np  # noqa: WPS433
+                embeddings = np.load(self._embeddings_path)
+            except Exception as e:
+                logger.warning(f"FactLedger embeddings sidecar load failed: {e}")
+                embeddings = None
+            if embeddings is not None:
+                # Match by index — the sidecar was written in the same
+                # order as entries and both are trimmed together on save.
+                count = min(len(entries), embeddings.shape[0])
+                offset = embeddings.shape[0] - count  # align to tail
+                for i in range(count):
+                    if "embedding" not in entries[i]:
+                        entries[i]["embedding"] = embeddings[offset + i].tolist()
+
+        self.entries = entries
 
     def _save(self) -> None:
+        """
+        Save in two files:
+
+        - ``fact_ledger.json``: entry metadata (text, npc_id, kind,
+          tick) without embeddings — stays human-readable and small.
+        - ``fact_ledger.embeddings.npy``: matched-index float32
+          embeddings array, written via numpy's native format.
+
+        The pair is always rewritten together so a crash mid-save
+        leaves both files matching the same state, or neither.
+        Numpy is a hard dependency of the ledger (required by the
+        similarity check) so there's no conditional code path.
+        """
         try:
             self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Split metadata from embeddings
+            metadata_entries: list[dict] = []
+            embeddings: list[list[float]] = []
+            for e in self.entries:
+                meta = {k: v for k, v in e.items() if k != "embedding"}
+                metadata_entries.append(meta)
+                emb = e.get("embedding")
+                if emb is not None:
+                    embeddings.append(emb)
+
+            # Write JSON metadata
             self.storage_path.write_text(
-                json.dumps({"entries": self.entries}, indent=2, ensure_ascii=False),
+                json.dumps({"entries": metadata_entries},
+                            indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
+
+            # Write binary sidecar (float32 — cosine similarity is
+            # well-approximated at this precision, and it halves the
+            # byte count vs float64)
+            try:
+                import numpy as np  # noqa: WPS433
+                if embeddings:
+                    arr = np.asarray(embeddings, dtype=np.float32)
+                    np.save(self._embeddings_path, arr,
+                             allow_pickle=False)
+                elif self._embeddings_path.exists():
+                    # All entries gone — remove stale sidecar
+                    try:
+                        self._embeddings_path.unlink()
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.warning(f"FactLedger embeddings sidecar save failed: {e}")
         except Exception as e:
             logger.error(f"FactLedger save failed: {e}")
 

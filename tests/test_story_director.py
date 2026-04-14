@@ -670,8 +670,10 @@ def test_fact_ledger_does_not_flag_unrelated_text():
 
 def test_fact_ledger_persists_and_reloads():
     tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_persist.json"
-    if tmp_path.exists():
-        tmp_path.unlink()
+    tmp_emb = tmp_path.with_suffix(".embeddings.npy")
+    for p in (tmp_path, tmp_emb):
+        if p.exists():
+            p.unlink()
     try:
         ledger = FactLedger(tmp_path)
         if ledger.embedder is None:
@@ -680,13 +682,148 @@ def test_fact_ledger_persists_and_reloads():
         ledger.add("Bess hears a strange whisper at the inn.",
                    npc_id="bess", kind="event", tick=1)
         assert tmp_path.exists()
+        assert tmp_emb.exists(), "embeddings sidecar should be created"
         ledger2 = FactLedger(tmp_path)
         assert len(ledger2.entries) == 1, ledger2.entries
         assert ledger2.entries[0]["npc_id"] == "bess"
+        # Embeddings must round-trip so similarity still works after
+        # a reload — check the key is present and non-empty
+        assert "embedding" in ledger2.entries[0]
+        assert len(ledger2.entries[0]["embedding"]) > 0
     finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
+        for p in (tmp_path, tmp_emb):
+            if p.exists():
+                p.unlink()
     print("  [PASS] fact_ledger_persists_and_reloads")
+
+
+def test_ledger_sidecar_round_trips_embedding_values():
+    """Round-tripping through the binary sidecar must preserve the
+    embedding values within float32 precision. This is what lets
+    similarity checks stay stable across a save/load cycle."""
+    import numpy as np
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_roundtrip.json"
+    tmp_emb = tmp_path.with_suffix(".embeddings.npy")
+    for p in (tmp_path, tmp_emb):
+        if p.exists():
+            p.unlink()
+    try:
+        ledger = FactLedger(tmp_path)
+        ledger._np = np
+        ledger._embedder = False  # skip real embedder
+        # Stuff hand-crafted entries directly
+        ledger.entries = [
+            {"text": "scene A",
+             "embedding": [0.10, 0.20, 0.30, 0.40],
+             "npc_id": "bess", "kind": "event", "tick": 1},
+            {"text": "scene B",
+             "embedding": [0.50, 0.60, 0.70, 0.80],
+             "npc_id": "kael", "kind": "fact", "tick": 2},
+        ]
+        ledger._save()
+        assert tmp_path.exists()
+        assert tmp_emb.exists()
+
+        # The JSON should NOT contain the embedding field anymore
+        raw = json.loads(tmp_path.read_text(encoding="utf-8"))
+        for e in raw["entries"]:
+            assert "embedding" not in e, (
+                "JSON metadata should not carry embeddings after compression"
+            )
+
+        # Reload and verify embeddings came back (within float32 eps)
+        ledger2 = FactLedger(tmp_path)
+        assert len(ledger2.entries) == 2
+        for original, reloaded in zip(ledger.entries, ledger2.entries):
+            assert reloaded["text"] == original["text"]
+            assert reloaded["npc_id"] == original["npc_id"]
+            for a, b in zip(original["embedding"], reloaded["embedding"]):
+                assert abs(a - b) < 1e-5, f"{a} vs {b}"
+    finally:
+        for p in (tmp_path, tmp_emb):
+            if p.exists():
+                p.unlink()
+    print("  [PASS] ledger_sidecar_round_trips_embedding_values")
+
+
+def test_ledger_loads_legacy_inline_format():
+    """Old fact_ledger.json files (pre-compression) had embeddings
+    inline in the JSON. Those must still load cleanly so existing
+    state files don't need migration."""
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_legacy.json"
+    tmp_emb = tmp_path.with_suffix(".embeddings.npy")
+    for p in (tmp_path, tmp_emb):
+        if p.exists():
+            p.unlink()
+    try:
+        # Hand-write an old-format JSON file (embeddings inline, no sidecar)
+        legacy_data = {
+            "entries": [
+                {"text": "legacy entry",
+                 "embedding": [0.1, 0.2, 0.3, 0.4],
+                 "npc_id": "bess", "kind": "event", "tick": 1},
+            ],
+        }
+        tmp_path.write_text(json.dumps(legacy_data), encoding="utf-8")
+
+        ledger = FactLedger(tmp_path)
+        assert len(ledger.entries) == 1
+        assert ledger.entries[0]["embedding"] == [0.1, 0.2, 0.3, 0.4]
+        assert ledger.entries[0]["npc_id"] == "bess"
+    finally:
+        for p in (tmp_path, tmp_emb):
+            if p.exists():
+                p.unlink()
+    print("  [PASS] ledger_loads_legacy_inline_format")
+
+
+def test_ledger_sidecar_is_smaller_than_inline_json():
+    """Binary float32 sidecar must be meaningfully smaller than the
+    same data stored as JSON float64 lists — that's the whole point
+    of compression. Test a realistic embedding size (384 floats)."""
+    import numpy as np
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_size.json"
+    tmp_emb = tmp_path.with_suffix(".embeddings.npy")
+    for p in (tmp_path, tmp_emb):
+        if p.exists():
+            p.unlink()
+    try:
+        ledger = FactLedger(tmp_path)
+        ledger._np = np
+        ledger._embedder = False
+        # 10 entries with 384-float embeddings (typical size)
+        rng = np.random.RandomState(42)
+        ledger.entries = [
+            {"text": f"entry {i}",
+             "embedding": rng.randn(384).astype(float).tolist(),
+             "npc_id": "bess", "kind": "event", "tick": i}
+            for i in range(10)
+        ]
+        ledger._save()
+
+        json_size = tmp_path.stat().st_size
+        emb_size = tmp_emb.stat().st_size
+        total_new = json_size + emb_size
+
+        # What the old format would have been: serialize entries WITH
+        # embeddings inline and measure
+        legacy_data = {"entries": ledger.entries}
+        legacy_bytes = json.dumps(legacy_data, indent=2).encode("utf-8")
+        legacy_size = len(legacy_bytes)
+
+        # Expect the new format to be at least 5x smaller than inline
+        # (embeddings dominate, float64-as-JSON is ~20 bytes/float,
+        # binary float32 is 4 bytes/float → ~5x best case)
+        ratio = legacy_size / total_new
+        assert ratio >= 4.0, (
+            f"expected >=4x reduction, got {ratio:.2f}x "
+            f"(legacy={legacy_size}, new={total_new})"
+        )
+    finally:
+        for p in (tmp_path, tmp_emb):
+            if p.exists():
+                p.unlink()
+    print("  [PASS] ledger_sidecar_is_smaller_than_inline_json")
 
 
 def test_contradiction_checker_catches_known_contradiction():
@@ -2828,6 +2965,9 @@ def main():
     test_fact_ledger_flags_similar_text()
     test_fact_ledger_does_not_flag_unrelated_text()
     test_fact_ledger_persists_and_reloads()
+    test_ledger_sidecar_round_trips_embedding_values()
+    test_ledger_loads_legacy_inline_format()
+    test_ledger_sidecar_is_smaller_than_inline_json()
     test_contradiction_checker_catches_known_contradiction()
     test_contradiction_checker_does_not_flag_paraphrase()
     test_contradiction_checker_does_not_flag_plot_escalation()

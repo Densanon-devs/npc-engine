@@ -1472,6 +1472,109 @@ All 75 tests green.
 
 ---
 
+## Ledger compression (binary embeddings sidecar)
+
+### The gap
+
+The 50-tick long-session validation flagged `fact_ledger.json` at
+1.8 MB — dominated by embeddings serialized as JSON lists of 384
+float64 values per entry (~12 KB per entry in JSON). The content
+payload (text, npc_id, kind, tick) is tiny by comparison; the
+numbers hog the disk.
+
+For a 200-entry capped ledger this is ~2 MB steady-state. Fine on
+local dev, noisy for agent servers running many parallel worlds,
+and wasteful given the fix is mechanical.
+
+### The fix
+
+Split storage into two files:
+
+1. `fact_ledger.json` — entry metadata (text, npc_id, kind, tick)
+   as before but *without* the `embedding` field. Stays
+   human-readable and small.
+2. `fact_ledger.embeddings.npy` — matched-index float32 array,
+   written via numpy's native `.npy` format. Same stem as the
+   JSON file, same directory.
+
+`FactLedger._save` writes both files in sequence. `_load` reads
+the JSON, then (if any entry lacks an inline `embedding` key)
+loads the sidecar and zips embeddings back into entries by
+index. `reset()` cleans up both paths.
+
+**Backward compat is zero-touch.** Old `fact_ledger.json` files
+from before this commit have inline embeddings — the loader
+detects this per-entry (`"embedding" in e`) and uses the inline
+data when present, falling back to the sidecar when absent. An
+existing session's ledger loads cleanly; on the next `add()` it
+gets re-saved in the new format, dropping the inline embeddings
+and writing the sidecar. No migration script.
+
+Float64 → float32 is a precision tradeoff. Sentence-transformers
+embeddings are unit-normalized and cosine similarity is stable
+at float32 precision — tested within 1e-5 absolute error. For
+our threshold tuning (0.6 / 0.7 / 0.75 / 0.85) this is far below
+the decision boundary, so no similarity scores shift enough to
+change behavior.
+
+### Empirical verification
+
+Ran a fresh 15-tick 3B bench and measured file sizes after
+compression vs simulated legacy inline format:
+
+| Metric | Legacy inline | New split | Ratio |
+|---|---|---|---|
+| 15-tick file size (44 entries) | 507.7 KB | **78.5 KB** | **6.47×** |
+| Per-entry cost | 11,815 bytes | **1,826 bytes** | 6.47× |
+| Projected 50-tick size | ~1,700 KB | **~260 KB** | 6.5× |
+
+**6.47× reduction at 15 ticks, extrapolating to ~86% disk
+savings at 50-tick scale.** The theoretical cap was ~10× (float32
+vs float64 plus JSON overhead), but JSON metadata (text strings,
+keys, indentation) takes a fixed floor that scales with entry
+count. At 44 entries the metadata is 12.3 KB; at 200 entries it
+would be ~56 KB with the sidecar around 300 KB → still ~5× the
+old 2 MB bound.
+
+Wall-clock unchanged: 12.39s/tick on the compressed run vs the
+12.44s/tick 50-tick mean. Load time for numpy's `.npy` format
+is faster than parsing JSON float lists, so if anything this
+should shave a few ms off init time on large ledgers.
+
+### Tests
+
+3 new unit tests:
+
+- `test_ledger_sidecar_round_trips_embedding_values` — craft
+  explicit entries, save, reload, verify embeddings match within
+  float32 epsilon and that JSON metadata no longer carries
+  embeddings inline
+- `test_ledger_loads_legacy_inline_format` — hand-write an old-
+  format JSON with inline embeddings, verify the loader handles
+  it without a sidecar file
+- `test_ledger_sidecar_is_smaller_than_inline_json` — synthesize
+  10 entries with 384-float embeddings, save, assert the new
+  format is at least 4× smaller than a simulated legacy inline
+  save (empirically 6.47× on real data)
+
+Plus one existing test updated: `test_fact_ledger_persists_and_reloads`
+now checks that the sidecar file is created AND that the reloaded
+entry carries its embedding back (previously only checked the
+npc_id field). Finally blocks clean both files.
+
+All 86 offline tests green.
+
+### Tuning knobs
+
+- `_embeddings_path` property on `FactLedger` derives the sidecar
+  path from the main JSON path (stem + `.embeddings.npy`). Change
+  the suffix here if you want a different naming convention.
+- Precision is hardcoded to float32. Dropping to float16 would
+  halve size again but risks similarity instability near the
+  0.60 threshold — not worth it for the 2× gain.
+
+---
+
 ## Long-session validation (50-tick stress test)
 
 ### The gap
@@ -2017,39 +2120,32 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Ledger compression (nice-to-have optimization)
+### 1. NPC dialogue identity bleed (still needs npc-engine work)
 
-**The gap:** `fact_ledger.json` reached 1.8 MB at 149 entries
-(~12 KB per entry) in the 50-tick validation run. Most of that
-is the embedding stored as a JSON list of 384 float64 values.
-Storing embeddings as binary float32 would cut this ~10× with
-zero content loss.
+**The gap:** In bench dialogue tests, Noah called the player "Mara"
+and Mara called the player "Kael". This is in the npc-engine
+*dialogue path* (`engine.process` → PIE → expert generation), not
+the StoryDirector. It taints the dialogue auto-feed because the
+Director records garbled dialogue.
 
-This is a pure optimization — the current format works fine for
-the 200-entry cap and loads in a fraction of a second. But for
-very long sessions, agent servers handling many parallel worlds,
-or checkpointing scenarios, the size matters.
+**Where to start:** `npc_engine/postgen.py` already does
+identity/hallucination/echo validation — it's where to add a
+"speaker addresses player by wrong name" check. Need to detect when
+an NPC dialogue uses ANOTHER NPC's name as if addressing the
+player, and either repair (replace with "traveler" / "stranger") or
+flag for retry.
 
-**Design sketch:**
-- Change `FactLedger._save`/`_load` to serialize embeddings as a
-  sidecar binary file (`fact_ledger_embeddings.bin`) with
-  numpy's `np.savez_compressed` or similar.
-- Keep the JSON entries metadata (text, npc_id, kind, tick) in
-  `fact_ledger.json`.
-- Optionally: skip persisting embeddings entirely and re-encode
-  on load. Trades ~3s boot time for ~1.8MB on disk.
+**Risk:** This is its own concern, separate from the Director. Best
+done as a focused npc-engine fix on its own branch, then merge
+forward.
 
-**Where to start:** `FactLedger._save` and `FactLedger._load` in
-`story_director.py`.
+### 2. Ledger compression (done — see "Ledger compression" section)
 
-**Risk:** Low. No behavior change; backward compat via format
-version flag.
+### 3. Longer-session validation (done — see "Long-session validation" section)
 
-### 2. Longer-session validation (done — see "Long-session validation" section)
+### 4. Own-output fixation (done — see Self-repetition precheck section)
 
-### 3. Own-output fixation (done — see Self-repetition precheck section)
-
-### 4. Multi-arc concurrency (done — see Multi-arc concurrency section)
+### 5. Multi-arc concurrency (done — see Multi-arc concurrency section)
 
 **Done in commit 20fb7e7.** The pre-dispatch
 `_precheck_self_repetition` + NPC-restricted ledger check + noop
@@ -2085,25 +2181,6 @@ first), then `_pick_examples` to honor theme diversity.
 
 **Risk:** Medium — hand-curating 15+ good examples takes effort.
 Auto-generation risks drift from the lore bible's tone.
-
-### 5. NPC dialogue identity bleed (unchanged — still needs npc-engine work)
-
-**The gap:** In bench dialogue tests, Noah called the player "Mara"
-and Mara called the player "Kael". This is in the npc-engine
-*dialogue path* (`engine.process` → PIE → expert generation), not
-the StoryDirector. It taints the dialogue auto-feed because the
-Director records garbled dialogue.
-
-**Where to start:** `npc_engine/postgen.py` already does
-identity/hallucination/echo validation — it's where to add a
-"speaker addresses player by wrong name" check. Need to detect when
-an NPC dialogue uses ANOTHER NPC's name as if addressing the
-player, and either repair (replace with "traveler" / "stranger") or
-flag for retry.
-
-**Risk:** This is its own concern, separate from the Director. Best
-done as a focused npc-engine fix on its own branch, then merge
-forward.
 
 ### 6. Real parallel workers
 

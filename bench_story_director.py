@@ -113,6 +113,7 @@ def boot_engine(model_path: Path, reset: bool):
         for runtime_file in (
             NPC_ROOT / "data" / "story_director" / "state.json",
             NPC_ROOT / "data" / "story_director" / "fact_ledger.json",
+            NPC_ROOT / "data" / "story_director" / "fact_ledger.embeddings.npy",
             NPC_ROOT / "data" / "story_director" / "arcs.json",
         ):
             if runtime_file.exists():
