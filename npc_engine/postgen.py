@@ -288,6 +288,98 @@ def detect_wrong_identity(dialogue: str, profile: Optional[dict]) -> bool:
     return has_wrong and not has_correct
 
 
+# Patterns where an NPC is addressing someone by name. The regex
+# captures the name in group 1 so we know WHICH name to check and
+# WHAT to replace. Case-insensitive match.
+#
+# Failure mode targeted: Noah says "Greetings, Mara. How can I help?"
+# to the player — the model picked up another NPC name from the
+# few-shot examples or cross-session ledger and used it as an address
+# term. Distinct from ``detect_wrong_identity`` which catches the
+# "I am {other_npc}" self-confusion case.
+_ADDRESS_PATTERNS = [
+    # Start-of-dialogue greeting with a name
+    # "Hello Mara," / "Hi Mara!" / "Greetings, Mara." / "Well met, Mara,"
+    r"^\s*(?:hello|hi|hey|greetings|welcome|well met|good day|good morn(?:ing)?|good evening|ah|yes|aye)[,\s]+([A-Z][a-z]+)\b",
+    # Polite prefix — "my dear Mara", "dear Mara"
+    r"\b(?:my dear|dear|friend)\s+([A-Z][a-z]+)\b",
+    # Trailing comma-address — "..., Mara." / "..., Mara!"
+    r",\s+([A-Z][a-z]+)\s*[.!?]",
+    # Start-of-sentence "Mara," address (model speaking TO someone)
+    r"(?:^|\.\s+)([A-Z][a-z]+),\s+",
+]
+
+
+def detect_wrong_addressee(dialogue: str,
+                            profile: Optional[dict]) -> tuple[bool, Optional[str]]:
+    """
+    Detect when the speaker is addressing the player (or someone) by
+    ANOTHER NPC's name. Returns ``(hit, wrong_name)`` where
+    ``wrong_name`` is the offending NPC id in lowercase, or None if
+    no bleed was found.
+
+    The patterns in ``_ADDRESS_PATTERNS`` look for capitalized words
+    in positions that indicate direct address — greeting openers,
+    polite prefixes, trailing comma-address, and sentence-initial
+    "Name," forms. Any captured name that matches another NPC (and
+    NOT the speaker) is flagged.
+    """
+    if not profile:
+        return False, None
+    speaker_name = profile.get("identity", {}).get("name", "").lower()
+    other_names = _ALL_NPC_NAMES - {speaker_name}
+
+    for pattern in _ADDRESS_PATTERNS:
+        for match in re.finditer(pattern, dialogue, flags=re.IGNORECASE):
+            captured = match.group(1).lower()
+            if captured == speaker_name:
+                # The speaker addressing themselves in third person is
+                # a different issue (persona slippage) — not this one.
+                continue
+            if captured in other_names:
+                return True, captured
+    return False, None
+
+
+def repair_wrong_addressee(dialogue: str, wrong_name: str,
+                            replacement: str = "traveler") -> str:
+    """
+    Replace every occurrence of ``wrong_name`` in ``dialogue`` with
+    ``replacement``. Position-aware capitalization: the replacement
+    is capitalized only when the match is at the very start of the
+    dialogue or right after sentence-ending punctuation (``.!?``
+    followed by whitespace). Otherwise it's lowercase so generic
+    address terms don't look like they're starting a new sentence.
+
+    Word-boundary match so we don't accidentally replace substrings
+    (e.g., ``Mara`` inside ``Maralynn``).
+
+    Proper nouns are capitalized regardless of sentence position, so
+    a naive "match first char case" check would always return
+    ``Traveler`` — which reads awkwardly mid-sentence. This position
+    check handles that.
+    """
+    if not wrong_name:
+        return dialogue
+
+    def _replace(match: "re.Match") -> str:
+        start = match.start()
+        # Scan backwards for the nearest non-whitespace character
+        i = start - 1
+        while i >= 0 and dialogue[i].isspace():
+            i -= 1
+        if i < 0 or dialogue[i] in ".!?":
+            return replacement.capitalize()
+        return replacement
+
+    return re.sub(
+        rf"\b{re.escape(wrong_name)}\b",
+        _replace,
+        dialogue,
+        flags=re.IGNORECASE,
+    )
+
+
 # ── OOD (modern-world) detection ─────────────────────────────
 
 _MODERN_WORLD_KEYWORDS = {
@@ -436,6 +528,17 @@ def validate_and_repair(raw: str, npc_id: str = "",
         role = profile.get("identity", {}).get("role", "")
         obj["dialogue"] = f"I am {name}, {role}. How may I help you?"
         obj["emotion"] = "neutral"
+        dialogue = obj["dialogue"]
+
+    # Wrong-addressee detection — model used another NPC's name to
+    # address the player (e.g. Noah saying "Greetings, Mara"). The
+    # offending name is replaced with "traveler" in-place so the rest
+    # of the response survives. Distinct from wrong-identity which
+    # catches "I am {other_npc}" self-confusion.
+    hit_addressee, wrong_name = detect_wrong_addressee(dialogue, profile)
+    if hit_addressee and wrong_name:
+        obj["dialogue"] = repair_wrong_addressee(dialogue, wrong_name)
+        dialogue = obj["dialogue"]
 
     # Echo detection — model copied the user's prompt instead of responding.
     # Only apply on quest-ask prompts (where we have a programmatic replacement).
