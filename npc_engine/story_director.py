@@ -490,6 +490,13 @@ class NarrativeArc:
     cluster as an arc. The theme and focus NPCs are derived from that
     cluster, so the arc is always grounded in content the Director has
     already produced.
+
+    ``touches_since_last_advance`` accumulates every dispatch that
+    targets a cast NPC since the last beat advance. It's the input to
+    ``ArcPlanner.advance_if_beat_met``, replacing the old approach
+    which walked ``recent_decisions`` (capped at 5 ticks) and couldn't
+    fit enough touches to advance single-NPC arcs at all. The counter
+    has no upper bound and resets on beat advance.
     """
 
     id: str
@@ -500,6 +507,7 @@ class NarrativeArc:
     status: str = "active"  # active | resolved | abandoned
     started_at_tick: int = 0
     last_advanced_at_tick: int = 0
+    touches_since_last_advance: int = 0
 
     @property
     def current_beat_label(self) -> str:
@@ -580,41 +588,46 @@ class ArcPlanner:
         self.save()
         return arc
 
-    def advance_if_beat_met(self, recent_decisions: list[dict],
-                             current_tick: int) -> bool:
+    def record_cast_touch(self, npc_id: Optional[str]) -> None:
         """
-        Count focus-NPC touches in ``recent_decisions`` since the current
-        beat started. If the threshold is met, bump the beat. Resolve the
-        arc when the final beat completes. Returns True when a beat
+        Bump the active arc's touch counter if ``npc_id`` is in its
+        cast. Called from ``StoryDirector._run_single_action`` after
+        every successful non-noop dispatch — that way every piece of
+        cast-directed content counts, regardless of whether
+        ``recent_decisions`` retains it.
+        """
+        if not npc_id:
+            return
+        arc = self.active()
+        if arc is None:
+            return
+        if npc_id not in arc.focus_npcs:
+            return
+        arc.touches_since_last_advance += 1
+
+    def advance_if_beat_met(self, current_tick: int) -> bool:
+        """
+        Advance the current beat when the active arc has accumulated
+        enough cast touches since the last advance. Resolve the arc
+        when the final beat completes. Returns True when a beat
         advanced (including resolution).
+
+        Touches are tracked directly on the arc via
+        ``touches_since_last_advance`` — earlier versions walked
+        ``recent_decisions`` and couldn't fit enough touches to
+        advance single-NPC arcs because that buffer is capped at 5
+        ticks.
         """
         arc = self.active()
         if arc is None:
             return False
 
-        touches = 0
-        for d in recent_decisions:
-            tick_num = d.get("tick", 0)
-            if tick_num <= arc.last_advanced_at_tick:
-                continue
-            actions_in_decision: list[dict] = []
-            if isinstance(d.get("action"), dict):
-                actions_in_decision.append(d["action"])
-            for sub in d.get("sub_actions", []) or []:
-                if isinstance(sub, dict) and isinstance(sub.get("action"), dict):
-                    actions_in_decision.append(sub["action"])
-            for act in actions_in_decision:
-                for key in ("npc_id", "target"):
-                    val = act.get(key)
-                    if isinstance(val, str) and val in arc.focus_npcs:
-                        touches += 1
-                        break  # don't double-count one action
-
-        if touches < _ARC_BEAT_ADVANCE_THRESHOLD:
+        if arc.touches_since_last_advance < _ARC_BEAT_ADVANCE_THRESHOLD:
             return False
 
         arc.current_beat += 1
         arc.last_advanced_at_tick = current_tick
+        arc.touches_since_last_advance = 0
         logger.info(
             f"ArcPlanner advanced {arc.id} to beat {arc.current_beat} "
             f"({arc.current_beat_label})"
@@ -963,9 +976,10 @@ class StoryDirector:
 
         # After the tick is recorded, check if the active arc's beat has
         # met its touch threshold and should advance (or resolve).
-        self.arc_planner.advance_if_beat_met(
-            self.recent_decisions, current_tick=self.tick_count,
-        )
+        # Touches are counted on the arc itself via record_cast_touch
+        # (called from _run_single_action) — no need to walk the tail
+        # of recent_decisions.
+        self.arc_planner.advance_if_beat_met(current_tick=self.tick_count)
 
         self._save_state()
 
@@ -1093,6 +1107,15 @@ class StoryDirector:
         # across sub-actions (within the same tick or across ticks) are
         # caught uniformly.
         if dispatch_result.get("ok") and dispatch_result.get("kind") not in (None, "noop"):
+            # Bump the arc touch counter for every cast-targeted
+            # dispatch. The planner uses this counter (not a
+            # recent_decisions walk) to decide when to advance beats.
+            touched_npc = (
+                action.get("npc_id") or action.get("target") or focus_npc
+            )
+            if isinstance(touched_npc, str) and touched_npc not in ("all", "*"):
+                self.arc_planner.record_cast_touch(touched_npc)
+
             ledger_text = self._ledger_text_for(action)
             if ledger_text:
                 ledger_npc = (

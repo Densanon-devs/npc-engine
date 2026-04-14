@@ -1472,6 +1472,136 @@ All 75 tests green.
 
 ---
 
+## Arc touch counter fix (regression that was hiding in plain sight)
+
+### The gap
+
+Across the arcs, bio, rotation, bio-rotate v2, selfrep v1-v4, and
+budget runs — **six consecutive 3B benches** — the active arc
+proposed at T5 and never advanced past beat 1. Every run showed
+`Arc events (1): T5 PROPOSED ...` and nothing else. I chalked this
+up to "arc-vs-retry tension: retries push content away from the
+theme faster than touches accumulate."
+
+That was wrong. The real cause was a bug in the arc advancement
+logic that had been there since the arcs commit shipped.
+
+### Diagnosis
+
+`ArcPlanner.advance_if_beat_met` walked `recent_decisions` and
+counted cast-NPC touches. But `recent_decisions` is capped at 5
+ticks (for ALREADY DONE, rotation, and other concerns). That means
+the max touches visible to the advance check is
+`5 ticks × 3 workers = 15` in theory, but only as many as the
+cast can actually claim in a 5-tick window.
+
+For a single-NPC arc like `cast=[bess]`, the rolling 5-tick window
+can contain at most ~2-3 Bess touches (she gets ~1 per 2 ticks via
+rotation). Threshold = 4. **So single-NPC arcs literally could not
+advance on this setup.**
+
+Empirical confirmation from the selfrep_v4 data:
+
+```
+Bess focus touches T6-T15 (after proposal): 5 total across 10 ticks
+5-tick rolling window values:    0, 1, 1, 2, 2, 3, 2, 3, 2, 3
+Maximum window sum: 3 (threshold: 4)
+```
+
+The rolling window maxed out at 3 — just under the threshold.
+Every prior bench was silently broken; I just hadn't noticed
+because "arc didn't advance" isn't a visible failure mode.
+
+### The fix
+
+Track cast touches on the arc itself instead of walking
+`recent_decisions`. Three changes:
+
+1. New field `NarrativeArc.touches_since_last_advance: int = 0`.
+2. New method `ArcPlanner.record_cast_touch(npc_id)` — bumps the
+   active arc's counter if the NPC is in its cast. Called from
+   `_run_single_action` after every successful non-noop dispatch.
+3. `advance_if_beat_met(current_tick)` — signature changed from
+   `(recent_decisions, current_tick)` to just `(current_tick)`.
+   Checks `arc.touches_since_last_advance >= threshold` instead
+   of walking the decisions list. Resets the counter to 0 on
+   advance.
+
+Tests updated to match the new API; 3 new tests added for
+`record_cast_touch` (bumps on cast, ignores non-cast, ignores
+inactive arcs).
+
+### Empirical verification (3B, 15 × 3 actions)
+
+```
+Metric                 biorot_v2  selfrep_v4  budget  arctouch
+Self-rep retries              0          10       6         3
+Wall-clock total          188s        221s    253s       92s
+Mean per-tick           12.5s       14.8s   16.8s      6.2s
+Unique vocab words          247         286     276       318
+Arc advanced past beat 1?    no          no      no       YES (T11)
+```
+
+**The arc advancement unlocked a cascade of benefits:**
+
+1. **Arc advances seed → escalate at T11.** First beat advance in
+   any 3B run across the whole session.
+2. **After T11, the prompt carries "Current beat 2/4: escalate —
+   deepen the stakes with a new wrinkle"** instead of the generic
+   seed guidance. The model has more specific direction to write
+   toward.
+3. **Content naturally diversifies** because the prompt is driving
+   it toward a different kind of beat. Bess T11 wove world-lore
+   with new invention: *"The king's tax collectors were never
+   seen again after that. I think they were replaced by a
+   different group."* Bess T13 cross-wove three threads:
+   Roderick+Mara, wolf bounty, Silverwood.
+4. **Naturally diverse content → fewer self-rep triggers**
+   (3 retries vs v4's 10).
+5. **Fewer retries → dramatically faster wall-clock**
+   (92s vs v4's 221s — 58% reduction).
+6. **Vocabulary diversity jumps to 318** — the highest of any 3B
+   run in the session.
+
+Every metric improved except the retry-driven bio-hook surfacing
+that v4 had (cellar passage 4 → 1, Elena garden 3 → 0). Those
+losses are offset by the new cellar passage appearing as a full
+QUEST at T3 (a richer hit than v4's multiple one-line mentions),
+and by the qualitative improvement in content quality where T11
+and T13 weave multiple bio and lore threads together.
+
+### Why this matters for the stack
+
+The fix is small (20 lines) but the impact is disproportionate
+because it unblocked a **positive feedback loop** between arc
+advancement, prompt specificity, content diversity, and retry
+pressure. All the prior session work (bio injection, rotation,
+self-rep) was building infrastructure that depended on this loop
+working. With the arc advancement broken, each layer was
+compensating for a deeper problem.
+
+The honest lesson: I should have verified arcs were advancing in
+the 3B bench output of the original commit (f457d2d), not just
+the unit tests. The unit tests passed because they constructed
+their own `recent_decisions` lists; they never exercised the
+"only last 5 ticks visible" interaction.
+
+### Tests
+
+3 new unit tests plus updates to 2 existing arc tests (which used
+the old `(recent_decisions, current_tick)` signature). All 78
+offline tests green.
+
+### Tuning knobs
+
+- `touches_since_last_advance` is the new counter field on each
+  arc; persisted via `asdict` → `NarrativeArc(**a)` round-trip
+  in `ArcPlanner._load` / `.save` without code changes (dataclass
+  handles it automatically).
+- Threshold constant `_ARC_BEAT_ADVANCE_THRESHOLD = 4` unchanged.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -1538,7 +1668,10 @@ prompt template and three action types. By the end it's:
 - **A semantic ledger** (every injection embedded + similarity-checked)
 - **A dialogue auto-feed loop** (every player turn observed)
 - **A multi-tick arc planner** (deterministic cluster → theme + 4-beat
-  skeleton, touch-counter advancement, zero new LLM calls)
+  skeleton, per-arc touch counter with unbounded accumulation,
+  zero new LLM calls — arcs now advance reliably on single-NPC
+  casts, which unlocks a prompt-specificity-content-diversity
+  feedback loop)
 - **NPC bio injection** (goals + personality + personal_knowledge +
   world_facts per focus NPC, one-line motive summary per roster NPC)
 - **Dynamic example rotation** (per-worker example picker that
@@ -1575,34 +1708,37 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Arc-vs-retry tension
+### 1. Multi-arc concurrency (arcs running in parallel)
 
-**The gap:** In the selfrep v4 bench, the narrative arc proposed
-at T5 (cast=[bess], theme="Bess drops a tray of hot soup") never
-advanced past beat 1. The self-rep retries kept pushing Bess's
-content away from the initial theme faster than the arc's touch
-counter could accumulate on a coherent thread. Arc cohesion vs
-retry-driven diversity is a real tension: one wants repetition
-(for beat progression), the other kills it.
+**The gap:** `ArcPlanner` tracks one active arc at a time. A
+Cardinal-style overseer would run 2-3 plot threads in parallel
+(e.g., the player's main quest + a background faction tension +
+a slow-burn mystery). When one arc resolves, the next proposes
+at the new densest ledger cluster — which may or may not be the
+theme the player is actually invested in.
 
 **Design sketch:**
-- If a retry is about to fire AND the candidate matches the
-  active arc's theme (NOT just an earlier output), let it through
-  — treating on-theme continuation as not-self-repetition.
-- Or: have the arc planner give a "beat grace window" — during
-  the first N ticks after a beat advance, raise the self-rep
-  threshold so the model can develop the beat without fighting
-  retries.
-- Or: only retry if the candidate's similarity is to content from
-  a DIFFERENT arc beat (semantic versioning of ledger entries).
+- `ArcPlanner.active_arcs: list[NarrativeArc]` instead of a
+  single `active_arc_id`.
+- Each tick, pick WHICH active arc this tick advances based on
+  the focus NPC. If focus_npc is in arc A's cast, use A's beat
+  goal in the prompt. If it's in both A and B, prefer the one
+  with the fewer touches_since_last_advance (weakest thread).
+- Cap at 3 concurrent active arcs; new proposals go on hold when
+  the cap is reached.
+- Cluster analysis for proposals needs to exclude ledger entries
+  that are already covered by an active arc's cast (so the same
+  thread doesn't spawn a duplicate arc).
 
-**Where to start:** `_precheck_self_repetition` — pass the active
-arc's theme text in and skip the retry if the candidate's
-similarity is to content tagged with the same arc/beat.
+**Where to start:** `ArcPlanner` class in `story_director.py`.
+The cleanest migration is to make `active_arc_id` → list and
+update `active()` to return the most-relevant arc given a
+focus_npc context.
 
-**Risk:** Medium. The arc-beat coupling is new; may require
-tagging ledger entries with the arc beat they were written
-during.
+**Risk:** Medium. Multi-arc state management is significantly
+more complex than single-arc. Prompt token budget for multiple
+arc blocks is a concern — probably best to only inject the one
+arc the current worker's focus_npc is in.
 
 ### 2. Own-output fixation (done — see Self-repetition precheck section)
 

@@ -1399,9 +1399,9 @@ def test_arc_planner_skips_when_active_arc_exists():
 
 
 def test_arc_planner_advances_beat_after_n_touches():
-    """When the focus NPC is touched >= threshold times since the last
-    advance, the current beat should bump by one. Below the threshold,
-    no advance. At or above, advance."""
+    """When the active arc's touches_since_last_advance reaches the
+    threshold, the current beat should bump by one. Below the
+    threshold, no advance. Counter resets to 0 on advance."""
     import npc_engine.story_director as sd_mod
     restore = _isolate_state_file("arc_advance")
     try:
@@ -1417,30 +1417,91 @@ def test_arc_planner_advances_beat_after_n_touches():
         director.arc_planner.arcs.append(arc)
         director.arc_planner.active_arc_id = arc.id
 
+        threshold = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
+
         # Below threshold — should NOT advance
-        below = [
-            {"tick": 2, "action": {"action": "event", "target": "mara", "event": "x"}},
-        ] * (sd_mod._ARC_BEAT_ADVANCE_THRESHOLD - 1)
-        for i, d in enumerate(below):
-            d["tick"] = 2 + i
-        advanced = director.arc_planner.advance_if_beat_met(below, current_tick=4)
+        arc.touches_since_last_advance = threshold - 1
+        advanced = director.arc_planner.advance_if_beat_met(current_tick=5)
         assert advanced is False, "must not advance below threshold"
         assert arc.current_beat == 0, arc.current_beat
-
-        # At threshold — SHOULD advance
-        recent = [
-            {"tick": 2 + i, "action": {"action": "event", "target": "mara", "event": "x"}}
-            for i in range(sd_mod._ARC_BEAT_ADVANCE_THRESHOLD)
-        ]
-        advanced = director.arc_planner.advance_if_beat_met(
-            recent, current_tick=1 + sd_mod._ARC_BEAT_ADVANCE_THRESHOLD + 1,
+        assert arc.touches_since_last_advance == threshold - 1, (
+            "below-threshold call should not reset the counter"
         )
+
+        # At threshold — SHOULD advance and counter resets
+        arc.touches_since_last_advance = threshold
+        advanced = director.arc_planner.advance_if_beat_met(current_tick=6)
         assert advanced is True
         assert arc.current_beat == 1, arc.current_beat
         assert arc.status == "active"
+        assert arc.touches_since_last_advance == 0, "counter must reset on advance"
+        assert arc.last_advanced_at_tick == 6
     finally:
         restore()
     print("  [PASS] arc_planner_advances_beat_after_n_touches")
+
+
+def test_arc_planner_record_cast_touch_bumps_counter():
+    """record_cast_touch should bump the active arc's counter ONLY
+    when the NPC is in the cast."""
+    restore = _isolate_state_file("arc_record_touch")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        arc = NarrativeArc(
+            id="arc_touch_test", theme="x",
+            focus_npcs=["mara", "kael"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=0, status="active",
+            started_at_tick=1, last_advanced_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_id = arc.id
+
+        # Touch cast NPCs — counter bumps
+        director.arc_planner.record_cast_touch("mara")
+        director.arc_planner.record_cast_touch("kael")
+        assert arc.touches_since_last_advance == 2
+
+        # Touch non-cast NPC — counter does NOT bump
+        director.arc_planner.record_cast_touch("bess")
+        assert arc.touches_since_last_advance == 2
+
+        # None / empty string — no-op
+        director.arc_planner.record_cast_touch(None)
+        director.arc_planner.record_cast_touch("")
+        assert arc.touches_since_last_advance == 2
+    finally:
+        restore()
+    print("  [PASS] arc_planner_record_cast_touch_bumps_counter")
+
+
+def test_arc_planner_record_cast_touch_ignores_inactive_arcs():
+    """record_cast_touch is a no-op when there's no active arc or
+    the arc is resolved."""
+    restore = _isolate_state_file("arc_touch_inactive")
+    try:
+        engine = _make_stub_engine()
+        director = StoryDirector(engine)
+        # No active arc
+        director.arc_planner.record_cast_touch("mara")
+        assert director.arc_planner.active() is None
+
+        # Add a resolved arc
+        resolved = NarrativeArc(
+            id="arc_done", theme="x", focus_npcs=["mara"],
+            beat_goals=["a", "b", "c", "d"],
+            current_beat=4, status="resolved",
+            started_at_tick=1, last_advanced_at_tick=10,
+        )
+        director.arc_planner.arcs.append(resolved)
+        director.arc_planner.active_arc_id = None
+        director.arc_planner.record_cast_touch("mara")
+        # Resolved arc's counter stays at 0
+        assert resolved.touches_since_last_advance == 0
+    finally:
+        restore()
+    print("  [PASS] arc_planner_record_cast_touch_ignores_inactive_arcs")
 
 
 def test_arc_planner_resolves_after_all_beats():
@@ -1461,14 +1522,8 @@ def test_arc_planner_resolves_after_all_beats():
         director.arc_planner.arcs.append(arc)
         director.arc_planner.active_arc_id = arc.id
 
-        threshold = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
-        recent = [
-            {"tick": 7 + i, "action": {"action": "event", "target": "mara", "event": "x"}}
-            for i in range(threshold)
-        ]
-        advanced = director.arc_planner.advance_if_beat_met(
-            recent, current_tick=7 + threshold,
-        )
+        arc.touches_since_last_advance = sd_mod._ARC_BEAT_ADVANCE_THRESHOLD
+        advanced = director.arc_planner.advance_if_beat_met(current_tick=10)
         assert advanced is True
         assert arc.current_beat == 4
         assert arc.is_complete
@@ -2585,6 +2640,8 @@ def main():
     test_arc_planner_skips_with_too_few_entries()
     test_arc_planner_skips_when_active_arc_exists()
     test_arc_planner_advances_beat_after_n_touches()
+    test_arc_planner_record_cast_touch_bumps_counter()
+    test_arc_planner_record_cast_touch_ignores_inactive_arcs()
     test_arc_planner_resolves_after_all_beats()
     test_prompt_contains_active_arc_block()
     test_arc_planner_persists_and_reloads()
