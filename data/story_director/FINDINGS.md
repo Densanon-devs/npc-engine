@@ -1479,6 +1479,100 @@ empirical bench showed they didn't produce measurable improvements.
 Documented here so the rationale survives future "should we try X
 again?" conversations.
 
+### Real parallel workers via N independent Llama instances (rejected 2026-04-14)
+
+**The design:** Multi-action ticks run sub-actions sequentially
+because llama-cpp-python's `Llama` instance isn't thread-safe.
+Hypothesis: load N independent `Llama` instances (one per worker
+slot), dispatch sub-actions concurrently via
+`ThreadPoolExecutor`, route each LLM call through a thread-safe
+`ModelPool` that serves slots from a `queue.Queue`. llama-cpp-
+python releases the GIL during inference, so threads against
+independent instances *should* run concurrently and deliver
+~2× wall-clock improvement on 3-worker ticks.
+
+**The scout finding:** Confirmed via a standalone bench
+(`scratch_parallel_llama.py`) that 2-3 independent Qwen 2.5 3B
+instances on CPU could parallelize cleanly:
+
+| Config | Per-call time | Total | Speedup |
+|---|---|---|---|
+| 2 instances, short prompts (40 tok) | 1.16 / 1.27s | serial 2.42s, parallel 1.28s | **1.89×** |
+| 3 instances, short prompts (40 tok) | ~1.5s | serial 4.69s, parallel 2.22s | **2.11×** |
+| 3 instances, bench-realistic (1500-tok prompts, 400-tok output) | 7.3s | serial 21.9s, parallel 12.4s | **1.76×** |
+
+Memory cost: GGUF weights mmap-shared across instances; only the
+KV cache (~30 MB at n_ctx=4096) is per-instance. Loading N=3
+instances added ~100 MB on top of the existing PIE base_model.
+
+**The prototype:** Implemented `ModelPool` class in story_director.py
+with thread-safe slot acquisition, eagerly loaded via
+`StoryDirector.enable_parallel_workers(n, model_path)`. Wired into
+`tick()` so multi-action ticks dispatch via `ThreadPoolExecutor`
+when the pool is set. Added `_state_lock` (RLock) around the
+shared-state mutation phase of `_run_single_action` (dispatch,
+ledger.add, bio mention) so concurrent workers can't race on
+writes. LLM calls run outside the lock through the pool's own
+slot mechanism. 4 unit tests covered ModelPool slot mechanics,
+exception-safety, and serial-path regression.
+
+**The empirical bench killed it.** Side-by-side on real Story
+Director ticks (15-tick equivalent, 3 sub-actions per tick):
+
+| Config | Mean per-tick |
+|---|---|
+| Serial baseline (PIE base_model, n_threads=8) | **~12.4s** |
+| Parallel workers=2, n_threads=2 | 22.5s |
+| Parallel workers=3, n_threads=2 | 33.1s |
+| Parallel workers=2, n_threads=4 | 67.6s (high variance) |
+| Parallel workers=3, n_threads=4 | 42.4s |
+
+**Every parallel configuration was slower than serial.** Added
+thread-id traces to confirm workers DO start at the same
+timestamp (real concurrency), but they finish at very different
+times — within one tick we'd see 10.9s, 22.9s, and 29.3s for the
+three workers.
+
+**Why the bench shows the opposite of the scout:**
+
+1. **Per-call time triples under contention.** The serial baseline
+   uses PIE's well-tuned `base_model` with `n_threads=8` against
+   the full CPU. Splitting into N=2 or N=3 pool instances forces
+   `n_threads_per_instance=2-4`, which makes EACH call ~3× slower
+   even before contention.
+2. **The slowest worker dominates.** With `actions_per_tick=3`,
+   one worker generates a ~400-token response while another stops
+   at ~80. The tick wall-clock = max(worker_times), not the sum.
+   So a 3-worker tick is bounded by the longest call, often
+   roughly equal to (or worse than) the serial total.
+3. **The scout's near-2× speedup was an artifact** of equalised
+   short prompts (40 tokens) where generation length variance
+   doesn't matter and per-call time is short enough that
+   contention overhead is negligible.
+
+**The fundamental hardware story:** Modern CPU llama.cpp
+inference is already thread-saturated by a single instance with
+n_threads ≈ physical cores. There's no spare CPU for parallel
+instances to use — they trade serial efficiency for nominal
+concurrency and lose. Parallelism would only win on hardware
+with significantly more cores than the serial baseline can use,
+or with much longer prompts where the eval phase dominates and
+benefits from N independent batches.
+
+**The rollback:** Discarded the prototype with `git restore`. No
+code survives in the main branch — only this rejection note and
+the new `_run_single_action` `_state_lock` (kept as harmless,
+zero-overhead defensive code). The scratch script was deleted.
+
+**When to reconsider:** If a future deployment runs on a 16+
+core server with the model fitting fully on GPU (CUDA contexts
+allowing per-thread instance ownership), the math changes.
+Could also be worth revisiting if Story Director moves to
+larger context windows (8k+) where eval-phase time dominates
+and per-instance n_threads=4 isn't a meaningful slowdown.
+
+---
+
 ### Co-reference alias expansion in FactLedger (rejected 2026-04-14)
 
 **The design:** Build an alias map from NPC profiles
