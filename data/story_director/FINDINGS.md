@@ -1472,6 +1472,86 @@ All 75 tests green.
 
 ---
 
+## Speculative items evaluated and rejected
+
+Features that were implemented, tested, and rolled back because the
+empirical bench showed they didn't produce measurable improvements.
+Documented here so the rationale survives future "should we try X
+again?" conversations.
+
+### Co-reference alias expansion in FactLedger (rejected 2026-04-14)
+
+**The design:** Build an alias map from NPC profiles
+(`{"elder": "noah", "merchant": "mara"}`) and append canonical NPC
+ids to ledger text before embedding — so *"The elder fears the
+merchant"* becomes *"The elder fears the merchant noah mara"* in
+embedding space. The idea was that role references would cluster
+closer to direct name mentions in similarity checks, helping
+bio-grounded hooks surface and tightening arc proposals.
+
+**The prototype:** Implemented on a throwaway branch
+(`story-director-coref`). Added `FactLedger.alias_map` field,
+`_expand_aliases(text)` method, and integration in `_encode`.
+StoryDirector built the alias map from NPC `identity.role` fields
+on init with ambiguous-short-form dropping (if two NPCs share
+"guard" as a short form, the alias is not added). 8 unit tests
+covered all the cases. Code was clean, tests were green.
+
+**Empirical results (15-tick 3B bench, same config as baseline):**
+
+| Metric | Baseline | With coref |
+|---|---|---|
+| Self-rep retries | 5 | 5 |
+| Unique vocab | 307 | 307 |
+| Tam apprentice hits | 1 | 1 |
+| Cellar passage hits | 1 | 1 |
+| Metal-id (Kael pk) | 1 | 1 |
+| Elena garden | 3 | 3 |
+| Bitter well | 3 | 2 |
+| Merchant guild | 5 | 5 |
+| Wall-clock | 186s | 232s (+25%) |
+
+Every content metric is identical or noise-level. Vocabulary is
+*exactly* the same (307 unique words in both runs). The one
+non-zero delta (bitter well −1) is a single ledger entry and
+within run-to-run variance. Wall-clock went up 25% but that's
+inside the 3B CPU-variance envelope (other 15-tick runs have
+ranged 92s–253s for identical configs).
+
+**Why it didn't help:** Instrumented the ledger to see how often
+role references show up *without* the canonical name. Of 44 ledger
+entries:
+
+- 40% "name only" — no role to expand, coref is a no-op
+- 13% "role only" — coref could help IN THEORY
+- 20% "both name+role" — redundant, already has name
+- 25% "neither" — coref is a no-op
+
+So only 13% of entries were eligible for coref to affect
+clustering. And on those, the modern sentence-transformers embedder
+(`all-MiniLM-L6-v2`) already places role words semantically close
+to their canonical referents in its training data — "elder" and
+"Noah" don't need explicit anchoring to cluster. Adding the
+canonical id is a minor nudge in embedding space, not a dramatic
+shift, and the nudge is too weak to push any pair across the
+similarity threshold that would change arc clustering or retry
+behavior.
+
+**The rollback:** Discarded the branch via `git checkout
+story-director`. No code survives in the main branch — only this
+rejection note.
+
+**When to reconsider:** If future work uses a smaller / weaker
+embedder that's actually bad at coreference, or if sessions show
+meaningful content stuck behind role-reference language, this
+could be worth revisiting with a more aggressive expansion strategy
+(e.g., replacing role substrings entirely rather than appending,
+or using a second pass to rewrite historical ledger entries).
+Current empirical evidence says the effort doesn't land on the
+current stack.
+
+---
+
 ## Ledger compression (binary embeddings sidecar)
 
 ### The gap
