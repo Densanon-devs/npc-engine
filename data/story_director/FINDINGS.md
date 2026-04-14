@@ -1202,6 +1202,148 @@ catches the test data. All 63 tests pass.
 
 ---
 
+## Self-repetition precheck (breaking the own-output copy loop)
+
+### The gap
+
+Intra-bio rotation broke the per-NPC bio copy loop but exposed the
+next layer: the model fixating on **its own recent outputs**. In
+the biorot_v2 bench, Bess's T1 emergent invention — *"Bess, hiding
+a furtive look in her eyes, suddenly drops a tray of hot soup,
+spilling it on her leg"* — reappeared with variations at T13 and
+T15. The ALREADY DONE block was supposed to catch this but matches
+too loosely; text variations slip through.
+
+The FactLedger already had the data. In the biorot_v2 bench log:
+T13 and T15 were flagged as 0.75 and 0.84 similarity to T1's hot
+soup scene, with NLI=neutral. The machinery existed — it just
+didn't *act* on similarity warnings. Only contradictions triggered
+a retry.
+
+### The fix
+
+`_precheck_self_repetition(action)` runs right after the existing
+`_precheck_contradiction` in the retry path. If the contradiction
+check returned None (no NLI contradiction), the self-rep check
+looks for a near-duplicate same-NPC match in the ledger and retries
+the worker with a prescriptive nudge.
+
+Four tuning iterations landed the current thresholds:
+
+**v1 (aggressive retry):** similarity >= 0.75, 8-tick lookback,
+"pick a different angle" retry nudge. Broke the hot soup fixation
+(3→1) but 2 retries degenerated to noops, killing Kael's Tam
+thread (3→0). The nudge was too open-ended for 3B — the model
+couldn't "invent a fresh situation" and gave up.
+
+**v2 (noop fallback):** if the retry returns `noop` and the
+original wasn't a noop, fall back to the original. Preserved
+content but reverted the fixation fix (hot soup 1→3) because the
+retry kept noop'ing and the fallback kept re-dispatching the
+repeated content.
+
+**v3 (NPC-restricted ledger + lower threshold + prescriptive nudge):**
+- New `restrict_to_npc` param on `FactLedger.check` — limits
+  similarity search to same-NPC entries. Previously the ledger
+  returned the overall top match, so a cross-NPC gossip entry at
+  0.86 could mask a same-NPC repetition at 0.77.
+- Lowered threshold 0.75 → 0.70. With the NPC restriction, false
+  positive risk is much lower; any same-NPC match at 0.70+ is
+  almost certainly paraphrased self-repetition.
+- Prescriptive retry nudge lists concrete alternatives:
+  *"(a) a conversation with another villager, (b) a physical
+  observation about a place or object, (c) a new piece of
+  information from a rumor, (d) a reaction to something another
+  NPC did."* Gives the model options instead of asking for
+  "invention".
+
+Big vocabulary jump (247 → 288) but T15 still slipped through
+because it was 14 ticks after T1, beyond the 8-tick lookback. The
+entire first half of a 15-tick session was untouchable.
+
+**v4 (extended lookback):** 8 → 20 tick window. Catches cross-half-
+session repetitions while still letting long-range plot echoes
+through (Kael mentioning Tam at T5 and again at T50 is continuity,
+not repetition).
+
+### Empirical verification (3B, 15 × 3 actions)
+
+| Metric | arcs | bio | rotation | biorot v2 | **selfrep v4** |
+|---|---|---|---|---|---|
+| Bess hot-soup hits | 0 | 0 | 0 | 3 | **1** |
+| Cellar passage (Bess p9) | 1 | 1 | 1 | 1 | **4** |
+| Elena / garden | 0 | 2 | 3 | 1 | 3 |
+| Tam apprentice | 0 | 0 | 4 | 3 | 1 |
+| Metal-id (Kael pk) | 0 | 0 | 0 | 1 | 1 |
+| Unique vocab words | 204 | 221 | 260 | 247 | **286** |
+| Self-rep retries fired | 0 | 0 | 0 | 0 | 10 |
+| Noops dispatched | 0 | 0 | 0 | 0 | **0** |
+
+**T15 Bess is the exemplar.** In biorot_v2 the model wrote
+*"Bess the innkeeper curses loudly as hot soup spills on her leg"*
+— a near-verbatim repeat of T1. In selfrep v4 the precheck fired
+(matches_tick=1, lookback=14 ticks now inside the 20-tick window),
+the retry nudge landed, and the model wrote instead:
+
+> *"Bess, the innkeeper, steps cautiously into the old cellar
+> tunnels beneath the inn, her nostrils flaring as she breathes in
+> the musty air. The scent is faint but unmistakabl[e]..."*
+
+That's Bess's priority-9 goal (*"Clear whatever is in the cellar
+tunnels before guests find out"*) expressed as a physical
+investigation scene. On-bio, novel, and directly triggered by the
+retry nudge's "(b) a physical observation about a place or object"
+option.
+
+**Cellar passage hits quadrupled** (1 → 4) because this retry
+mechanism produced new cellar beats that wouldn't have existed
+otherwise.
+
+### Honest tradeoffs
+
+- **Wall-clock roughly 2.4x** (biorot_v2 ~92s → selfrep_v4 ~221s).
+  10 retries × ~13s each on average. Retry is cheap per-call but
+  frequent. Production use would probably want a per-tick cap or a
+  per-session budget to bound latency.
+- **Arc advancement suffers.** In v4 the arc proposed at T5
+  (cast=[bess], theme="Bess drops a tray of hot soup") never
+  advanced past beat 1. The retries kept pushing Bess's content
+  away from the initial theme faster than the touch counter could
+  accumulate on a coherent thread. Real tension between
+  "retry for content diversity" and "arc wants thematic cohesion."
+  Noted as a next-steps v5 item.
+- **Some strong bio threads weaken.** Kael's Tam content dropped
+  from 3 → 1 because some of his Tam-related beats were retried
+  away as "too similar to earlier Tam content." The model's
+  continuity on a single thread loses to the diversity-pressure.
+- **No noops dispatched.** The v2 noop fallback still applies —
+  if the retry degenerates to silence, we keep the original. Zero
+  dispatched noops in the v4 run.
+
+### Tests
+
+8 offline unit tests cover the precheck: fires on high-sim
+same-NPC recent match, passes `restrict_to_npc` to the ledger,
+`FactLedger.check` honors the filter, ignores low-similarity,
+ignores old matches, ignores target='all', retry path dispatches
+the retry's new content, retry falls back to original on noop,
+contradiction takes precedence over self-repetition. All 72 tests
+green including the integration smoke test.
+
+### Tuning knobs
+
+- `_SELF_REPETITION_SIMILARITY = 0.70` (was 0.75 in v1/v2)
+- `_SELF_REPETITION_LOOKBACK_TICKS = 20` (was 8 in v1-v3)
+- Contradiction retry takes precedence — self-rep only runs if
+  contradiction precheck returned None
+- Noop fallback: if the retry returns `noop` and the original
+  wasn't a noop, keep the original
+- Ledger `restrict_to_npc` param — new optional filter, backward
+  compatible (defaults to no filter, current contradiction path
+  unchanged)
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -1280,6 +1422,12 @@ prompt template and three action types. By the end it's:
   cooldown exclusion that drops items from the prompt once
   mentioned enough — this broke the "each NPC quotes its top bio
   item verbatim" copy loop)
+- **Self-repetition retry** (pre-dispatch ledger check with
+  NPC-restricted similarity, prescriptive retry nudge listing
+  concrete alternatives, noop fallback — broke the "model
+  paraphrases its own recent output" copy loop and surfaced
+  Bess's cellar tunnels quest by turning a would-be hot-soup
+  repeat into a fresh investigation beat)
 - **A REST surface** (`/story/tick`, `/story/state`, `/story/player_action`)
 
 Every single piece exists because an empirical run produced a failure
@@ -1299,36 +1447,67 @@ Ranked by leverage. Each entry is detailed enough that a fresh
 session (or another agent) can start work without re-reading the
 full narrative above.
 
-### 1. Own-output fixation (the new inner loop)
+### 1. Retry budgeting — reduce wall-clock overhead of self-rep retries
 
-**The gap:** After intra-bio rotation shipped, a new failure mode
-appeared in the 3B bench: Bess's T1 emergent invention (*"dropping
-a tray of hot soup"*) reappeared at T13 and T15 with slight
-phrasing variations. The model is no longer copying few-shots or
-bio items — it's copying *its own recent outputs*. ALREADY DONE is
-supposed to catch this via the "do not repeat" block, but it's
-matching too loosely — text variations slip through.
+**The gap:** Self-repetition retries produce richer content but
+cost ~2.4x wall-clock on the 15-tick 3B bench (92s → 221s).
+10 retries per 15 ticks is a lot; each one is a full LLM call.
+For production (real-time game loop, tick every 30+ seconds),
+this is probably tolerable. For a fast cadence (one beat every
+5-10 seconds), the latency is prohibitive.
 
 **Design sketch:**
-- Add a `_recent_output_phrases` rolling buffer (last ~15 dispatch
-  texts).
-- Before dispatching, embed the candidate against the recent buffer
-  using the existing FactLedger embedder. If cosine > 0.8 against
-  any of the last 10-15 outputs, retry the worker with an explicit
-  "You already wrote this: [prior], pick a different angle" preamble.
-- Alternatively: hash the first 6 content words of each recent
-  output and reject a new candidate whose first 6 content words
-  overlap with >= 4 of them.
+- Add a per-tick retry budget (e.g., at most 1 retry across all
+  multi-action workers in a single tick).
+- Or a per-session soft cap: after N self-rep retries in a row,
+  raise the similarity threshold for the next few ticks.
+- Or gate on action kind: only retry for facts (which tend to be
+  the most repeat-prone), not events or quests.
 
-**Where to start:** `_run_single_action` already has a pre-dispatch
-retry path for contradictions. Add a second pre-dispatch check for
-self-repetition right alongside it. Same pattern as
-`_precheck_contradiction` → `_precheck_self_repetition`.
+**Where to start:** `_run_single_action` for per-tick counting
+(state lives on the director as `_tick_retry_count` which resets
+each tick). Or `_precheck_self_repetition` for per-session rate
+limiting.
 
-**Risk:** Low. The retry pattern already exists. Main risk is
-false positives — the detector could reject content that's
-legitimately building on a prior thread. Mitigate by only rejecting
-when the NPC TARGET matches AND the similarity is high.
+**Risk:** Low. The check itself is already conditional and
+optional.
+
+### 2. Arc-vs-retry tension
+
+**The gap:** In the selfrep v4 bench, the narrative arc proposed
+at T5 (cast=[bess], theme="Bess drops a tray of hot soup") never
+advanced past beat 1. The self-rep retries kept pushing Bess's
+content away from the initial theme faster than the arc's touch
+counter could accumulate on a coherent thread. Arc cohesion vs
+retry-driven diversity is a real tension: one wants repetition
+(for beat progression), the other kills it.
+
+**Design sketch:**
+- If a retry is about to fire AND the candidate matches the
+  active arc's theme (NOT just an earlier output), let it through
+  — treating on-theme continuation as not-self-repetition.
+- Or: have the arc planner give a "beat grace window" — during
+  the first N ticks after a beat advance, raise the self-rep
+  threshold so the model can develop the beat without fighting
+  retries.
+- Or: only retry if the candidate's similarity is to content from
+  a DIFFERENT arc beat (semantic versioning of ledger entries).
+
+**Where to start:** `_precheck_self_repetition` — pass the active
+arc's theme text in and skip the retry if the candidate's
+similarity is to content tagged with the same arc/beat.
+
+**Risk:** Medium. The arc-beat coupling is new; may require
+tagging ledger entries with the arc beat they were written
+during.
+
+### 3. Own-output fixation (superseded by self-rep retry)
+
+**Done in commit 0a7ada8 → TBD.** The pre-dispatch
+`_precheck_self_repetition` + NPC-restricted ledger check + noop
+fallback collectively break the own-output copy loop that was the
+prior #1 item. See the "Self-repetition precheck" section above
+for the full writeup and empirical verification.
 
 ### 2. Auto-diversify examples.yaml library
 

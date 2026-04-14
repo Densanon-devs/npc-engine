@@ -126,6 +126,29 @@ _ARC_BEAT_SKELETON = (
 # paraphrase doesn't immediately hide the item the model is using.
 _BIO_COOLDOWN_THRESHOLD = 2
 
+# Cosine similarity above which a candidate action is considered a
+# self-repetition of a recent Director output. Tuned against the 3B
+# selfrep_v2 bench where a literal near-duplicate ("hot soup spills
+# on her leg" vs "hot soup, spilling it on her leg") sat at 0.73 —
+# just under the earlier 0.75 threshold. With the check now restricted
+# to same-NPC matches, the false-positive risk is much lower: any
+# same-NPC match at 0.70+ is almost certainly the model paraphrasing
+# itself rather than gossip propagation or organic continuation.
+_SELF_REPETITION_SIMILARITY = 0.70
+
+# Only consider self-repetition against recent same-NPC entries.
+# Older matches are stale and may legitimately be echoed; cross-NPC
+# similarity is gossip propagation, not self-repetition.
+#
+# Tuned against the v3 bench where T15 Bess repeated T1 Bess's
+# "hot soup spilling" scene at sim=0.79 but was ignored because
+# 14 ticks > 8-tick lookback. With 15-tick sessions as the norm
+# and the ledger capped at 200 entries (~60 ticks of 3-worker
+# content), 20 ticks covers "most of a session" while still letting
+# long-range plot echoes through (Kael mentioning Tam at T5 and
+# again at T50 is continuity, not repetition).
+_SELF_REPETITION_LOOKBACK_TICKS = 20
+
 # Common English stopwords to strip from bio-mention detection. Short
 # list — we want to avoid false positives from generic structural
 # words, not build a linguistically accurate stopword set.
@@ -276,12 +299,20 @@ class FactLedger:
 
     # ── Public API ──────────────────────────────────────────────
 
-    def check(self, text: str) -> Optional[dict]:
+    def check(self, text: str,
+              restrict_to_npc: Optional[str] = None) -> Optional[dict]:
         """
         Compute a similarity + NLI warning for ``text`` against the
         existing ledger, WITHOUT storing it. Used by the Director's
         pre-dispatch retry path: if a candidate action would conflict
         with prior content, retry before mutating the world.
+
+        When ``restrict_to_npc`` is set, the similarity comparison
+        only considers ledger entries with a matching ``npc_id``. This
+        is how the self-repetition precheck distinguishes "the same
+        NPC is saying the same thing again" (a copy loop) from "a
+        different NPC is referencing earlier content" (gossip
+        propagation, which is legitimate).
 
         Returns a warning dict (with ``nli`` block and ``contradiction``
         flag if applicable) or ``None`` if no match exceeds the threshold.
@@ -289,7 +320,7 @@ class FactLedger:
         embedding = self._encode(text)
         if embedding is None:
             return None
-        warning = self._check_similarity(embedding)
+        warning = self._check_similarity(embedding, restrict_to_npc=restrict_to_npc)
         if warning is None:
             return None
         nli = self.contradiction_checker.check(
@@ -376,14 +407,30 @@ class FactLedger:
 
     # ── Internals ───────────────────────────────────────────────
 
-    def _check_similarity(self, new_embedding) -> Optional[dict]:
+    def _check_similarity(self, new_embedding,
+                           restrict_to_npc: Optional[str] = None) -> Optional[dict]:
         if not self.entries:
             return None
         np = self.np
         if np is None:
             return None
+
+        # Optionally filter to entries tied to a specific NPC. This
+        # is what makes the self-repetition precheck NPC-aware: it
+        # looks for the best *same-NPC* match rather than the overall
+        # top match, which may be cross-NPC gossip propagation.
+        if restrict_to_npc is not None:
+            candidates = [
+                e for e in self.entries
+                if e.get("npc_id") == restrict_to_npc
+            ]
+        else:
+            candidates = self.entries
+        if not candidates:
+            return None
+
         try:
-            existing = np.array([e["embedding"] for e in self.entries])
+            existing = np.array([e["embedding"] for e in candidates])
             sims = existing @ new_embedding  # cosine, vectors normalized
             max_idx = int(sims.argmax())
             max_sim = float(sims[max_idx])
@@ -392,7 +439,7 @@ class FactLedger:
             return None
         if max_sim < self.threshold:
             return None
-        match = self.entries[max_idx]
+        match = candidates[max_idx]
         return {
             "similarity": round(max_sim, 3),
             "matches_text": match["text"][:240],
@@ -940,9 +987,11 @@ class StoryDirector:
         # Cheap to check (one embed + one NLI inference) and bypassed
         # entirely on the first few ticks before the ledger has anything.
         retried = False
+        retry_reason: Optional[str] = None
         precheck = self._precheck_contradiction(action)
         if precheck is not None:
             retried = True
+            retry_reason = "contradiction"
             retry_prompt = prompt + (
                 "\n\nNOTE: Your previous attempt contradicts an earlier "
                 f"established fact (T{precheck['matches_tick']} "
@@ -955,6 +1004,52 @@ class StoryDirector:
             action2 = self._finalize_action(action2, focus_npc, action_kind)
             action = action2
             raw = raw2
+        else:
+            # Fall through to the self-repetition check only if the
+            # contradiction path didn't already retry. Both checks share
+            # the retry budget — one is enough to keep latency bounded.
+            selfrep = self._precheck_self_repetition(action)
+            if selfrep is not None:
+                retried = True
+                retry_reason = "self_repetition"
+                # Prescriptive retry nudge — "pick a different angle"
+                # was too open-ended on 3B and frequently produced
+                # noops. Listing concrete alternatives gives the model
+                # something to latch onto instead of asking for
+                # "invention".
+                retry_prompt = prompt + (
+                    "\n\nNOTE: Your previous attempt repeats a recent "
+                    f"beat (T{selfrep['matches_tick']} "
+                    f"{selfrep['matches_kind']}/{selfrep['matches_npc']}): "
+                    f"\"{selfrep['matches_text'][:160]}\". "
+                    "Write a DIFFERENT beat for this NPC. Pick one of: "
+                    "(a) a conversation with another villager named in "
+                    "the world state, (b) a physical observation about a "
+                    "place or object in the setting, (c) a new piece of "
+                    "information learned from a rumor or event, "
+                    "(d) a reaction to something another NPC did. "
+                    "Do not repeat the prior beat or paraphrase it."
+                )
+                original_action = action
+                original_raw = raw
+                raw2, action2 = self._llm_call_with_repair(retry_prompt, max_tokens, temperature)
+                action2 = self._finalize_action(action2, focus_npc, action_kind)
+                # Guard: on 3B the "pick a different angle" retry
+                # sometimes degenerates to a noop, which drops the
+                # content entirely. For self-rep retries (unlike
+                # contradiction), the original is *content-valid* —
+                # it was just slightly repetitive. Falling back to it
+                # is strictly better than losing the tick to silence.
+                if action2.get("action") == "noop" and original_action.get("action") != "noop":
+                    logger.info(
+                        "Self-repetition retry returned noop; falling "
+                        "back to the original action to preserve content"
+                    )
+                    action = original_action
+                    raw = original_raw
+                else:
+                    action = action2
+                    raw = raw2
 
         dispatch_result = self._dispatch(action)
 
@@ -984,7 +1079,10 @@ class StoryDirector:
                 self._record_bio_mentions(focus_npc, ledger_text)
 
         if retried:
-            dispatch_result["retried_after_contradiction"] = True
+            if retry_reason == "contradiction":
+                dispatch_result["retried_after_contradiction"] = True
+            elif retry_reason == "self_repetition":
+                dispatch_result["retried_after_self_repetition"] = True
 
         return {
             "focus_npc": focus_npc,
@@ -993,6 +1091,7 @@ class StoryDirector:
             "dispatch": dispatch_result,
             "raw_response": raw,
             "retried": retried,
+            "retry_reason": retry_reason,
         }
 
     def _finalize_action(self, action: dict, focus_npc: Optional[str],
@@ -1019,6 +1118,54 @@ class StoryDirector:
         if warning is not None and warning.get("contradiction"):
             return warning
         return None
+
+    def _precheck_self_repetition(self, action: dict) -> Optional[dict]:
+        """
+        Fire when the candidate is *too similar to a recent Director
+        output on the same NPC*. This catches the fixation mode where
+        the model invents a scene and then paraphrases its own
+        invention across later ticks (observed in the 3B biorot_v2
+        bench: Bess's "dropping a tray of hot soup" scene reappeared
+        at T13 and T15).
+
+        The ledger check is restricted to same-NPC entries via
+        ``restrict_to_npc`` so cross-NPC gossip propagation (where the
+        top similarity match might be a different NPC talking about
+        the same subject) doesn't mask a real self-repetition match
+        sitting lower in the rankings.
+
+        Two filters still apply:
+
+        1. ``similarity >= _SELF_REPETITION_SIMILARITY`` (0.70) —
+           with the NPC restriction, any same-NPC match at 0.70+ is
+           almost certainly paraphrased self-repetition.
+        2. ``tick_count + 1 - matches_tick <= _SELF_REPETITION_LOOKBACK_TICKS``
+           — stale matches from 10+ ticks ago shouldn't block new
+           content; plot threads can legitimately echo earlier beats
+           after enough time passes.
+
+        Returns the warning dict if both hold, None otherwise.
+        """
+        text = self._ledger_text_for(action)
+        if not text:
+            return None
+
+        candidate_npc = (
+            action.get("npc_id") or action.get("target") or ""
+        )
+        if not candidate_npc or candidate_npc in ("all", "*"):
+            return None
+
+        warning = self.ledger.check(text, restrict_to_npc=candidate_npc)
+        if warning is None:
+            return None
+        if warning.get("similarity", 0) < _SELF_REPETITION_SIMILARITY:
+            return None
+
+        matches_tick = int(warning.get("matches_tick", 0) or 0)
+        if self.tick_count + 1 - matches_tick > _SELF_REPETITION_LOOKBACK_TICKS:
+            return None
+        return warning
 
     def _architect_plan(self, n_actions: int) -> list[tuple[Optional[str], str]]:
         """

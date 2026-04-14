@@ -1732,6 +1732,329 @@ def test_prompt_skips_bio_block_when_npc_is_bare():
     print("  [PASS] prompt_skips_bio_block_when_npc_is_bare")
 
 
+# ── Self-repetition precheck tests ──────────────────────────────
+
+def _fake_ledger_check(warning: Optional[dict]):
+    """Return a monkey-patch replacement for ``ledger.check`` that
+    always yields the same canned warning. None means no match.
+    Accepts (and ignores) the ``restrict_to_npc`` kwarg so tests can
+    drive the real precheck code path which always passes it."""
+    def _check(_text, restrict_to_npc=None):
+        return warning
+    return _check
+
+
+def test_precheck_self_repetition_fires_on_high_sim_same_npc_recent():
+    """A candidate that's near-duplicate (>=0.75) of a recent
+    same-NPC Director entry must fire the precheck."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.tick_count = 5
+    director.ledger.check = _fake_ledger_check({
+        "similarity": 0.84,
+        "matches_text": "Bess drops a tray of hot soup",
+        "matches_npc": "bess",
+        "matches_kind": "event",
+        "matches_tick": 3,
+    })
+    action = {"action": "event", "target": "bess",
+              "event": "Bess fumbles a bowl of steaming stew"}
+    warning = director._precheck_self_repetition(action)
+    assert warning is not None
+    assert warning["matches_tick"] == 3
+    print("  [PASS] precheck_self_repetition_fires_on_high_sim_same_npc_recent")
+
+
+def test_precheck_self_repetition_restricts_to_same_npc():
+    """The precheck must pass restrict_to_npc to the ledger so the
+    similarity search only considers same-NPC entries. Cross-NPC
+    similarity is gossip propagation, not self-repetition — and
+    without the restriction, a high-similarity cross-NPC match would
+    mask a lower-similarity same-NPC match sitting below it."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.tick_count = 5
+    # Capture the kwargs so we can verify the NPC filter was passed
+    captured = {}
+    def spy_check(text, restrict_to_npc=None):
+        captured["npc"] = restrict_to_npc
+        return None
+    director.ledger.check = spy_check
+    action = {"action": "event", "target": "bess",
+              "event": "Bess does something"}
+    director._precheck_self_repetition(action)
+    assert captured["npc"] == "bess", captured
+    print("  [PASS] precheck_self_repetition_restricts_to_same_npc")
+
+
+def test_ledger_check_filters_by_restrict_to_npc():
+    """FactLedger.check(restrict_to_npc=X) must only compare against
+    entries with matching npc_id. Unit-tests the filter directly."""
+    import numpy as np
+    tmp_path = NPC_ROOT / "data" / "story_director" / "_tmp_ledger_restrict.json"
+    if tmp_path.exists():
+        tmp_path.unlink()
+    try:
+        ledger = FactLedger(tmp_path, threshold=0.5)
+        ledger._np = np
+        ledger._embedder = False
+        # Seed with a high-similarity kael entry and a lower-similarity
+        # bess entry against the same query embedding [1, 0]
+        ledger.entries = [
+            {"text": "Kael near-duplicate",
+             "embedding": [0.99, 0.14],  # sim=0.99 to [1,0]
+             "npc_id": "kael", "kind": "event", "tick": 1},
+            {"text": "Bess weaker match",
+             "embedding": [0.75, 0.66],  # sim=0.75 to [1,0]
+             "npc_id": "bess", "kind": "event", "tick": 2},
+        ]
+        # Stub the query to return the base embedding directly
+        ledger._encode = lambda text: np.array([1.0, 0.0], dtype=float)
+
+        # No restriction: top match should be kael (sim 0.99)
+        w_open = ledger.check("anything")
+        assert w_open is not None
+        assert w_open["matches_npc"] == "kael"
+
+        # Restricted to bess: should return bess (sim 0.75), NOT kael
+        w_bess = ledger.check("anything", restrict_to_npc="bess")
+        assert w_bess is not None
+        assert w_bess["matches_npc"] == "bess"
+        assert w_bess["similarity"] < 0.99  # not the kael match
+
+        # Restricted to an unknown NPC: should return None
+        w_none = ledger.check("anything", restrict_to_npc="nobody")
+        assert w_none is None
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+    print("  [PASS] ledger_check_filters_by_restrict_to_npc")
+
+
+def test_precheck_self_repetition_ignores_low_similarity():
+    """Matches below the 0.75 threshold are thematic overlap, not
+    self-repetition — they should not fire the precheck."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.tick_count = 5
+    director.ledger.check = _fake_ledger_check({
+        "similarity": 0.62,
+        "matches_text": "Something else about bess",
+        "matches_npc": "bess",
+        "matches_kind": "fact",
+        "matches_tick": 3,
+    })
+    action = {"action": "fact", "npc_id": "bess", "fact": "Bess hears a rumor"}
+    assert director._precheck_self_repetition(action) is None
+    print("  [PASS] precheck_self_repetition_ignores_low_similarity")
+
+
+def test_precheck_self_repetition_ignores_old_matches():
+    """Stale matches from beyond the lookback window should be
+    allowed through — plot threads can legitimately echo old beats
+    after enough ticks pass. The window is set by
+    _SELF_REPETITION_LOOKBACK_TICKS so the test derives its ticks
+    from the module constant rather than hardcoding."""
+    import npc_engine.story_director as sd_mod
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    window = sd_mod._SELF_REPETITION_LOOKBACK_TICKS
+    # Current tick_count, candidate at tick_count+1. Put the match
+    # JUST beyond the window (age = window + 2).
+    director.tick_count = window + 5
+    old_tick = director.tick_count + 1 - (window + 2)
+    director.ledger.check = _fake_ledger_check({
+        "similarity": 0.90,
+        "matches_text": "Bess ancient event",
+        "matches_npc": "bess",
+        "matches_kind": "event",
+        "matches_tick": old_tick,
+    })
+    action = {"action": "event", "target": "bess", "event": "Bess does something"}
+    assert director._precheck_self_repetition(action) is None, (
+        "match beyond lookback window should not fire"
+    )
+    # Same setup but match WITHIN the window (age = window - 1).
+    recent_tick = director.tick_count + 1 - (window - 1)
+    director.ledger.check = _fake_ledger_check({
+        "similarity": 0.90,
+        "matches_text": "Bess recent event",
+        "matches_npc": "bess",
+        "matches_kind": "event",
+        "matches_tick": recent_tick,
+    })
+    assert director._precheck_self_repetition(action) is not None
+    print("  [PASS] precheck_self_repetition_ignores_old_matches")
+
+
+def test_precheck_self_repetition_ignores_all_target():
+    """target='all' is a global event without a specific NPC — can't
+    self-repeat a global, so the precheck should skip."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    director.tick_count = 5
+    director.ledger.check = _fake_ledger_check({
+        "similarity": 0.90,
+        "matches_text": "Village-wide event",
+        "matches_npc": "all",
+        "matches_kind": "event",
+        "matches_tick": 4,
+    })
+    action = {"action": "event", "target": "all", "event": "Something"}
+    assert director._precheck_self_repetition(action) is None
+    print("  [PASS] precheck_self_repetition_ignores_all_target")
+
+
+def test_self_repetition_retry_dispatches_second_response():
+    """Full integration: when the ledger precheck fires self-repetition,
+    the worker retries once and the SECOND response is what gets
+    dispatched. Flag retried_after_self_repetition on the result."""
+    restore = _isolate_state_file("selfrep_retry")
+    try:
+        engine = _make_stub_engine(responses=[
+            # First response: will be flagged as a near-duplicate
+            '{"action": "event", "target": "bess", '
+            '"event": "Bess drops a tray of hot soup again."}',
+            # Retry response: novel content
+            '{"action": "event", "target": "bess", '
+            '"event": "Bess slips out the back door to meet a mysterious courier."}',
+        ])
+        director = StoryDirector(engine)
+        # Pin rotation so this tick targets bess with an event
+        director.recent_player_actions = [{
+            "at": "2030-01-01T00:00:00+00:00",
+            "tick_at_time": 0,
+            "text": "Player visited Bess.",
+            "target": "bess",
+        }]
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
+        # Monkey-patch ledger.check so the first attempt fires
+        # self-repetition. Note both _precheck_contradiction and
+        # _precheck_self_repetition call ledger.check on the first
+        # attempt, so we need the warning to persist for calls 1 AND
+        # 2. Calls 3+ (from the retry path or the dispatch layer)
+        # get None so the retry dispatches cleanly.
+        selfrep_warning = {
+            "similarity": 0.88,
+            "matches_text": "Bess drops a hot soup tray",
+            "matches_npc": "bess",
+            "matches_kind": "event",
+            "matches_tick": 1,
+        }
+        call_count = {"n": 0}
+        def staged_check(_text, restrict_to_npc=None):
+            call_count["n"] += 1
+            if call_count["n"] <= 2:
+                return selfrep_warning
+            return None
+        director.ledger.check = staged_check
+
+        result = director.tick()
+        assert len(engine.pie.base_model.prompts) == 2, (
+            f"expected two LLM calls (first + retry), got "
+            f"{len(engine.pie.base_model.prompts)}"
+        )
+        assert "mysterious courier" in str(result["action"]), result
+        assert result["dispatch"].get("retried_after_self_repetition") is True, (
+            result["dispatch"]
+        )
+    finally:
+        restore()
+    print("  [PASS] self_repetition_retry_dispatches_second_response")
+
+
+def test_self_repetition_retry_falls_back_to_original_on_noop():
+    """On 3B the retry nudge sometimes degenerates to a noop, which
+    would drop the content entirely. Self-rep retries must fall back
+    to the original action when the retry returns a noop — slight
+    repetition is better than silence."""
+    restore = _isolate_state_file("selfrep_noop")
+    try:
+        engine = _make_stub_engine(responses=[
+            # First response: valid content that will be flagged
+            '{"action": "event", "target": "bess", '
+            '"event": "Bess drops a tray of hot soup again."}',
+            # Retry returns a noop — the fallback should kick in
+            '{"action": "noop", "reason": "stuck"}',
+        ])
+        director = StoryDirector(engine)
+        director.recent_player_actions = [{
+            "at": "2030-01-01T00:00:00+00:00",
+            "tick_at_time": 0,
+            "text": "Player visited Bess.",
+            "target": "bess",
+        }]
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
+        selfrep_warning = {
+            "similarity": 0.88,
+            "matches_text": "Bess drops a hot soup tray",
+            "matches_npc": "bess",
+            "matches_kind": "event",
+            "matches_tick": 1,
+        }
+        director.ledger.check = _fake_ledger_check(selfrep_warning)
+
+        result = director.tick()
+        # Retry was triggered (two LLM calls happened)
+        assert len(engine.pie.base_model.prompts) == 2, engine.pie.base_model.prompts
+        # But the DISPATCHED action is the ORIGINAL, not the noop
+        assert result["action"].get("action") == "event", result["action"]
+        assert "hot soup" in str(result["action"]).lower(), result["action"]
+        # Still flagged as retried (for auditing)
+        assert result["dispatch"].get("retried_after_self_repetition") is True
+    finally:
+        restore()
+    print("  [PASS] self_repetition_retry_falls_back_to_original_on_noop")
+
+
+def test_contradiction_takes_precedence_over_self_repetition():
+    """If both checks would fire, the contradiction path wins (it's
+    the more serious case). The self-repetition check only runs when
+    the contradiction check returned None."""
+    restore = _isolate_state_file("contra_precedence")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "fact", "npc_id": "bess", '
+            '"fact": "Bess denies the merchant guild rumors."}',
+            '{"action": "fact", "npc_id": "bess", '
+            '"fact": "Bess keeps her ear to the ground."}',
+        ])
+        director = StoryDirector(engine)
+        director.recent_player_actions = [{
+            "at": "2030-01-01T00:00:00+00:00",
+            "tick_at_time": 0,
+            "text": "Player asked Bess about rumors.",
+            "target": "bess",
+        }]
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("fact")
+        # Both contradiction AND high-sim — contradiction should win
+        contradiction_warning = {
+            "similarity": 0.88,
+            "matches_text": "Bess confirmed the guild rumors",
+            "matches_npc": "bess",
+            "matches_kind": "fact",
+            "matches_tick": 1,
+            "contradiction": True,
+            "nli": {"label": "contradiction", "confidence": 0.95,
+                    "is_contradiction": True, "scores": {}},
+        }
+        call_count = {"n": 0}
+        def staged_check(_text, restrict_to_npc=None):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return contradiction_warning
+            return None
+        director.ledger.check = staged_check
+
+        result = director.tick()
+        # Should be flagged with contradiction, not self_repetition
+        assert result["dispatch"].get("retried_after_contradiction") is True
+        assert result["dispatch"].get("retried_after_self_repetition") is not True
+    finally:
+        restore()
+    print("  [PASS] contradiction_takes_precedence_over_self_repetition")
+
+
 # ── Intra-bio rotation tests ────────────────────────────────────
 
 def test_is_bio_mentioned_detects_word_overlap():
@@ -2133,6 +2456,17 @@ def main():
     test_world_snapshot_roster_includes_top_goal()
     test_prompt_contains_bio_block_for_focus_npc()
     test_prompt_skips_bio_block_when_npc_is_bare()
+
+    print("\nStory Director — self-repetition precheck tests")
+    test_precheck_self_repetition_fires_on_high_sim_same_npc_recent()
+    test_precheck_self_repetition_restricts_to_same_npc()
+    test_ledger_check_filters_by_restrict_to_npc()
+    test_precheck_self_repetition_ignores_low_similarity()
+    test_precheck_self_repetition_ignores_old_matches()
+    test_precheck_self_repetition_ignores_all_target()
+    test_self_repetition_retry_dispatches_second_response()
+    test_self_repetition_retry_falls_back_to_original_on_noop()
+    test_contradiction_takes_precedence_over_self_repetition()
 
     print("\nStory Director — intra-bio rotation tests")
     test_is_bio_mentioned_detects_word_overlap()
