@@ -2356,54 +2356,9 @@ first), then `_pick_examples` to honor theme diversity.
 **Risk:** Medium — hand-curating 15+ good examples takes effort.
 Auto-generation risks drift from the lore bible's tone.
 
-### 6. Real parallel workers
+### 6. Real parallel workers (rejected — see "Speculative items evaluated and rejected")
 
-**The gap:** Multi-action ticks run sub-actions sequentially because
-llama-cpp-python isn't thread-safe for one base model. On a 3-action
-tick this means 3× the wall-clock vs. theoretical parallel.
-
-**Design sketch:**
-- Option A: keep N independent `BaseModel` instances (3× the RAM but
-  trivial parallelism via `concurrent.futures.ThreadPoolExecutor`)
-- Option B: use PIE's `GenerationQueue` from `densanon.core.pipeline`
-  which already prioritizes background work — the Director would
-  enqueue all N sub-actions at once and await results
-- Option C: a separate llama.cpp server process per worker (real
-  process isolation, no thread issues)
-
-**Where to start:** `npc_engine/story_director.py:_run_single_action`
-is the single function that needs to become async-aware. The
-`tick(actions_per_tick=N)` loop would dispatch N futures and
-`await asyncio.gather(*futures)`.
-
-**Risk:** RAM cost for option A is significant (3× model size in
-working memory). Option B requires understanding PIE's queue
-priorities. Option C is the cleanest but adds operational complexity.
-
-### 7. Co-reference resolution in the FactLedger
-
-**The gap:** Embedding similarity misses linked entities when names
-differ. *"The elder is hiding something"* and *"Noah won't talk
-about it"* would not match because "elder" vs "Noah" lowers the
-embedding cosine.
-
-**Design sketch:**
-- Build an alias map from NPC profiles: `{"noah": ["the elder",
-  "village elder"], "kael": ["the blacksmith", "smith"]}`
-- Before embedding, expand alias references in the text to the
-  canonical NPC id. So *"The elder is hiding something"* becomes
-  *"noah (the elder) is hiding something"* before passing to the
-  embedder.
-- The expanded form keeps the original surface text in the entry
-  but uses the augmented version for similarity comparison.
-
-**Where to start:** `FactLedger._encode` in
-`npc_engine/story_director.py`. Add an `_expand_aliases` step that
-reads NPC profile data from `engine.pie.npc_knowledge.profiles`
-and substitutes role/title references. Cache the alias map on the
-director (it doesn't change at runtime).
-
-**Risk:** Low — purely additive to the embedding path.
+### 7. Co-reference resolution in the FactLedger (rejected — see "Speculative items evaluated and rejected")
 
 ### 8. Auto-augmentor generation for narrative examples
 
