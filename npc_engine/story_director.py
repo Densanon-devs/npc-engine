@@ -39,6 +39,7 @@ logger = logging.getLogger("NPCEngine.story_director")
 DATA_DIR = NPC_ENGINE_ROOT / "data" / "story_director"
 LORE_FILE = DATA_DIR / "ashenvale_lore.md"
 EXAMPLES_FILE = DATA_DIR / "examples.yaml"
+EXAMPLES_TERSE_FILE = DATA_DIR / "examples_terse.yaml"
 STATE_FILE = DATA_DIR / "state.json"
 LEDGER_FILE = DATA_DIR / "fact_ledger.json"
 ARCS_FILE = DATA_DIR / "arcs.json"
@@ -1017,16 +1018,51 @@ class StoryDirector:
             self._lore_text = LORE_FILE.read_text(encoding="utf-8").strip()
         else:
             logger.warning(f"Story Director lore file not found at {LORE_FILE}")
+        self._reload_examples()
 
-        if EXAMPLES_FILE.exists():
+    def _reload_examples(self) -> None:
+        """
+        Load the example library that matches the current
+        ``narration_mode``. Terse mode prefers
+        ``examples_terse.yaml`` — if it's missing, we fall back to
+        the prose library so an incomplete terse install still
+        works (with the partial-compliance result documented for
+        the prose-only toggle commit).
+
+        Called from ``_load_assets`` at init and from
+        ``set_narration_mode`` if the caller flips modes after init.
+        """
+        source = (
+            EXAMPLES_TERSE_FILE
+            if self.narration_mode == "terse" and EXAMPLES_TERSE_FILE.exists()
+            else EXAMPLES_FILE
+        )
+        if source.exists():
             try:
-                data = yaml.safe_load(EXAMPLES_FILE.read_text(encoding="utf-8")) or {}
+                data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
                 self._examples = data.get("examples", []) or []
+                logger.info(f"Story Director loaded {len(self._examples)} examples from {source.name}")
             except Exception as e:
                 logger.error(f"Story Director failed to load examples: {e}")
                 self._examples = []
         else:
-            logger.warning(f"Story Director examples file not found at {EXAMPLES_FILE}")
+            logger.warning(f"Story Director examples file not found at {source}")
+            self._examples = []
+
+    def set_narration_mode(self, mode: str) -> None:
+        """
+        Switch between ``prose`` and ``terse`` output styles at runtime.
+        Reloads the matching example library so the picker serves the
+        right style templates to the next tick. Use this instead of
+        assigning to ``self.narration_mode`` directly — the attribute
+        assignment works but won't reload examples.
+        """
+        if mode not in ("prose", "terse"):
+            raise ValueError(f"narration_mode must be 'prose' or 'terse', got {mode!r}")
+        if mode == self.narration_mode:
+            return
+        self.narration_mode = mode
+        self._reload_examples()
 
     def _load_state(self) -> None:
         if not STATE_FILE.exists():

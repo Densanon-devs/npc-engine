@@ -259,7 +259,7 @@ def main():
     print("-" * 72)
 
     engine, tmp_pie, tmp_npc = boot_engine(model_path, args.reset)
-    engine.story_director.narration_mode = args.narration_mode
+    engine.story_director.set_narration_mode(args.narration_mode)
     print(f"Narration mode: {args.narration_mode}")
     try:
         outcomes = Counter()

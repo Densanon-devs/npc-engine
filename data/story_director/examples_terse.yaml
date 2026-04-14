@@ -1,0 +1,211 @@
+# Terse few-shot examples for the Story Director.
+# Used when StoryDirector.narration_mode == "terse". Each example's
+# content field (event/fact/quest description) is a single
+# third-person factual statement, under 25 words, no internal
+# monologue or quoted dialogue.
+#
+# Same 17-example structure as examples.yaml: 2-3 per NPC, balanced
+# across event/fact/quest kinds. Primary_npc tags preserved so the
+# _pick_examples() filter works identically.
+#
+# These examples serve as STYLE TEMPLATES — the model mimics them
+# more strongly than it follows the OUTPUT STYLE instructions in
+# the prompt. Keep them rigorously short.
+
+examples:
+  # ── kael ────────────────────────────────────────────────────
+  - primary_npc: kael
+    world_state: |
+      Kael lost three hammers last week. Rumors say Mara was seen near the forge.
+      No active quests from Kael.
+    action:
+      action: quest
+      reason: "Standing tension needs a quest hook."
+      npc_id: kael
+      quest:
+        id: missing_hammers
+        name: "The Missing Hammers"
+        description: "Kael's hammers have been going missing from the forge at night. Find out who is taking them."
+        reward: "A forged blade of your choosing."
+        objectives:
+          - "Watch the forge after dark and identify the thief."
+
+  - primary_npc: kael
+    world_state: |
+      Kael has not heard from apprentice Tam in three weeks. Tam went into the Silverwood.
+    action:
+      action: event
+      reason: "Surface the Tam thread as a short observation."
+      target: kael
+      event: "Kael works late at the forge tonight, staring at Tam's empty workbench."
+
+  - primary_npc: kael
+    world_state: |
+      Kael examined a merchant-guild dagger and the steel rang wrong.
+    action:
+      action: fact
+      reason: "Expose Kael's metal-sense skill as a terse personal fact."
+      npc_id: kael
+      fact: "A merchant-guild blade I tested today rings false. The steel is counterfeit."
+      fact_type: personal
+
+  # ── mara ────────────────────────────────────────────────────
+  - primary_npc: mara
+    world_state: |
+      Mara has a new shipment arriving. Kael has been asking where her steel comes from.
+    action:
+      action: fact
+      reason: "Plant Mara's counterfeit anxiety as a short private worry."
+      npc_id: mara
+      fact: "The blacksmith is asking questions. I must move the shipment before he finds the marks."
+      fact_type: personal
+
+  - primary_npc: mara
+    world_state: |
+      Mara received word from a contact in the Northern Port. Her shop has been quiet.
+    action:
+      action: event
+      reason: "Plant the informant network bio hook with a small event."
+      target: mara
+      event: "A hooded courier left a small package at Mara's shop before dawn."
+
+  - primary_npc: mara
+    world_state: |
+      Mara offered the player a discount yesterday. Trust with Mara: 45.
+    action:
+      action: quest
+      reason: "Mara warming up opens a legitimate-looking errand."
+      npc_id: mara
+      quest:
+        id: discreet_errand
+        name: "A Discreet Errand"
+        description: "Mara needs a package collected from a courier at the east gate at dusk. She says it is fabric dye."
+        reward: "Forty gold and a silk cloak."
+        objectives:
+          - "Meet the courier at the east gate at dusk and deliver the package to Mara."
+
+  # ── noah ────────────────────────────────────────────────────
+  - primary_npc: noah
+    world_state: |
+      Noah tends Elena's rose garden every morning. He found a letter today among the thorns.
+    action:
+      action: fact
+      reason: "Elena's memory is a private bio hook — surface as terse personal fact."
+      npc_id: noah
+      fact: "I found a letter from Elena in her rose garden today. Five years, and she still has things to say."
+      fact_type: personal
+
+  - primary_npc: noah
+    world_state: |
+      Noah holds the old king's sealed letter unopened. The well water has turned bitter.
+    action:
+      action: event
+      reason: "Tighten the sealed-letter + bitter-well coincidence with a small action."
+      target: noah
+      event: "Noah held the sealed letter over a candle tonight, then put it away again."
+
+  - primary_npc: noah
+    world_state: |
+      A traveler from the Northern Alliance lands was seen riding in at sunset.
+    action:
+      action: quest
+      reason: "Noah's Border War history gives him stakes in any Northern arrival."
+      npc_id: noah
+      quest:
+        id: northern_traveler
+        name: "The Northern Traveler"
+        description: "Noah recognized the traveler's colors as Northern Alliance. He wants to know why they have come."
+        reward: "Noah's old campaign journal and the elder's trust."
+        objectives:
+          - "Shadow the traveler through the village and report their purpose."
+
+  # ── bess ────────────────────────────────────────────────────
+  - primary_npc: bess
+    world_state: |
+      Bess heard travelers say the tax collector's body was found on the north road.
+    action:
+      action: quest
+      reason: "Strong news hook + gossip-hub NPC is the natural quest origin."
+      npc_id: bess
+      quest:
+        id: tax_collector_body
+        name: "The Road North"
+        description: "The tax collector's body was found on the north road. Bess wants to know who killed him."
+        reward: "Free room and board for a season."
+        objectives:
+          - "Travel the north road and find out who killed the tax collector."
+
+  - primary_npc: bess
+    world_state: |
+      Bess has been keeping a lantern near the cellar door at night. Something in the tunnels keeps her up.
+    action:
+      action: event
+      reason: "Surface the cellar-tunnels bio goal as a short physical observation."
+      target: bess
+      event: "Bess locked the cellar door twice tonight and checked it again before dawn."
+
+  # ── elara ───────────────────────────────────────────────────
+  - primary_npc: elara
+    world_state: |
+      Elara returned from the Silverwood looking pale. Bess has not seen her in days.
+    action:
+      action: event
+      reason: "Silverwood as source of trouble, ripple to all."
+      target: all
+      event: "Elara stumbled out of the Silverwood white-faced and silent."
+
+  - primary_npc: elara
+    world_state: |
+      Elara tasted the well water and spat it out. Her grandmother Mira blessed this well decades ago.
+    action:
+      action: fact
+      reason: "Anchor the bitter-well arc to Mira's blessing."
+      npc_id: elara
+      fact: "The well water turns bitter. Mira's blessing is failing. Something old is stirring beneath the stones."
+      fact_type: personal
+
+  # ── guard_roderick ──────────────────────────────────────────
+  - primary_npc: guard_roderick
+    world_state: |
+      Roderick has no proof against Mara. Player has earned trust: 55.
+    action:
+      action: fact
+      reason: "Share Roderick's suspicion with the player."
+      npc_id: guard_roderick
+      fact: "I watch Mara the merchant. She smuggles more than fabric, but I have no proof yet."
+      fact_type: personal
+
+  - primary_npc: guard_roderick
+    world_state: |
+      Roderick has seen strange lights in the forest four nights this month.
+    action:
+      action: quest
+      reason: "The recurring strange-lights observation needs a player hook."
+      npc_id: guard_roderick
+      quest:
+        id: forest_lights
+        name: "Lights in the Silverwood"
+        description: "Roderick has seen strange lights north of the village four nights this month. He wants a scout."
+        reward: "Use of the guard barracks and Roderick's trust."
+        objectives:
+          - "Walk the north tree line after dark and observe the lights."
+
+  # ── pip ─────────────────────────────────────────────────────
+  - primary_npc: pip
+    world_state: |
+      Pip overheard something in Mara's shop. No event yet injected.
+    action:
+      action: event
+      reason: "Pip as listener surfaces a rumor without committing to a quest."
+      target: pip
+      event: "Pip overheard Mara whispering about a shipment hidden under the floorboards."
+
+  - primary_npc: pip
+    world_state: |
+      Pip dreams of becoming a guard. Roderick tossed him a copper and gave him a watching job.
+    action:
+      action: fact
+      reason: "Plant Pip's hero-worship as a short personal fact."
+      npc_id: pip
+      fact: "Captain Roderick trusts me. He gave me a copper and told me to watch the east gate."
+      fact_type: personal

@@ -2472,6 +2472,64 @@ def test_narration_mode_defaults_to_prose():
     print("  [PASS] narration_mode_defaults_to_prose")
 
 
+def test_set_narration_mode_reloads_examples_terse_library():
+    """Flipping narration_mode to 'terse' via set_narration_mode must
+    reload examples from examples_terse.yaml if it exists. Reverse
+    flip back to 'prose' should reload the original library."""
+    import npc_engine.story_director as sd_mod
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Pre-check: prose mode loaded the prose examples (17 entries
+    # after the expand commit)
+    assert director.narration_mode == "prose"
+    prose_count = len(director._examples)
+    assert prose_count > 0
+
+    # Terse file must exist alongside the prose file for this test
+    assert sd_mod.EXAMPLES_TERSE_FILE.exists(), (
+        "examples_terse.yaml missing — the terse library wasn't installed"
+    )
+
+    director.set_narration_mode("terse")
+    assert director.narration_mode == "terse"
+    terse_count = len(director._examples)
+    assert terse_count > 0
+    # Sanity: the terse examples should be meaningfully shorter than
+    # the prose ones. Compare mean word count of the event/fact
+    # description fields across loaded examples.
+    def mean_wc(items):
+        counts = []
+        for e in items:
+            a = e.get("action", {})
+            text = (a.get("event") or a.get("fact") or
+                    (a.get("quest", {}) or {}).get("description") or "")
+            if text:
+                counts.append(len(text.split()))
+        return sum(counts) / len(counts) if counts else 0
+
+    # Flip back and compare
+    terse_mean = mean_wc(director._examples)
+    director.set_narration_mode("prose")
+    prose_mean = mean_wc(director._examples)
+    assert terse_mean < prose_mean, (
+        f"terse examples should be shorter on average: "
+        f"terse_mean={terse_mean:.1f} vs prose_mean={prose_mean:.1f}"
+    )
+    print("  [PASS] set_narration_mode_reloads_examples_terse_library")
+
+
+def test_set_narration_mode_rejects_unknown_mode():
+    """set_narration_mode must reject unknown values to catch typos."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    try:
+        director.set_narration_mode("cinematic")
+    except ValueError:
+        print("  [PASS] set_narration_mode_rejects_unknown_mode")
+        return
+    raise AssertionError("expected ValueError on unknown mode")
+
+
 def test_narration_mode_terse_injects_output_style_block():
     """Setting narration_mode='terse' injects an OUTPUT STYLE block
     that instructs the model to produce short third-person statements."""
@@ -3056,6 +3114,8 @@ def main():
     print("\nStory Director — narration mode tests")
     test_narration_mode_defaults_to_prose()
     test_narration_mode_terse_injects_output_style_block()
+    test_set_narration_mode_reloads_examples_terse_library()
+    test_set_narration_mode_rejects_unknown_mode()
 
     print("\nStory Director — self-rep retry budget tests")
     test_self_rep_budget_resets_each_tick()
