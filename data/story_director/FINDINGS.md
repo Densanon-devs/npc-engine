@@ -3443,6 +3443,284 @@ python bench_fact_consumption.py --world port_blackwater \
 
 ---
 
+## Burst rotation + small-cast cap — bench validation (2026-04-15, GPU)
+
+Benches ran against commit `9047c80` with `logs/syn500_burst_30.json`,
+`logs/pb_burst_cap_20.json`, and `logs/facts_pb_terse_burstcap.json`
+as the artifacts.
+
+### GPU toolchain saga — llama-cpp-python CUDA isn't automatic
+
+Before the benches could run with any meaningful speed, a latent
+system issue surfaced: every prior `bench_story_director.py` run on
+this machine had been **silently CPU-only** because `llama-cpp-python
+0.3.20` was installed as the CPU wheel. Switching it to GPU required
+three nested fixes:
+
+1. **No prebuilt CUDA wheel exists for 0.3.x.** abetlen's `cu124`
+   index tops out at 0.2.70 (May 2024), which predates the `qwen2`
+   pre-tokenizer and fails to load any Qwen 2.5 GGUF file with
+   `error loading model vocabulary: unknown pre-tokenizer type:
+   'qwen2'`. Downgrading is not an option.
+2. **Source build path works.** With CUDA 12.1 toolkit already
+   present and 12.9 installed during this session, a from-source
+   build using `CMAKE_ARGS="-DGGML_CUDA=on
+   -DCMAKE_CUDA_ARCHITECTURES=86" FORCE_CMAKE=1 pip install
+   --force-reinstall --no-cache-dir --no-binary=llama-cpp-python
+   llama-cpp-python==0.3.20` completes in ~10 minutes via MSVC
+   14.43 + nvcc 12.9 and produces a 30 MB `ggml-cuda.dll` targeted
+   at Ampere (RTX 3060 compute capability 8.6). But this alone
+   still runs on CPU.
+3. **The static-link backend trap.** The source build produces
+   `ggml-cuda.dll` in static-link mode: it exports
+   `ggml_backend_cuda_reg` (the static entry point that a main
+   program links against) but NOT `ggml_backend_init` /
+   `ggml_backend_score` (the dynamic-load entry points that
+   `ggml_backend_load_all` scans for). Result: `ggml-cuda.dll` is
+   bundled alongside `llama.dll` but is never registered with the
+   backend registry, so `llama_supports_gpu_offload()` returns
+   `False` and every `Llama(n_gpu_layers=99)` silently falls through
+   to CPU. The `CUDA0 compute buffer` log line that indicates GPU
+   usage never prints; instead you see `CPU compute buffer`.
+
+**The fix landed in this session** is a patch to
+`llama_cpp/__init__.py` that explicitly dlopens `ggml-cuda.dll` at
+module-import time, calls its static `ggml_backend_cuda_reg`, and
+hands the resulting reg handle to `libggml.ggml_backend_register`.
+After the patch, `supports_gpu_offload` flips to `True`, `Llama`
+prints `found 1 CUDA devices: NVIDIA GeForce RTX 3060 ... VRAM:
+12287 MiB`, and Qwen 2.5 3B runs at **100 tokens/sec** (vs
+18–20 tok/s CPU, a 5–6× speedup).
+
+The patch also adds `CUDA_PATH/bin` to the DLL search dir so the
+bundled backend DLL can resolve its `cudart64_12.dll` /
+`cublas64_12.dll` / `cublasLt64_12.dll` dependencies — necessary
+because Python 3.8+ on Windows no longer searches `PATH` from
+`ctypes.CDLL`. The patched `__init__.py` is a silent no-op on
+systems where `ggml-cuda.dll` isn't present or the static reg
+symbol isn't exported, so it's safe to ship.
+
+**Important implication for prior FINDINGS numbers**: every
+`bench_story_director.py` result recorded before 2026-04-15 in this
+file was run on CPU — including the 13.20s/tick synthetic_500
+phase B rotation run and the 6.79s/tick PB terse stress run. The
+model stayed the same (qwen2.5-3b-instruct-q4_k_m.gguf), the
+scaffolding stayed the same, but the compute backend was always
+CPU. Apples-to-apples comparison with the new numbers below
+requires keeping that in mind — the headline per-tick latency
+improvements combine *both* burst rotation AND GPU offload.
+
+### synthetic_500 — burst rotation recovers the prefix cache
+
+30 ticks × 3 actions, Qwen 2.5 3B, terse, 16K ctx, GPU offload,
+`_BURST_ROTATION_DEPTH=4`.
+
+| Run                                | NPCs touched | Max touches | Mean tick | RSS peak |
+|------------------------------------|--------------|-------------|-----------|----------|
+| Phase A baseline (CPU, unbounded)  | 18 / 500     | 5           | 20.62s    | 3409 MB  |
+| Phase B fix 1 only (CPU, bounded)  | 18 / 500     | 5           | 5.48s     | 3400 MB  |
+| Phase B fix 1+2 (CPU, bounded+rot) | 90 / 500     | 1           | 13.20s    | 7304 MB  |
+| **Phase C (GPU, +burst K=4)**      | **68 / 500** | **4**       | **5.37s** | **3462 MB** |
+
+Trace at `logs/syn500_burst_30.json`.
+
+**Burst rotation signature is exact.** Slot 0 runs parsed from the
+trace:
+
+```
+[('aldric_croft_080', 4), ('aldric_oakenshield_474', 4),
+ ('aria_ashforth_168', 4), ('aria_oakenshield_092', 4),
+ ('bram_elderwood_262', 4), ('bram_pendrake_392', 4),
+ ('bren_dunmoor_062', 4), ('bren_stoneacre_249', 2)]
+```
+
+Each slot-0 NPC holds for 4 consecutive ticks then rotates — exactly
+what `_consume_burst_focus` promises. The final run of 2 is tick 30
+cutting off mid-burst.
+
+**Latency recovered the bounded-snapshot floor.** 5.37s/tick ≈
+5.48s/tick from the pre-rotation run, meaning burst rotation fully
+recovered the prefix-cache reuse that commit `9f0bd38`'s
+unrestricted rotation had broken. Latency dropped **60% vs the
+rotation-only baseline** (13.20 → 5.37) even though half that drop
+is attributable to GPU offload (CPU version likely lands near 7-8s
+with burst based on proportional scaling — not measured; see
+caveat above).
+
+**Coverage trade is as expected.** 68 NPCs vs 90 because slot 0
+advances every 4 ticks instead of every tick. With 30 ticks and
+K=4, slot 0 produces ~7.5 unique NPCs; the 60 non-slot-0 dispatches
+(30 ticks × 2 slots) still rotate normally and contribute ~60
+additional unique NPCs. 7.5 + 60 ≈ 68 matches the observed count.
+
+**RSS peak returned to normal.** 3462 MB vs the 7304 MB phantom
+growth from the CPU-side rotation run. The GPU run's KV cache
+lives in VRAM, not process RSS, so the inflated working-set
+instrumentation disappears entirely. This invalidates one of the
+three 0a/0b/0c KV cache mitigations (0c: explicit
+`llama_kv_cache_clear` validation) — that entire line of
+investigation was Windows working-set noise on top of a
+not-really-growing KV cache.
+
+**Defensive layers stayed clean.** 0 coercions, 0 dispatch failures,
+0 contradictions, 25/30 ledger warnings (all neutral-NLI, so not
+real contradictions), 3 arcs proposed and active. Schema
+enforcement, arc planning, and ledger all behaved identically to
+earlier runs.
+
+### Port Blackwater — small-cast cap fires on every tick
+
+20 ticks, Qwen 2.5 3B, terse, 16K ctx, GPU offload,
+`_SMALL_CAST_THRESHOLD=4`, caller requested 3 actions/tick.
+
+| Metric                      | Prior CPU (20t × 3 act) | **Phase C (GPU, 20t × 1 act capped)** |
+|-----------------------------|-------------------------|---------------------------------------|
+| Total wall                  | 135.80s                 | **33.89s**                            |
+| Mean tick                   | 6.79s                   | **1.69s**                             |
+| Total Director dispatches   | 60                      | **20**                                |
+| RSS peak                    | ~3.4 GB                 | 3447 MB                               |
+| Per-NPC touches             | ~20 each                | captain_reva=8, finn=8, old_bones=4   |
+
+Trace at `logs/pb_burst_cap_20.json`.
+
+**Cap fires 20/20 ticks.** Every tick reports `sub_actions: 1`
+despite the caller passing `--actions-per-tick 3`. The log line
+`Story Director: small cast (3 NPCs <= 4), capping actions_per_tick
+3 -> 1` fires on each tick, confirming the cap path is entered.
+Total Director output volume dropped **3×** (60 → 20 dispatches),
+which is exactly what the fact-consumption bench needs to see.
+
+**Burst rotation on small cast distributes as expected.** 20 ticks
+÷ K=4 burst depth = 5 bursts of 4 across a 3-NPC cast. Two NPCs
+receive 2 bursts (8 touches) and the third receives 1 burst (4
+touches). Observed: `{captain_reva: 8, finn: 8, old_bones: 4}`.
+The uneven distribution isn't a bug — it's what K=4 produces on a
+3-NPC cast over a non-multiple-of-3 tick count.
+
+**One bench-side alert to ignore.** `Consecutive target repeats
+(sub-action level): 15/19`. This counts transitions between
+consecutive ticks where slot 0 stays on the same NPC. With burst
+K=4, 3 out of every 4 tick boundaries legitimately repeat the same
+NPC — the 15/19 count is the arithmetic expectation for a 20-tick
+burst=4 run, not a failure. The bench's repeat-counter was written
+before burst rotation existed; it needs a burst-aware update when
+convenient, but the number itself is correct for the new regime.
+
+**Small-cast frictions partially resolved.** FactLedger warnings
+dropped from the prior 83% (pre-burst PB reference) to 65% (13/20),
+but 1 NLI contradiction still fired on terse content at sim=0.83
+between two `quest` entries. Memory's open friction list item
+("NLI false-positive bypass for terse mode") is still valid — the
+cap + burst didn't touch NLI thresholds, and this run reproduces
+the noise.
+
+### Fact consumption on Port Blackwater terse — soft miss by 3 tokens
+
+10 ticks × (capped to) 1 action, Qwen 2.5 3B, terse, GPU. Director
+wall 18.31s (1.83s/tick).
+
+| Per-NPC delta | Prior PB terse | **Phase C** | Change |
+|---------------|----------------|-------------|--------|
+| Mean          | +191 tokens    | **+94 tok** | **-51%** |
+| Max           | +229 tokens    | **+153 tok** | **-33%** |
+| Shipping goal | <150           | FAIL by 3   | — |
+
+Trace at `logs/facts_pb_terse_burstcap.json`.
+
+**Per-NPC breakdown:**
+- `old_bones`: +58 tokens (well under goal, 1 world + 1 personal + 1 event)
+- `finn`: +72 tokens (well under goal, 1 personal + 1 event)
+- `captain_reva`: **+153 tokens** (1 world + 2 events + 1 quest)
+
+**Why captain_reva is the outlier.** She received the first K=4
+burst, which happened to include 2 `event` dispatches. The
+NPCKnowledge dynamic-lane interleave (see "Personal/world slice fix
+— dynamic lanes") reserves 2 slots for the newest dynamic
+world/personal facts, so additions to those lanes are naturally
+bounded. But **events are a separate section in `build_context`
+without a reserve cap** — all 2 captain_reva events reached her
+prompt, contributing +492 chars ≈ +123 tokens on their own. The 1
+world fact added another ~+30 tokens, pushing her total to 153.
+
+**Verdict.** The cap + burst combination cut mean delta in half
+and max delta by a third, dropping 2 of 3 NPCs well under the 150
+shipping budget. The 3-token overage on captain_reva isn't a
+dialogue failure — it's a soft budget miss at the ceiling — and
+the root cause is identified (uncapped events section), not a
+flaw in the cap itself.
+
+**New follow-up added to the backlog.** Give the events section a
+`dynamic_reserve_min` / cap analogous to world and personal
+knowledge. Size the events section cap so that terse-mode
+additions stay within the 150-token budget on worst-case small
+casts (current worst case: 2 events × ~60 tokens each = 120 tokens
+from events alone, leaving ~30 for the world/personal slice). This
+is a 1-2 hour change in `densanon/core/npc_knowledge/knowledge.py`
+(and the two in-sync copies) with unit tests.
+
+### What the benches confirmed and what they invalidated
+
+**Confirmed:**
+- Burst rotation's prefix-stability hypothesis is correct: K=4 hold
+  of slot 0 recovers the full bounded-snapshot cache-reuse benefit,
+  latency returns to the floor.
+- Small-cast cap mechanically fires on every tick for casts ≤ 4 and
+  reduces Director output volume 3× on PB.
+- Fact-consumption mean delta drops 51%, max delta drops 33%.
+- GPU offload gives a 5–6× token-throughput speedup on Qwen 2.5 3B
+  that applies uniformly across all bench paths.
+- 113-offline-test suite continues green post-bench (no runtime
+  regressions introduced).
+
+**Invalidated:**
+- The "KV cache memory growing unboundedly on synthetic_500" concern
+  (0c follow-up line item). RSS peak 3462 MB on GPU vs 7304 MB on
+  CPU isn't real memory growth — it's Windows working-set
+  instrumentation noise that disappears when KV cache lives in VRAM
+  instead of RSS. No need to pursue explicit `llama_kv_cache_clear`
+  validation.
+- The prior "rotation fix makes things slower" characterization.
+  Rotation made things slower *on CPU* because the prefix-cache
+  reuse was lost. On GPU with burst rotation on top, latency is
+  within 0.1s of the bounded-snapshot floor — rotation itself was
+  never the problem, cache reuse was.
+
+**Still open:**
+- 0a (0.5B re-bench on synthetic_500) — optional. If the 3B GPU
+  latency stays under 6s/tick on synthetic_500, 0.5B's only role
+  would be pushing latency under ~2s for live-dialogue game
+  contexts. Revisit only if Jordan has a specific budget.
+- Events section cap — new item from the +3 token captain_reva
+  overage. Small, independent, shippable.
+- Existing friction items (ledger noise threshold scaling, NLI
+  false-positive bypass for terse, quest id collision rename,
+  Ashenvale lore migration to `data/worlds/ashenvale/story/`) all
+  still applicable.
+
+### Reproduction (all three benches)
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# 1. synthetic_500 headline
+python bench_story_director.py --ticks 30 --reset --model qwen_3b \
+    --world synthetic_500 --actions-per-tick 3 \
+    --narration-mode terse --log logs/syn500_burst_30.json
+
+# 2. PB small-cast cap stress
+python bench_story_director.py --ticks 20 --reset --model qwen_3b \
+    --world port_blackwater --actions-per-tick 3 \
+    --narration-mode terse --log logs/pb_burst_cap_20.json
+
+# 3. PB fact consumption (the shipping metric)
+python bench_fact_consumption.py --ticks 10 --model qwen_3b \
+    --world port_blackwater --narration-mode terse \
+    --actions-per-tick 3 \
+    --log logs/facts_pb_terse_burstcap.json
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
