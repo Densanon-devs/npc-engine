@@ -159,6 +159,30 @@ _SELF_REPETITION_SIMILARITY = 0.70
 # budget-gated — they're rare and more serious.
 _MAX_SELF_REP_RETRIES_PER_TICK = 1
 
+# Small-cast action budget cap. On worlds with at most
+# ``_SMALL_CAST_THRESHOLD`` NPCs, the Director forces
+# ``actions_per_tick = 1`` regardless of what the caller requested.
+# With unrestricted multi-action on a 3-NPC cast, every NPC is
+# touched every tick, and the 2026-04-14 fact-consumption bench
+# showed each NPC accumulating ~10 Director injections in 10 ticks
+# — driving terse-mode per-NPC token delta to 229 vs a 150-token
+# shipping budget. Capping to one action per tick on small casts
+# lets rotation walk the cast over ``cast_size`` ticks instead of
+# piling N injections onto every NPC every tick. Shipping gate for
+# PB-style worlds as the live-dialogue default.
+_SMALL_CAST_THRESHOLD = 4
+
+# Burst rotation depth: number of consecutive ticks a single NPC
+# stays as the architect's first-slot focus before rotation moves on.
+# Trades coverage breadth for KV cache reuse depth — keeping the
+# planned_focus_ids set stable across K ticks means the world snapshot
+# (shared by every sub-action in a tick) hashes to the same prefix so
+# llama-cpp's KV cache reuses prior state instead of recomputing from
+# scratch. K=4 is the starting guess from the 2026-04-14 syn500 bench
+# where the rotation fix jumped latency 5.48s → 13.20s/tick on cold
+# misses.
+_BURST_ROTATION_DEPTH = 4
+
 # Only consider self-repetition against recent same-NPC entries.
 # Older matches are stale and may legitimately be echoed; cross-NPC
 # similarity is gossip propagation, not self-repetition.
@@ -1028,11 +1052,18 @@ class StoryDirector:
         # earliest NPCs fell off and rotation cycled the same ~15
         # NPCs forever.
         #
-        # This is a separate trail from recent_decisions because
-        # recent_decisions records the postgen-rewritten dispatch (which
-        # the wrong-addressee repair may have rerouted to a different
-        # NPC), and for rotation we want the architect's INTENDED focus.
+        # This is a separate trail from recent_decisions so any future
+        # code path that mutates action.npc_id after _enforce_focus_npc
+        # can't pollute rotation — rotation reads the architect's
+        # INTENDED focus, written here before workers run.
         self._npc_last_planned_tick: dict[str, int] = {}
+        # Burst rotation state: the NPC currently held as the first-slot
+        # focus across consecutive ticks, plus the remaining number of
+        # ticks (AFTER the one that locked it in) the burst will keep
+        # that NPC. Both persist in state.json so a bench resume keeps
+        # the cache-reuse pattern intact across restarts.
+        self._burst_focus_npc: Optional[str] = None
+        self._burst_remaining: int = 0
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1186,6 +1217,12 @@ class StoryDirector:
                     str(k): int(v) for k, v in raw_planned.items()
                     if isinstance(v, (int, float))
                 }
+            raw_burst = state.get("burst_focus_npc")
+            if isinstance(raw_burst, str) and raw_burst:
+                self._burst_focus_npc = raw_burst
+            raw_burst_rem = state.get("burst_remaining", 0)
+            if isinstance(raw_burst_rem, (int, float)):
+                self._burst_remaining = max(0, int(raw_burst_rem))
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
@@ -1205,6 +1242,8 @@ class StoryDirector:
             "last_tick_at": self.last_tick_at,
             "recent_decisions": self.recent_decisions[-5:],
             "npc_last_planned_tick": self._npc_last_planned_tick,
+            "burst_focus_npc": self._burst_focus_npc,
+            "burst_remaining": self._burst_remaining,
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
@@ -1237,6 +1276,22 @@ class StoryDirector:
         if actions_per_tick < 1:
             actions_per_tick = 1
 
+        # Small-cast cap: on worlds with at most _SMALL_CAST_THRESHOLD
+        # NPCs, force actions_per_tick to 1 so rotation walks the cast
+        # over multiple ticks instead of touching every NPC every tick.
+        # Prevents the PB-style accumulation that pushed terse-mode
+        # token delta past the 150-token shipping budget (2026-04-14
+        # fact-consumption bench). Above the threshold, the caller's
+        # requested value is honored.
+        cast_size = len(self.engine.pie.npc_knowledge.profiles)
+        if 0 < cast_size <= _SMALL_CAST_THRESHOLD and actions_per_tick > 1:
+            logger.info(
+                f"Story Director: small cast ({cast_size} NPCs <= "
+                f"{_SMALL_CAST_THRESHOLD}), capping actions_per_tick "
+                f"{actions_per_tick} -> 1"
+            )
+            actions_per_tick = 1
+
         # Default max_tokens depends on narration mode. Prose
         # outputs run 40-50 words (~60-80 tokens) and occasionally
         # spike to 100+ which justifies the 400-token ceiling.
@@ -1261,9 +1316,10 @@ class StoryDirector:
         planned_focus_ids = [npc for (npc, _kind) in plan]
         # Record the architect's plan in the unbounded planned-focus
         # trail BEFORE workers run. This is what _pick_focus_npc reads
-        # on the NEXT call to compute least-recently-touched rotation,
-        # and it must not be polluted by postgen rewrites of the
-        # dispatched npc_id. The dict is unbounded in entry count
+        # on the NEXT call to compute least-recently-touched rotation.
+        # Kept independent of recent_decisions so future code paths
+        # that rewrite action.npc_id can't pollute rotation state.
+        # The dict is unbounded in entry count
         # (capped only by cast size), so on a 500-NPC world the
         # rotation eventually visits every NPC instead of cycling the
         # same ~15.
@@ -1596,19 +1652,73 @@ class StoryDirector:
         adds each chosen NPC to a temporary exclusion set so two
         workers can't compete for the same target.
 
+        The first slot is served by burst rotation (see
+        ``_consume_burst_focus``): the same NPC holds slot 0 across
+        ``_BURST_ROTATION_DEPTH`` consecutive ticks so the world
+        snapshot shared by every sub-action stays prefix-stable and
+        llama-cpp reuses its KV cache instead of recomputing from
+        scratch. Subsequent slots fall through to normal
+        least-recently-touched rotation so the other workers in the
+        tick still cover fresh ground.
+
         Returns at most ``n_actions`` slots, fewer if the world doesn't
         have enough NPCs.
         """
         plan: list[tuple[Optional[str], str]] = []
         excluded: set[str] = set()
-        for _ in range(max(1, n_actions)):
-            focus = self._pick_focus_npc(extra_exclude=excluded)
+        burst_focus = self._consume_burst_focus()
+        for i in range(max(1, n_actions)):
+            if i == 0 and burst_focus is not None:
+                focus: Optional[str] = burst_focus
+            else:
+                focus = self._pick_focus_npc(extra_exclude=excluded)
             if focus is None:
                 break
             excluded.add(focus)
             kind = self._pick_action_kind(focus)
             plan.append((focus, kind))
         return plan
+
+    def _consume_burst_focus(self) -> Optional[str]:
+        """
+        Return the sticky NPC that should hold slot 0 of this tick's
+        plan, advancing the burst counter by one. Three cases:
+
+        1. **Burst still held** — ``_burst_remaining > 0`` and the
+           currently bursted NPC still exists in the live cast.
+           Decrement and return it.
+        2. **Burst exhausted or invalid** — pick a fresh NPC via
+           normal rotation (``_pick_focus_npc`` with no excludes),
+           lock it in as the new burst focus, and set
+           ``_burst_remaining = _BURST_ROTATION_DEPTH - 1`` so the
+           freshly-picked NPC holds slot 0 for K total ticks (this
+           one plus K-1 follow-ups).
+        3. **No NPCs available** — return ``None``. Caller falls
+           through to the regular rotation path which will also
+           return None and cause the architect plan to be empty.
+
+        The ``_burst_focus_npc`` field is persisted in ``state.json``
+        so a bench run that loads prior state continues the same
+        burst window instead of restarting it on every process boot.
+        """
+        profiles = self.engine.pie.npc_knowledge.profiles
+        if not profiles:
+            return None
+
+        if (self._burst_remaining > 0
+                and self._burst_focus_npc
+                and self._burst_focus_npc in profiles):
+            self._burst_remaining -= 1
+            return self._burst_focus_npc
+
+        fresh = self._pick_focus_npc()
+        if fresh is None:
+            self._burst_focus_npc = None
+            self._burst_remaining = 0
+            return None
+        self._burst_focus_npc = fresh
+        self._burst_remaining = max(0, _BURST_ROTATION_DEPTH - 1)
+        return fresh
 
     def get_state(self) -> dict:
         return {
@@ -2028,16 +2138,13 @@ class StoryDirector:
             return pending_target
 
         # Layer 2: least-recently-touched rotation. Read from the
-        # architect's PLANNED focus dict, not recent_decisions —
-        # otherwise on big-cast worlds the postgen wrong-addressee
-        # repair rewrites the dispatched npc_id to whoever the LLM
-        # named, the rotation never sees the architect's intended NPC
-        # as touched, and rotation oscillates forever between the
-        # alphabetically-first untouched NPC and the LLM's preferred
-        # name. _npc_last_planned_tick is the source of truth for
-        # "what the architect intended", regardless of how the dispatch
-        # actually landed, and it's unbounded in entry count so the
-        # rotation can walk a 500-NPC world in true round-robin order.
+        # architect's PLANNED focus dict, not recent_decisions.
+        # recent_decisions is capped at 5 ticks for unrelated reasons,
+        # so on big-cast worlds it can't serve as a round-robin trail —
+        # NPCs touched 6+ ticks ago would fall off and be picked again.
+        # _npc_last_planned_tick records every architect pick across
+        # the entire session, unbounded in entry count, so rotation
+        # can walk a 500-NPC world in true round-robin order.
         last_touched: dict[str, int] = {npc_id: -1 for npc_id in available}
         for npc_id, tick_num in self._npc_last_planned_tick.items():
             if npc_id in last_touched:

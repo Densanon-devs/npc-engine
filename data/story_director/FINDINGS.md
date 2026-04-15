@@ -3096,28 +3096,26 @@ This is the obvious fix: bound the snapshot to a sample of the
 1-hop social neighbors) instead of the whole world. Phase B will
 implement and re-measure.
 
-**2. The LLM/postgen junction collapses rotation at scale.** Of the
-500 NPCs, only 18 received any dispatches over 30 ticks — and all
-18 share the `aldric_*` first-name prefix (1/32 of the cast, since
-`FIRST_NAMES` has 32 entries). The Python-side rotation is
-correct: `_pick_focus_npc` walks the alphabetically-ordered profile
-list least-recently-touched first, and the architect's per-tick
-plan picks distinct NPCs. But the LLM, given a 500-line snapshot,
-fixates on the first NPC name it parses (alphabetically the first
-'A' name) and writes about it. The postgen wrong-addressee repair
-(commit `885308f`) then reroutes the dispatched `npc_id` to
-whoever the LLM actually named — overriding the Python focus.
-Result: 3 sub-actions/tick × 30 ticks = 90 dispatches, all routed
-to ~18 'aldric_*' NPCs, each touched 5 times.
-
-This is a cousin of small-cast amplification: Python plans
-correctly, the LLM substitutes its own preference, and the postgen
-safety layer obediently follows the LLM. The fix is twofold:
-- Bounded snapshot reduces the candidate name pool from 500 to ~16,
-  so the LLM can't pick something unrelated.
-- The postgen rerouter could refuse to override the Python focus
-  when the LLM-named NPC isn't in the architect's plan for this
-  tick — treat that as "LLM hallucinated a name, ignore it".
+**2. Rotation collapses at scale because `recent_decisions` is
+capped at 5 ticks.** Of the 500 NPCs, only 18 received any
+dispatches over 30 ticks — and all 18 share the `aldric_*`
+first-name prefix. (**Correction 2026-04-15:** an earlier version
+of this finding blamed the postgen wrong-addressee repair for
+"rerouting the dispatched `npc_id` to whoever the LLM named." That
+was a misdiagnosis — `_finalize_action` unconditionally forces
+`action["npc_id"] = focus_npc` before dispatch in
+`_enforce_focus_npc`, so the LLM's preferred name never survives
+enforcement. The true cause of the collapse was purely the
+rotation trail: `_pick_focus_npc` used to read from
+`recent_decisions`, which is capped at 5 entries for unrelated
+reasons; once the first 18 picked NPCs aged off the window, the
+rotation cycled them forever because everyone else still looked
+"untouched." See `npc_engine/postgen.py` for what the repair
+actually does — it rewrites stray NPC names in NPC **dialogue text**
+to "traveler", and it never touches Story Director dispatch at
+all.) The fix landed in commit `9f0bd38` and is described fully
+under "Fix 2 — architect-driven rotation via unbounded
+planned-focus dict" below.
 
 **3. Schema enforcement and NLI are bulletproof at scale.** 0
 coercions, 0 contradictions, 0 dispatch failures across 90
@@ -3200,24 +3198,21 @@ can include the architect's choices.
 
 ### Fix 2 — architect-driven rotation via unbounded planned-focus dict
 
-The phase A finding was that the LLM/postgen junction collapses
-rotation at scale. The deeper bug behind that is:
-`_pick_focus_npc` was reading `recent_decisions` to compute
-"last touched", and `recent_decisions` is
+The phase A finding was that rotation collapses at scale. The
+cause: `_pick_focus_npc` was reading `recent_decisions` to compute
+"last touched", and `recent_decisions` is capped at 5 entries for
+unrelated reasons — so on a 500-NPC world, NPCs touched 6+ ticks
+ago fall off the window and become "untouched" again, and
+rotation cycles the same ~15 NPCs forever no matter how big the
+cast is.
 
-  - capped at 5 entries (so on a 500-NPC world, NPCs touched 6+
-    ticks ago fall off and become "untouched" again), and
-  - polluted by postgen wrong-addressee rewrites (so the npc_id
-    recorded as "touched" is whoever the LLM actually named, not
-    the architect's planned focus).
-
-Both problems are fixed by a new `_npc_last_planned_tick: dict[str,
-int]` on `StoryDirector` that records every architect pick across
-the entire session. **Unbounded in entry count** (capped only by
-cast size — at most 500 entries on a 500-NPC world) and populated
-from the architect's plan, not the postgen dispatch. Persisted
-across restarts in `state.json` under the `npc_last_planned_tick`
-key. `_pick_focus_npc` reads from it first; the legacy
+The fix is a new `_npc_last_planned_tick: dict[str, int]` on
+`StoryDirector` that records every architect pick across the
+entire session. **Unbounded in entry count** (capped only by cast
+size — at most 500 entries on a 500-NPC world) and populated from
+the architect's plan, not the dispatch result. Persisted across
+restarts in `state.json` under the `npc_last_planned_tick` key.
+`_pick_focus_npc` reads from it first; the legacy
 `recent_decisions` walk stays as a belt-and-braces fallback for
 tests that populate decisions directly.
 
@@ -3328,6 +3323,122 @@ cd D:/LLCWork/npc-engine
 python bench_story_director.py --ticks 30 --reset --model qwen_3b \
     --world synthetic_500 --actions-per-tick 3 \
     --narration-mode terse --log logs/syn500_bounded_rotated_30.json
+```
+
+---
+
+## Burst rotation + small-cast action cap (2026-04-15, code-only)
+
+Two pure-Python fixes landed ahead of any new bench run, stacked so
+the next synthetic_500 + PB stress pass validates them together:
+
+### Burst rotation (0b from the KV cache cold-miss follow-up list)
+
+New module constant `_BURST_ROTATION_DEPTH = 4` and two
+`StoryDirector` fields: `_burst_focus_npc: Optional[str]` +
+`_burst_remaining: int`, both persisted in `state.json`.
+
+`_architect_plan` now routes slot 0 through a new
+`_consume_burst_focus()` method. The sticky NPC holds slot 0 for
+K=4 consecutive ticks before rotation picks a fresh NPC via the
+usual least-recently-touched path. Slots 1+ in multi-action mode
+still rotate normally via `_pick_focus_npc(extra_exclude=...)`, so
+the cohort isn't fully frozen — only the slot-0 NPC is sticky.
+
+**Why slot 0 specifically and not the whole cohort.** The 500-NPC
+phase B result (coverage 18 → 90, latency 5.48s → 13.20s) showed
+the latency regression came from llama-cpp recomputing KV cache
+state every tick because the set of NPC names in the world
+snapshot changed every tick. Keeping slot 0 sticky stabilizes the
+largest single component of the snapshot (the per-tick planned
+focus bio block). Sticking the whole cohort would max out cache
+reuse but kill coverage breadth — K=4 on slot 0 is the starting
+compromise.
+
+**State persistence.** `_burst_focus_npc` and `_burst_remaining`
+both go into `state.json` so a bench resume continues the same
+K-tick window it started, and a crash recovery doesn't restart the
+burst counter from zero.
+
+**Invariant: stale burst focus is self-healing.** If the persisted
+burst NPC no longer exists in the live cast (NPC removed between
+runs, world reload, etc.), `_consume_burst_focus` falls through to
+a fresh `_pick_focus_npc` call instead of returning None.
+
+Four offline tests cover it:
+`test_burst_rotation_holds_slot_zero_across_k_ticks`,
+`test_burst_rotation_coexists_with_multi_action_rotation`,
+`test_burst_rotation_persists_across_director_instances`,
+`test_burst_rotation_recovers_when_focus_npc_vanishes`.
+
+### Small-cast action budget cap
+
+New module constant `_SMALL_CAST_THRESHOLD = 4`. `tick()` now
+inspects `len(self.engine.pie.npc_knowledge.profiles)` and, when
+the cast is at most 4 NPCs, forces `actions_per_tick = 1`
+regardless of what the caller requested (with a one-line log
+message so benches can count how often the cap kicks in).
+
+**Why.** The 2026-04-14 fact-consumption bench measured per-NPC
+token delta on Port Blackwater (3 NPCs) at +229 tokens across 10
+ticks, well over the 150-token shipping budget for live dialogue.
+With unrestricted multi-action on a 3-NPC cast, the architect
+picks all 3 NPCs every tick, so each NPC absorbs ~10 Director
+injections in 10 ticks. Capping to 1 action/tick on small casts
+lets rotation walk the cast over multiple ticks instead of piling
+N injections onto every NPC every tick — roughly 1/3 of the
+accumulation on a 3-NPC world.
+
+Boundary semantics: the threshold is **inclusive**, so a 4-NPC
+cast caps and a 5-NPC cast passes through. Above the threshold the
+caller's requested value is honored untouched.
+
+Four offline tests cover it:
+`test_small_cast_caps_actions_per_tick_to_one`,
+`test_large_cast_honors_requested_actions_per_tick`,
+`test_small_cast_cap_threshold_boundary`,
+`test_small_cast_single_action_passthrough`. The existing
+`test_multi_action_tick_runs_n_workers`,
+`test_self_rep_budget_blocks_second_retry_in_same_tick`, and
+`test_contradiction_retry_not_budget_gated` tests switched to a new
+7-NPC `_LARGE_STUB_PROFILES` cast so the cap doesn't interfere
+with their multi-action assertions.
+
+### Status
+
+- **Code**: committed with full unit test coverage, 113 offline
+  tests green.
+- **Bench**: NOT YET RUN. The next time the GPU frees up, the
+  intended validation pass is:
+  - synthetic_500 terse at 3 actions/tick to verify burst rotation
+    drops per-tick latency back toward the 5.48s bounded-snapshot
+    floor while keeping coverage at or near 90/500 in 30 ticks.
+  - Port Blackwater terse at actions_per_tick=3 (will be capped to
+    1 by the new rule) to verify per-NPC token delta drops below
+    the 150-token budget after 10 ticks.
+- **Still open**: 0a (0.5B re-bench on synthetic_500) and 0c
+  (explicit `llama_kv_cache_clear` validation) are untouched. They
+  stay on the KV cache cold-miss follow-up list and are tackled
+  only if burst rotation doesn't close the gap on its own.
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# Verify code-only fixes pass unit tests
+python tests/test_story_director.py
+
+# Once GPU is free: re-bench with burst + small-cast cap in place
+python bench_story_director.py --ticks 30 --reset --model qwen_3b \
+    --world synthetic_500 --actions-per-tick 3 \
+    --narration-mode terse --log logs/syn500_burst_30.json
+
+python bench_story_director.py --ticks 10 --reset --model qwen_3b \
+    --world port_blackwater --actions-per-tick 3 \
+    --narration-mode terse --log logs/pb_burst_cap_10.json
+python bench_fact_consumption.py --world port_blackwater \
+    --narration-mode terse --ticks 10
 ```
 
 ---

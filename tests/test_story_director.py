@@ -171,12 +171,30 @@ class _StubEngine:
         return {"accepted": quest_id, "given_by": given_by}
 
 
-def _make_stub_engine(responses=None):
-    profiles = {
-        "kael": _StubNPC("kael", "blacksmith"),
-        "bess": _StubNPC("bess", "innkeeper"),
-        "noah": _StubNPC("noah", "elder"),
-    }
+_DEFAULT_STUB_PROFILES = (
+    ("kael", "blacksmith"),
+    ("bess", "innkeeper"),
+    ("noah", "elder"),
+)
+
+_LARGE_STUB_PROFILES = (
+    ("kael", "blacksmith"),
+    ("bess", "innkeeper"),
+    ("noah", "elder"),
+    ("mara", "merchant"),
+    ("tam", "hunter"),
+    ("rin", "scribe"),
+    ("eld", "priest"),
+)
+
+
+def _make_stub_engine(responses=None, profile_specs=None):
+    """Build a stub engine. ``profile_specs`` lets callers override the
+    default 3-NPC Ashenvale-ish cast; pass a sequence of ``(id, role)``
+    tuples to exercise small-cast caps or multi-action plans that need
+    a cast above the _SMALL_CAST_THRESHOLD cutoff."""
+    specs = profile_specs or _DEFAULT_STUB_PROFILES
+    profiles = {npc_id: _StubNPC(npc_id, role) for npc_id, role in specs}
     engine = _StubEngine(profiles)
     engine.pie.base_model = _StubBaseModel(responses or [])
     return engine
@@ -458,6 +476,107 @@ def test_architect_plan_caps_at_npc_count():
     print("  [PASS] architect_plan_caps_at_npc_count")
 
 
+def test_burst_rotation_holds_slot_zero_across_k_ticks():
+    """Slot 0 of the architect plan must stick to the same NPC for K
+    consecutive ticks, then rotate to the next least-recently-touched
+    NPC on tick K+1. This is the KV cache reuse lever."""
+    import npc_engine.story_director as sd_mod
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    k = sd_mod._BURST_ROTATION_DEPTH
+    slot_zero: list[str] = []
+    for tick_num in range(1, k + 2):  # K ticks in burst + 1 rotation tick
+        plan = director._architect_plan(1)
+        assert plan, f"empty plan on tick {tick_num}"
+        slot_zero.append(plan[0][0])
+        # Simulate what tick() does after _architect_plan returns —
+        # stamp the planned NPC so subsequent rotation sees it as touched.
+        director._npc_last_planned_tick[plan[0][0]] = tick_num
+    # First K picks MUST all be the same NPC.
+    assert len(set(slot_zero[:k])) == 1, f"burst broke early: {slot_zero[:k]}"
+    # Tick K+1 must have rotated to a different NPC.
+    assert slot_zero[k] != slot_zero[0], (
+        f"burst failed to rotate after {k} ticks: {slot_zero}"
+    )
+    print("  [PASS] burst_rotation_holds_slot_zero_across_k_ticks")
+
+
+def test_burst_rotation_coexists_with_multi_action_rotation():
+    """In multi-action mode the non-zero slots must still rotate
+    normally while slot 0 is held by burst. Distinct NPCs per tick
+    across all slots is still required (no worker collisions)."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Two ticks of 3 actions each. Slot 0 should repeat across the
+    # two ticks; slots 1 and 2 should change to give fresh coverage.
+    plan_a = director._architect_plan(3)
+    assert len(plan_a) == 3, plan_a
+    assert len({p[0] for p in plan_a}) == 3, f"duplicate NPCs in tick 1: {plan_a}"
+    # Simulate tick()'s planned-tick bump for every slot so rotation
+    # on the next call sees them as touched.
+    for npc, _ in plan_a:
+        director._npc_last_planned_tick[npc] = 1
+
+    plan_b = director._architect_plan(3)
+    assert len(plan_b) == 3, plan_b
+    assert len({p[0] for p in plan_b}) == 3, f"duplicate NPCs in tick 2: {plan_b}"
+    # Slot 0 must be the SAME NPC across ticks (burst held it).
+    assert plan_b[0][0] == plan_a[0][0], (
+        f"slot 0 must stick: tick1={plan_a[0][0]} tick2={plan_b[0][0]}"
+    )
+    print("  [PASS] burst_rotation_coexists_with_multi_action_rotation")
+
+
+def test_burst_rotation_persists_across_director_instances():
+    """Burst focus + remaining must survive a save/load cycle so a
+    bench resume (or crash recovery) continues the same cache-reuse
+    window instead of restarting the burst from scratch."""
+    restore = _isolate_state_file("burst_persist")
+    try:
+        engine1 = _make_stub_engine()
+        director1 = StoryDirector(engine1)
+        # Tick once so burst gets locked in + state gets saved.
+        director1._architect_plan(1)
+        expected_focus = director1._burst_focus_npc
+        expected_remaining = director1._burst_remaining
+        assert expected_focus is not None
+        assert expected_remaining > 0
+        director1._save_state()
+
+        # Fresh director reads state.json back.
+        engine2 = _make_stub_engine()
+        director2 = StoryDirector(engine2)
+        assert director2._burst_focus_npc == expected_focus, (
+            director2._burst_focus_npc, expected_focus,
+        )
+        assert director2._burst_remaining == expected_remaining, (
+            director2._burst_remaining, expected_remaining,
+        )
+    finally:
+        restore()
+    print("  [PASS] burst_rotation_persists_across_director_instances")
+
+
+def test_burst_rotation_recovers_when_focus_npc_vanishes():
+    """If the persisted burst focus no longer exists in the live cast
+    (e.g. an NPC was removed between runs), the director must drop
+    the stale burst and pick a fresh NPC via normal rotation instead
+    of returning None or crashing."""
+    engine = _make_stub_engine()
+    director = StoryDirector(engine)
+    # Simulate a stale burst pointing at an NPC that was deleted.
+    director._burst_focus_npc = "ghost_npc_id"
+    director._burst_remaining = 3
+    plan = director._architect_plan(1)
+    assert plan, "plan should not be empty when live NPCs exist"
+    assert plan[0][0] in {"kael", "bess", "noah"}, plan
+    # The stale id should be replaced by a real one.
+    assert director._burst_focus_npc != "ghost_npc_id", (
+        director._burst_focus_npc,
+    )
+    print("  [PASS] burst_rotation_recovers_when_focus_npc_vanishes")
+
+
 def test_pick_focus_respects_extra_exclude():
     """The in-flight architect planner uses extra_exclude to mark NPCs
     as taken. _pick_focus_npc must honor it across both layers (player
@@ -485,14 +604,18 @@ def test_pick_focus_respects_extra_exclude():
 def test_multi_action_tick_runs_n_workers():
     """An actions_per_tick=3 tick should produce 3 distinct sub-actions
     and update tick_count by exactly one (not three — it's still ONE
-    tick, just with parallel workers)."""
+    tick, just with parallel workers). Uses a 7-NPC cast so the
+    small-cast cap doesn't fire."""
     restore = _isolate_state_file("multi")
     try:
-        engine = _make_stub_engine(responses=[
-            '{"action": "event", "target": "kael", "event": "kael event"}',
-            '{"action": "event", "target": "bess", "event": "bess event"}',
-            '{"action": "event", "target": "noah", "event": "noah event"}',
-        ])
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "kael event"}',
+                '{"action": "event", "target": "bess", "event": "bess event"}',
+                '{"action": "event", "target": "noah", "event": "noah event"}',
+            ],
+        )
         director = StoryDirector(engine)
         result = director.tick(actions_per_tick=3)
         assert "sub_actions" in result, result
@@ -503,6 +626,118 @@ def test_multi_action_tick_runs_n_workers():
     finally:
         restore()
     print("  [PASS] multi_action_tick_runs_n_workers")
+
+
+def test_small_cast_caps_actions_per_tick_to_one():
+    """On a small cast (<=_SMALL_CAST_THRESHOLD NPCs), tick() forces
+    actions_per_tick down to 1 regardless of the caller's request.
+    Prevents the PB-style bloat where 3 actions/tick × 10 ticks piles
+    10 injections onto each NPC."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("smallcast_cap")
+    try:
+        # Default 3-NPC cast is below threshold.
+        assert len(_DEFAULT_STUB_PROFILES) <= sd_mod._SMALL_CAST_THRESHOLD
+        engine = _make_stub_engine(responses=[
+            '{"action": "event", "target": "kael", "event": "only one"}',
+        ])
+        director = StoryDirector(engine)
+        # Caller asks for 3, cap should trim to 1.
+        result = director.tick(actions_per_tick=3)
+        # Single-action mode returns the legacy flat shape.
+        assert "action" in result, result
+        assert "sub_actions" not in result, result
+        assert director.tick_count == 1, director.tick_count
+    finally:
+        restore()
+    print("  [PASS] small_cast_caps_actions_per_tick_to_one")
+
+
+def test_large_cast_honors_requested_actions_per_tick():
+    """On a cast above _SMALL_CAST_THRESHOLD, the caller's requested
+    actions_per_tick passes through unchanged."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("largecast_pass")
+    try:
+        assert len(_LARGE_STUB_PROFILES) > sd_mod._SMALL_CAST_THRESHOLD
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "a"}',
+                '{"action": "event", "target": "bess", "event": "b"}',
+                '{"action": "event", "target": "noah", "event": "c"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        result = director.tick(actions_per_tick=3)
+        assert "sub_actions" in result, result
+        assert len(result["sub_actions"]) == 3, result
+    finally:
+        restore()
+    print("  [PASS] large_cast_honors_requested_actions_per_tick")
+
+
+def test_small_cast_cap_threshold_boundary():
+    """A cast of exactly _SMALL_CAST_THRESHOLD NPCs must still trigger
+    the cap (threshold is inclusive). One NPC above the threshold must
+    NOT trigger it."""
+    import npc_engine.story_director as sd_mod
+    # Build a cast of exactly _SMALL_CAST_THRESHOLD.
+    at_threshold = tuple(
+        (f"npc{i}", "role") for i in range(sd_mod._SMALL_CAST_THRESHOLD)
+    )
+    above_threshold = at_threshold + (("extra_npc", "role"),)
+
+    restore = _isolate_state_file("cap_at_threshold")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=at_threshold,
+            responses=[
+                '{"action": "event", "target": "npc0", "event": "x"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        result = director.tick(actions_per_tick=3)
+        assert "sub_actions" not in result, (
+            f"cast={sd_mod._SMALL_CAST_THRESHOLD} should have been capped: {result}"
+        )
+    finally:
+        restore()
+
+    restore = _isolate_state_file("cap_above_threshold")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=above_threshold,
+            responses=[
+                '{"action": "event", "target": "npc0", "event": "x"}',
+                '{"action": "event", "target": "npc1", "event": "y"}',
+                '{"action": "event", "target": "npc2", "event": "z"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        result = director.tick(actions_per_tick=3)
+        assert "sub_actions" in result, result
+        assert len(result["sub_actions"]) == 3, result
+    finally:
+        restore()
+    print("  [PASS] small_cast_cap_threshold_boundary")
+
+
+def test_small_cast_single_action_passthrough():
+    """When caller already requests 1 action/tick on a small cast, the
+    cap is a no-op — no log noise, normal single-action flow."""
+    restore = _isolate_state_file("smallcast_passthrough")
+    try:
+        engine = _make_stub_engine(responses=[
+            '{"action": "event", "target": "kael", "event": "x"}',
+        ])
+        director = StoryDirector(engine)
+        result = director.tick(actions_per_tick=1)
+        assert "action" in result, result
+        assert "sub_actions" not in result, result
+    finally:
+        restore()
+    print("  [PASS] small_cast_single_action_passthrough")
 
 
 def test_single_action_tick_is_backward_compatible():
@@ -2589,13 +2824,18 @@ def test_self_rep_budget_blocks_second_retry_in_same_tick():
     import npc_engine.story_director as sd_mod
     restore = _isolate_state_file("budget_block")
     try:
-        engine = _make_stub_engine(responses=[
-            # Worker 1 first attempt (flagged), then retry (fresh)
-            '{"action": "event", "target": "bess", "event": "Bess scene A"}',
-            '{"action": "event", "target": "bess", "event": "Bess fresh after retry"}',
-            # Worker 2 first attempt (would be flagged too, but budget = 0 now)
-            '{"action": "event", "target": "kael", "event": "Kael scene A"}',
-        ])
+        # Use large cast so the small-cast cap doesn't clamp
+        # actions_per_tick=2 down to 1.
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                # Worker 1 first attempt (flagged), then retry (fresh)
+                '{"action": "event", "target": "bess", "event": "Bess scene A"}',
+                '{"action": "event", "target": "bess", "event": "Bess fresh after retry"}',
+                # Worker 2 first attempt (would be flagged too, but budget = 0 now)
+                '{"action": "event", "target": "kael", "event": "Kael scene A"}',
+            ],
+        )
         director = StoryDirector(engine)
         director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
         # Every precheck fires the same canned warning (we use
@@ -2643,14 +2883,19 @@ def test_contradiction_retry_not_budget_gated():
     budget — they're rare and more serious."""
     restore = _isolate_state_file("budget_contra")
     try:
-        engine = _make_stub_engine(responses=[
-            # Worker 1: first flagged as self-rep, retry succeeds
-            '{"action": "event", "target": "bess", "event": "Bess scene"}',
-            '{"action": "event", "target": "bess", "event": "Bess new scene"}',
-            # Worker 2: first flagged as CONTRADICTION, retry should fire
-            '{"action": "fact", "npc_id": "kael", "fact": "Kael contradiction"}',
-            '{"action": "fact", "npc_id": "kael", "fact": "Kael resolved"}',
-        ])
+        # Use large cast so the small-cast cap doesn't clamp
+        # actions_per_tick=2 down to 1.
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                # Worker 1: first flagged as self-rep, retry succeeds
+                '{"action": "event", "target": "bess", "event": "Bess scene"}',
+                '{"action": "event", "target": "bess", "event": "Bess new scene"}',
+                # Worker 2: first flagged as CONTRADICTION, retry should fire
+                '{"action": "fact", "npc_id": "kael", "fact": "Kael contradiction"}',
+                '{"action": "fact", "npc_id": "kael", "fact": "Kael resolved"}',
+            ],
+        )
         director = StoryDirector(engine)
         director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("event")
 
@@ -3066,8 +3311,16 @@ def main():
     test_enforce_action_kind_event_to_fact()
     test_architect_plan_picks_distinct_npcs()
     test_architect_plan_caps_at_npc_count()
+    test_burst_rotation_holds_slot_zero_across_k_ticks()
+    test_burst_rotation_coexists_with_multi_action_rotation()
+    test_burst_rotation_persists_across_director_instances()
+    test_burst_rotation_recovers_when_focus_npc_vanishes()
     test_pick_focus_respects_extra_exclude()
     test_multi_action_tick_runs_n_workers()
+    test_small_cast_caps_actions_per_tick_to_one()
+    test_large_cast_honors_requested_actions_per_tick()
+    test_small_cast_cap_threshold_boundary()
+    test_small_cast_single_action_passthrough()
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()
     test_record_player_action_and_snapshot()
