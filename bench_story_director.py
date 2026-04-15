@@ -121,6 +121,29 @@ WORLDS = {
         "active_npc":       "captain_reva",
         "story_runtime_rel": "data/worlds/port_blackwater/story",
     },
+    # Synthetic worlds for scaling tests. Generate with
+    # ``python generate_synthetic_world.py --towns N --npcs-per-town M
+    # --output synthetic_<total>``. The active_npc is auto-resolved at
+    # boot to the first profile in the directory if the named one
+    # doesn't exist (see boot_engine for the fallback).
+    "synthetic_25": {
+        "world_dir_rel":    "data/worlds/synthetic_25",
+        "world_name":       "Synthetic 25",
+        "active_npc":       "auto",
+        "story_runtime_rel": "data/worlds/synthetic_25/story",
+    },
+    "synthetic_100": {
+        "world_dir_rel":    "data/worlds/synthetic_100",
+        "world_name":       "Synthetic 100",
+        "active_npc":       "auto",
+        "story_runtime_rel": "data/worlds/synthetic_100/story",
+    },
+    "synthetic_500": {
+        "world_dir_rel":    "data/worlds/synthetic_500",
+        "world_name":       "Synthetic 500",
+        "active_npc":       "auto",
+        "story_runtime_rel": "data/worlds/synthetic_500/story",
+    },
 }
 
 
@@ -184,7 +207,14 @@ def boot_engine(model_path: Path, reset: bool, world_spec: dict):
 
     raw = yaml.safe_load((PIE_ROOT / "config.yaml").read_text(encoding="utf-8"))
     raw["base_model"]["path"] = str(model_path)
-    raw["base_model"]["context_length"] = 4096
+    # Default 4096 fits Ashenvale and Port Blackwater. Synthetic
+    # large-world stress runs need more — the world snapshot grows
+    # roughly linearly with cast size and a 500-NPC unbounded snapshot
+    # is ~9300 tokens before any examples or focus block. 16K is
+    # comfortable headroom while still inside Qwen 2.5's 32K training
+    # window. Bumping context here costs RAM (KV cache scales with
+    # context*layers) but doesn't affect prompt length.
+    raw["base_model"]["context_length"] = 16384
     raw["base_model"]["temperature"] = 0.6
     raw["fusion"] = raw.get("fusion") or {}
     raw["fusion"]["chat_format"] = "chatml"
@@ -196,10 +226,21 @@ def boot_engine(model_path: Path, reset: bool, world_spec: dict):
     temp_pie = PIE_ROOT / "config_bench_story.yaml"
     temp_pie.write_text(yaml.dump(raw, default_flow_style=False), encoding="utf-8")
 
+    # Synthetic worlds use procedural NPC ids; resolve "auto" to the
+    # first profile yaml the loader will find. The active_npc only
+    # matters for dialogue scripts (which the synthetic stress runs
+    # don't use), so any valid id works.
+    active_npc = world_spec["active_npc"]
+    if active_npc == "auto":
+        profiles = sorted((world_dir / "npc_profiles").glob("*.yaml"))
+        if not profiles:
+            raise RuntimeError(f"No NPC profiles found in {world_dir / 'npc_profiles'}")
+        active_npc = profiles[0].stem
+
     npc_cfg = {
         "world_dir": str(world_dir),
         "world_name": world_spec["world_name"],
-        "active_npc": world_spec["active_npc"],
+        "active_npc": active_npc,
         "pie_config": str(temp_pie),
     }
     temp_npc = NPC_ROOT / "config_bench_story.yaml"
@@ -299,12 +340,21 @@ def main():
                         help="Output style. 'prose' = cinematic novel narration (current "
                              "default). 'terse' = short third-person facts under 25 words, "
                              "optimized for downstream NPC dialogue context injection.")
+    parser.add_argument("--tick-budget-seconds", type=float, default=0.0,
+                        help="Parallel-to-game pacing. After each tick, sleep until at "
+                             "least this many seconds have elapsed since the tick started. "
+                             "Lets the bench simulate a Director that cooperates with a "
+                             "main game loop instead of monopolizing the CPU. 0 = no "
+                             "budget (back-to-back ticks, the default).")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
     world_spec = WORLDS[args.world]
-    player_script = PLAYER_SCRIPTS[args.world]
-    dialogue_script = DIALOGUE_SCRIPTS[args.world]
+    # Synthetic worlds don't ship player/dialogue scripts (procedural NPC
+    # ids would make the scripts brittle); they fall back to empty lists,
+    # which means --player-script / --dialogue-script become no-ops.
+    player_script = PLAYER_SCRIPTS.get(args.world, [])
+    dialogue_script = DIALOGUE_SCRIPTS.get(args.world, [])
     print(f"Model: {model_path.name}")
     print(f"World: {args.world} ({world_spec['world_name']})")
     print(f"Ticks: {args.ticks}")
@@ -318,6 +368,29 @@ def main():
     print(f"Examples:  {engine.story_director._examples_file} "
           f"({len(engine.story_director._examples)} entries)")
     print(f"State dir: {engine.story_director._runtime_dir}")
+    print(f"Profiles loaded: {len(engine.pie.npc_knowledge.profiles)}")
+
+    # Optional psutil for peak-RSS instrumentation. Bench still runs
+    # without it; the parallel-to-game scaling reports just lose the
+    # memory column.
+    try:
+        import psutil
+        _proc = psutil.Process()
+    except Exception:
+        _proc = None
+
+    def _sample_rss_mb() -> float:
+        if _proc is None:
+            return 0.0
+        try:
+            return _proc.memory_info().rss / (1024 * 1024)
+        except Exception:
+            return 0.0
+
+    rss_baseline_mb = _sample_rss_mb()
+    print(f"RSS baseline: {rss_baseline_mb:.0f} MB"
+          + (" (psutil unavailable, all RSS metrics will read 0)" if _proc is None else ""))
+
     try:
         outcomes = Counter()
         timings = []
@@ -330,6 +403,8 @@ def main():
         dialogue_total_time = 0.0
         similarity_warnings: list[dict] = []
         arc_events: list[dict] = []  # (tick, event, arc_id, detail)
+        snapshot_lengths: list[int] = []
+        rss_samples_mb: list[float] = []
 
         for i in range(args.ticks):
             tick_num = i + 1
@@ -377,6 +452,19 @@ def main():
 
             print(f"\n=== TICK {tick_num} ===")
             before = _snapshot_world(engine)
+            # Sample the world snapshot length BEFORE the tick — this
+            # is the prompt-bound input the LLM gets each tick. Grows
+            # roughly linearly with cast size on the unbounded snapshot
+            # path, which is the bottleneck for 100+ NPC worlds.
+            try:
+                snap_text = engine.story_director._world_snapshot()
+                snap_chars = len(snap_text)
+                snap_tokens_est = snap_chars // 4
+                snapshot_lengths.append(snap_chars)
+                if tick_num == 1 or tick_num % 10 == 0 or args.ticks <= 5:
+                    print(f"  snapshot: {snap_chars} chars (~{snap_tokens_est} tok)")
+            except Exception as e:
+                print(f"  (snapshot length sample failed: {e})")
             # Snapshot all active arcs before the tick so we can diff
             # the set and show proposals / beat advances / resolutions
             # per arc. With multi-arc support, we may see multiple arcs
@@ -385,6 +473,7 @@ def main():
                 a.id: (a.current_beat, a.status)
                 for a in engine.story_director.arc_planner.active_arcs()
             }
+            rss_samples_mb.append(_sample_rss_mb())
             t0 = time.monotonic()
             result = engine.story_director.tick(
                 max_tokens=args.max_tokens,
@@ -393,6 +482,11 @@ def main():
             )
             elapsed = time.monotonic() - t0
             timings.append(elapsed)
+            # Tick budget for parallel-to-game simulation. Sleep so the
+            # tick-to-tick interval respects the budget, but never sleep
+            # negative time if the tick already overran.
+            if args.tick_budget_seconds > 0 and elapsed < args.tick_budget_seconds:
+                time.sleep(args.tick_budget_seconds - elapsed)
 
             arc_after = {
                 a.id: a
@@ -546,6 +640,53 @@ def main():
         print(f"Targets touched:")
         for t, c in action_targets.most_common():
             print(f"  {t:20} {c}")
+
+        # ── Scaling report — cast coverage, snapshot growth, RSS ─────
+        # Only meaningful on big-cast worlds, but cheap enough to print
+        # for every run.
+        n_profiles = len(engine.pie.npc_knowledge.profiles)
+        touched_ids = set(action_targets.keys()) - {None, "", "-"}
+        touched_count = len(touched_ids)
+        untouched_count = max(0, n_profiles - touched_count)
+        coverage_pct = 100.0 * touched_count / n_profiles if n_profiles else 0.0
+        if action_targets:
+            touch_counts = sorted(action_targets.values(), reverse=True)
+            max_touch = touch_counts[0]
+            median_touch = touch_counts[len(touch_counts) // 2]
+        else:
+            max_touch = 0
+            median_touch = 0
+        if snapshot_lengths:
+            snap_min = min(snapshot_lengths)
+            snap_max = max(snapshot_lengths)
+            snap_first = snapshot_lengths[0]
+            snap_last = snapshot_lengths[-1]
+        else:
+            snap_min = snap_max = snap_first = snap_last = 0
+        if rss_samples_mb:
+            rss_peak = max(rss_samples_mb)
+            rss_growth = rss_peak - rss_baseline_mb
+        else:
+            rss_peak = rss_baseline_mb
+            rss_growth = 0.0
+
+        print("\nScaling report")
+        print(f"  cast size:          {n_profiles}")
+        print(f"  NPCs touched:       {touched_count} / {n_profiles} "
+              f"({coverage_pct:.1f}%)")
+        print(f"  NPCs untouched:     {untouched_count}")
+        print(f"  max touches/NPC:    {max_touch}")
+        print(f"  median touches/NPC: {median_touch}")
+        print(f"  snapshot chars:     first={snap_first}  last={snap_last}  "
+              f"min={snap_min}  max={snap_max}")
+        print(f"  snapshot tokens (~chars/4): first={snap_first//4}  "
+              f"last={snap_last//4}  max={snap_max//4}")
+        print(f"  RSS baseline:       {rss_baseline_mb:.0f} MB")
+        print(f"  RSS peak:           {rss_peak:.0f} MB  (growth {rss_growth:+.0f} MB)")
+        if args.tick_budget_seconds > 0:
+            wall_total = sum(max(t, args.tick_budget_seconds) for t in timings)
+            print(f"  tick budget:        {args.tick_budget_seconds:.1f}s/tick "
+                  f"(simulated wall: {wall_total:.0f}s)")
 
         # Drift signal: how often did consecutive sub-actions (across the
         # whole flat sequence, including within and across ticks) target

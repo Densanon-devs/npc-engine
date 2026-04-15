@@ -29,6 +29,11 @@ data/worlds/*/story/arcs.json
 data/worlds/*/story/_tmp_*.json
 data/worlds/*/story/_tmp_*.npy
 
+# Synthetic worlds for scaling tests — fully regeneratable from
+# generate_synthetic_world.py with a fixed seed, no need to track
+# 500+ procedural profile YAMLs in git history.
+data/worlds/synthetic_*/
+
 # Story Director bench outputs
 tick_trace_*.json
 data/worlds/*/player_quests.yaml.bak

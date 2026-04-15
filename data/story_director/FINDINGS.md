@@ -3008,6 +3008,155 @@ python tests/test_story_director.py
 
 ---
 
+## Big-world scaling test — 500 NPCs (2026-04-14, phase A baseline)
+
+### Setup
+
+Synthetic world generator at `generate_synthetic_world.py` produces
+hierarchical worlds with N towns × M NPCs and dense intra-town /
+sparse inter-town social graphs. Each NPC gets a templated identity
+(name, role, personality, speech), four world facts grounded in the
+town's setting, four personal facts (backstory + relationship +
+secret + motivation), an optional starting quest (~30%), and minimal
+capabilities (trust + emotional state). The generator writes profile
+YAMLs that the existing `NPCKnowledgeManager._load_all` consumes
+unchanged. Three worlds shipped: `synthetic_25` (5×5),
+`synthetic_100` (10×10), `synthetic_500` (25×20).
+
+`bench_story_director.py` gained four pieces of instrumentation:
+- `synthetic_25` / `synthetic_100` / `synthetic_500` entries in the
+  `WORLDS` dict with `active_npc: "auto"` (resolves to the first
+  profile in the directory at boot time)
+- per-tick world snapshot length sample (chars + token estimate),
+  printed every 10 ticks, summarized at end of run
+- peak RSS sample via `psutil` (graceful no-op if `psutil` missing)
+- end-of-run scaling report: cast size, NPCs touched, NPCs
+  untouched, max/median touches per NPC, snapshot growth, RSS peak
+- `--tick-budget-seconds N` flag that sleeps after each tick to
+  simulate parallel-to-game pacing
+
+The bench's default `context_length` was bumped from 4096 to 16384
+because the unbounded `_world_snapshot` at 500 NPCs is ~4750 tokens
+on its own — 4K context overflows on the very first tick and every
+generation falls into a 9337-tokens-vs-4096-window error. 16K is
+inside Qwen 2.5's 32K training window and gives breathing room for
+lore + examples + focus block.
+
+### Smoke results — does it run end-to-end?
+
+| World          | NPCs | 3-tick mean | Notes                                |
+|----------------|------|-------------|--------------------------------------|
+| synthetic_25   | 25   | 14.5s       | First-run cold-cache likely          |
+| synthetic_100  | 100  | 7.3s        | Faster than 25, cache hot            |
+| synthetic_500  | 500  | crash @ 4K  | 9337 tokens > 4096 ctx, all noops    |
+| synthetic_500  | 500  | 20.9s @ 16K | All sub-actions dispatched cleanly   |
+
+The cliff is exactly the snapshot O(N) explosion predicted by
+reading `_world_snapshot` (each NPC adds a line of role + mood +
+trust + quest count + top goal). At 500 NPCs the snapshot is the
+whole prompt; everything else is rounding error.
+
+### 30-tick stress on synthetic_500 (Qwen 2.5 3B, terse, 16K ctx)
+
+Total wall: 618.72s (≈10.3 minutes). Mean tick: 20.62s. Min/max
+tick: ~17s / ~26s. The variance is LLM CPU jitter, not snapshot
+growth — snapshot stayed within 18,263–19,005 chars across all 30
+ticks (it doesn't grow because the per-NPC line count is fixed).
+
+```
+Scaling report
+  cast size:          500
+  NPCs touched:       18 / 500 (3.6%)
+  NPCs untouched:     482
+  max touches/NPC:    5
+  median touches/NPC: 5
+  snapshot chars:     first=18263  last=18943  min=18263  max=19005
+  snapshot tokens:    first=4565   last=4735   max=4751
+  RSS baseline:       2980 MB
+  RSS peak:           3409 MB  (growth +429 MB)
+Coercions:            0/30
+Ledger entries:       88
+FactLedger warnings:  38/30 (contradictions: 0)
+Arcs proposed:        3   active at end: 3
+```
+
+Arc events over the 30 ticks: 3 proposed (T5, T10, T20), 4 beat
+advances. Beat 3→4 (resolve) on the T5 arc. The arc planner is
+still doing real work at 500 NPCs.
+
+Trace log: `logs/syn500_unbounded_30.json`
+
+### What this test surfaced
+
+**1. Snapshot O(N) is the headline bottleneck.** At 500 NPCs the
+unbounded snapshot is ~4750 tokens — bigger than the entire prompt
+budget on the production 4K context setting. Every line is one NPC.
+This is the obvious fix: bound the snapshot to a sample of the
+"active scene" (focus NPC + arc cast + recently-touched + maybe
+1-hop social neighbors) instead of the whole world. Phase B will
+implement and re-measure.
+
+**2. The LLM/postgen junction collapses rotation at scale.** Of the
+500 NPCs, only 18 received any dispatches over 30 ticks — and all
+18 share the `aldric_*` first-name prefix (1/32 of the cast, since
+`FIRST_NAMES` has 32 entries). The Python-side rotation is
+correct: `_pick_focus_npc` walks the alphabetically-ordered profile
+list least-recently-touched first, and the architect's per-tick
+plan picks distinct NPCs. But the LLM, given a 500-line snapshot,
+fixates on the first NPC name it parses (alphabetically the first
+'A' name) and writes about it. The postgen wrong-addressee repair
+(commit `885308f`) then reroutes the dispatched `npc_id` to
+whoever the LLM actually named — overriding the Python focus.
+Result: 3 sub-actions/tick × 30 ticks = 90 dispatches, all routed
+to ~18 'aldric_*' NPCs, each touched 5 times.
+
+This is a cousin of small-cast amplification: Python plans
+correctly, the LLM substitutes its own preference, and the postgen
+safety layer obediently follows the LLM. The fix is twofold:
+- Bounded snapshot reduces the candidate name pool from 500 to ~16,
+  so the LLM can't pick something unrelated.
+- The postgen rerouter could refuse to override the Python focus
+  when the LLM-named NPC isn't in the architect's plan for this
+  tick — treat that as "LLM hallucinated a name, ignore it".
+
+**3. Schema enforcement and NLI are bulletproof at scale.** 0
+coercions, 0 contradictions, 0 dispatch failures across 90
+sub-actions on a brand-new world the Director has never seen
+before. The defensive layers don't degrade with cast size.
+
+**4. RSS growth is ~430 MB across 30 ticks.** Mostly KV cache
+expansion from the 16K context and embedding growth in the fact
+ledger. Acceptable for desktop game integration but worth
+revisiting once the snapshot bound shrinks the prompt: the smaller
+the prompt, the smaller the KV cache footprint per tick.
+
+**5. Per-tick latency is incompatible with live dialogue.** 20.6s
+per tick at 3 actions/tick = 6.9s per action. A game running
+parallel to this needs the Director to either tick less often
+(`--tick-budget-seconds 60` would mean one full tick per minute of
+game time, totally fine) or use a smaller model (0.5B was
+~half the latency in earlier tests) or both. The bounded-snapshot
+fix should also reduce per-tick latency because the LLM is
+processing 4750 fewer tokens of input per call.
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# Generate worlds
+python generate_synthetic_world.py --towns 5 --npcs-per-town 5 --output synthetic_25 --seed 7
+python generate_synthetic_world.py --towns 10 --npcs-per-town 10 --output synthetic_100 --seed 17
+python generate_synthetic_world.py --towns 25 --npcs-per-town 20 --output synthetic_500 --seed 42
+
+# 30-tick baseline stress on 500 NPCs
+python bench_story_director.py --ticks 30 --reset --model qwen_3b \
+    --world synthetic_500 --actions-per-tick 3 \
+    --narration-mode terse --log logs/syn500_unbounded_30.json
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
