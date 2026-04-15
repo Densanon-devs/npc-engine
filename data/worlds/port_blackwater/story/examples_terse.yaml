@@ -1,0 +1,214 @@
+# Terse few-shot examples — Port Blackwater pack.
+# Used when StoryDirector.narration_mode == "terse". Each event/fact/
+# quest description is a single third-person factual statement under
+# 25 words, no internal monologue, no quoted dialogue. Same 17-entry
+# structure as examples.yaml.
+#
+# These examples are the primary style signal for terse mode — they
+# out-vote OUTPUT STYLE instructions in the prompt. Keep them
+# rigorously short.
+
+examples:
+  # ── captain_reva ────────────────────────────────────────────
+  - primary_npc: captain_reva
+    world_state: |
+      Captain Reva has lost three merchant ships to the Shoals this month.
+      No active quests about the wrecks.
+    action:
+      action: quest
+      reason: "Turn the mounting wreck count into a quest hook."
+      npc_id: captain_reva
+      quest:
+        id: wreck_pattern
+        name: "Three Ships on the Rocks"
+        description: "Three ships have wrecked on the Shoals since the lighthouse went dark. Reva wants the north beach searched at low tide."
+        reward: "A permanent berth and twenty silver."
+        objectives:
+          - "Walk the north beach at low tide and recover any wreckage."
+
+  - primary_npc: captain_reva
+    world_state: |
+      Captain Reva sat alone at her desk tonight. The sealed letter from
+      the governor of Meridia is still in the top drawer.
+    action:
+      action: event
+      reason: "Surface the sealed-letter bio hook as a short observation."
+      target: captain_reva
+      event: "Captain Reva unlocked her desk drawer tonight, stared at the governor's sealed letter until the candle burned down, and put it back unopened."
+
+  - primary_npc: captain_reva
+    world_state: |
+      The Red Tide flagship returned from the Shoals at dawn. Two crewmen
+      are missing. The quartermaster will not meet Reva's eye.
+    action:
+      action: fact
+      reason: "Plant Reva's growing suspicion of the Red Tide."
+      npc_id: captain_reva
+      fact: "The Red Tide is hiding what they do at the Shoals. Two men missing and a silent quartermaster. I will find their cargo."
+      fact_type: personal
+
+  - primary_npc: captain_reva
+    world_state: |
+      Reva has not spoken to Old Bones in six days. Player trust with
+      Reva: 55.
+    action:
+      action: fact
+      reason: "Expose Reva's reasoning in the Bones standoff."
+      npc_id: captain_reva
+      fact: "I stopped going to the Drowned Rat when Bones stopped telling me the truth. He knows I know about the tunnels."
+      fact_type: personal
+
+  - primary_npc: captain_reva
+    world_state: |
+      A waterlogged logbook from the lighthouse keeper washed up at dock
+      two this morning. Its last entry reads "they came up from the rocks."
+    action:
+      action: event
+      reason: "The logbook is a concrete object advancing the lighthouse arc."
+      target: captain_reva
+      event: "A waterlogged logbook arrived at Reva's desk before noon. She read the last entry twice, called for oiled paper, and shut her office door."
+
+  # ── finn ────────────────────────────────────────────────────
+  - primary_npc: finn
+    world_state: |
+      Finn finished his shift early and wandered the tide line at sunset.
+      No active quests involving the north beach.
+    action:
+      action: event
+      reason: "Circle the glass-shard secret without spending it."
+      target: finn
+      event: "Finn walked the tide line at sunset tonight. He stopped at the loose plank at the end of dock three, checked for watchers, and kept walking."
+
+  - primary_npc: finn
+    world_state: |
+      Finn loaded three Red Tide crates today. One crate was lighter than
+      the others and rattled like thin glass.
+    action:
+      action: fact
+      reason: "Link Finn's labor to the black-glass-jar thread."
+      npc_id: finn
+      fact: "One of the Red Tide's crates rattled today — glass, but lighter than a crate of mugs. Sealed under pitch. Why?"
+      fact_type: personal
+
+  - primary_npc: finn
+    world_state: |
+      Finn was paid a copper extra for the late tide and wants to spend
+      it meaningfully. Player trust with Finn: 40.
+    action:
+      action: quest
+      reason: "Nudge Finn's join-a-crew dream forward with a small task."
+      npc_id: finn
+      quest:
+        id: proof_worth
+        name: "A Coin for the Tide"
+        description: "Finn has a copper and a dream. He wants help picking a captain to stand a drink for tonight."
+        reward: "Finn owes you a favor and any dock rumor he hears."
+        objectives:
+          - "Walk the docks with Finn at dusk and pick a captain who might take on a new hand."
+
+  - primary_npc: finn
+    world_state: |
+      Finn heard a low hum from the direction of the north cliff last
+      night. He has not told anyone.
+    action:
+      action: fact
+      reason: "Route the Shoals-singing thread through Finn's ears."
+      npc_id: finn
+      fact: "Something off the north cliff last night was not the wind. Low and slow, like a bell rung underwater. I don't want to know what it was."
+      fact_type: personal
+
+  - primary_npc: finn
+    world_state: |
+      Finn noticed a hooded figure near dock three at dusk for the
+      second time this week.
+    action:
+      action: event
+      reason: "Second sighting escalates the hooded-figure thread."
+      target: finn
+      event: "Finn crouched behind a bollard at dusk while a hooded figure walked dock three, knelt at the loose plank, then rose and walked on into the dark."
+
+  # ── old_bones ───────────────────────────────────────────────
+  - primary_npc: old_bones
+    world_state: |
+      Old Bones is serving an Iron Wake crew. One of them keeps asking
+      about the tunnels under the tavern.
+    action:
+      action: quest
+      reason: "Bones wants the curious sailor redirected before it reaches Reva."
+      npc_id: old_bones
+      quest:
+        id: loose_tongue
+        name: "A Crewman with Questions"
+        description: "An Iron Wake sailor has been asking about the cellar tunnels. Old Bones wants to know who put the idea in his head."
+        reward: "A bottle of the good rum."
+        objectives:
+          - "Find out who first mentioned the tunnels to the Iron Wake sailor and tell Old Bones."
+
+  - primary_npc: old_bones
+    world_state: |
+      A stranger paid Old Bones in Meridian coin tonight. Meridian coin
+      is rare in Port Blackwater.
+    action:
+      action: fact
+      reason: "Foreign coin connects to Reva's sealed letter."
+      npc_id: old_bones
+      fact: "A stranger paid in real Meridian silver tonight. Meridian hands do not reach this far unless the governor wants something."
+      fact_type: personal
+
+  - primary_npc: old_bones
+    world_state: |
+      Old Bones closed the tavern early last night and sat alone in the
+      empty common room.
+    action:
+      action: event
+      reason: "Dramatize the singing-at-midnight bio hook quietly."
+      target: old_bones
+      event: "Old Bones closed the Drowned Rat an hour early tonight and sat alone with the lanterns blown out, head cocked toward the cellar door."
+
+  - primary_npc: old_bones
+    world_state: |
+      Old Bones saw Finn hide a small object under the third plank at
+      the end of dock three this morning.
+    action:
+      action: fact
+      reason: "Bones observes Finn's secret without spending it."
+      npc_id: old_bones
+      fact: "The dock boy hid something under the third plank at dock three this morning. Whatever it is matters to him — so it matters to me."
+      fact_type: personal
+
+  - primary_npc: old_bones
+    world_state: |
+      Old Bones has not heard from his smuggling contact in the caves
+      for four nights. The cellar door has been blank every morning.
+    action:
+      action: event
+      reason: "Missing contact links the caves to the Shoals mystery."
+      target: old_bones
+      event: "Old Bones opened the cellar door at dawn for the fourth morning in a row and found nothing on the threshold. No kelp, no shell, no bent nail."
+
+  - primary_npc: old_bones
+    world_state: |
+      Old Bones heard that Reva took delivery of a waterlogged logbook
+      from the lighthouse this morning. Player trust with Bones: 50.
+    action:
+      action: quest
+      reason: "Bones wants the lighthouse keeper's last entry before the next tide."
+      npc_id: old_bones
+      quest:
+        id: what_she_read
+        name: "What She Read"
+        description: "Reva received a waterlogged logbook from the lighthouse today. Old Bones wants to know what the last entry said."
+        reward: "A seat at the bar nobody will ask you to leave."
+        objectives:
+          - "Find out what the lighthouse keeper's final log entry said and report it to Old Bones."
+
+  - primary_npc: old_bones
+    world_state: |
+      A Stormcrow crew argued loudly about whether the singing from the
+      Shoals was a mermaid or a ghost. Bones laughed but did not join in.
+    action:
+      action: fact
+      reason: "Bones holds his private certainty about the Shoals."
+      npc_id: old_bones
+      fact: "The Stormcrows think the Shoals sing because of mermaids. It is older than mermaids and it is not singing for fun."
+      fact_type: personal

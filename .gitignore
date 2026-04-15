@@ -20,6 +20,15 @@ data/story_director/arcs.json
 data/story_director/_tmp_*.json
 data/story_director/_tmp_*.npy
 
+# Per-world Story Director runtime state (mirrors the legacy paths above
+# for any world that ships its own data/worlds/<world>/story/ pack)
+data/worlds/*/story/state.json
+data/worlds/*/story/fact_ledger.json
+data/worlds/*/story/fact_ledger.embeddings.npy
+data/worlds/*/story/arcs.json
+data/worlds/*/story/_tmp_*.json
+data/worlds/*/story/_tmp_*.npy
+
 # Story Director bench outputs
 tick_trace_*.json
 data/worlds/*/player_quests.yaml.bak

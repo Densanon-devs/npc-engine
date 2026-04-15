@@ -1,0 +1,2914 @@
+{
+  "player_events": [],
+  "dialogue_events": [],
+  "ticks": [
+    {
+      "tick": 1,
+      "elapsed": 9.375,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva is distracted by the sealed letter in her desk, which she received from the governor of Meridia. She must make a decision about what to do next.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. Her mind raced with potential consequences, her eyes scanning the text for any hints of what the governor might be asking for.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva is distracted by the sealed letter in her desk, which she received from the governor of Meridia. She must make a decision about what to do next.",
+            "target": "captain_reva",
+            "event": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. Her mind raced with potential consequences, her eyes scanning the text for any hints of what the governor might be asking for."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "quest",
+          "outcome": "FAIL[quest:quest_already_exists]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Finn's secret glass shard is a clue to the mysterious black glass jars and the dark lighthouse. Plant this as a quest for him to investigate further.\", \"npc_id\": \"finn\", \"quest\": {\"id\": \"glass_shard\", \"name\": \"Melted Glass Piece\", \"description\": \"Finn found a shard of melted glass on the beach near the lighthouse. It has faint markings that glow in moonlight. He wants to find out what it is and who could have left it there.\", \"reward\": \"A permanent berth in the dock area and five silver.\", \"objectives\": [\"Investigate the beach near the lighthouse for any more pieces of melted glass and try to read the faint markings on the shard.\"]}} ===\n{\"action\": \"quest\", \"reason\": \"Finn's secret glass shard is a clue to the mysterious black glass jars and the dark lighthouse. Plant this as a quest for him to investigate further.\", \"npc_id\": \"finn\", \"quest\": {\"id\": \"glass_shard\", \"name\": \"Melted Glass Piece\", \"description\": \"Finn found a shard of melted glass on the beach near the lighthouse. It has faint markings that glow in moonlight. He wants to find out what it is and who could have left it there.\", \"reward\": \"A permanent berth in the dock area and five silver.\", \"objectives\": [\"Investigate the beach near the lighthouse for any more pieces of melted glass and try to read the faint markings on the shard.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Finn's secret glass shard is a clue to the mysterious black glass jars and the dark lighthouse. Plant this as a quest for him to investigate further.",
+            "npc_id": "finn",
+            "quest": {
+              "id": "glass_shard",
+              "name": "Melted Glass Piece",
+              "description": "Finn found a shard of melted glass on the beach near the lighthouse. It has faint markings that glow in moonlight. He wants to find out what it is and who could have left it there.",
+              "reward": "A permanent berth in the dock area and five silver.",
+              "objectives": [
+                "Investigate the beach near the lighthouse for any more pieces of melted glass and try to read the faint markings on the shard."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": false,
+            "reason": "quest_already_exists: glass_shard"
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has been hearing strange sounds coming from the Shoals at night, and he's noticed a mysterious hooded figure climbing the lighthouse path.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones heard strange singing coming from the Shoals last week — not human but something older. He saw a hooded figure climbing the lighthouse path carrying one of those black glass jars three nights ago. The figure was moving quickly, and Old Bones thinks they were trying to get away from something.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has been hearing strange sounds coming from the Shoals at night, and he's noticed a mysterious hooded figure climbing the lighthouse path.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones heard strange singing coming from the Shoals last week — not human but something older. He saw a hooded figure climbing the lighthouse path carrying one of those black glass jars three nights ago. The figure was moving quickly, and Old Bones thinks they were trying to get away from something.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva is distracted by the sealed letter in her desk, which she received from the governor of Meridia. She must make a decision about what to do next.",
+        "target": "captain_reva",
+        "event": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. Her mind raced with potential consequences, her eyes scanning the text for any hints of what the governor might be asking for."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva"
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 2,
+      "elapsed": 6.922,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva has a nagging feeling that the governor's letter isn't just a formality. She needs to take a closer look at it.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva walks to her desk, frowning. She reaches for the letter in her desk and then stops, her hand hovering above it. Her eyes dart around, as if expecting someone to interrupt her.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva has a nagging feeling that the governor's letter isn't just a formality. She needs to take a closer look at it.",
+            "target": "captain_reva",
+            "event": "Captain Reva walks to her desk, frowning. She reaches for the letter in her desk and then stops, her hand hovering above it. Her eyes dart around, as if expecting someone to interrupt her."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Finn's secret knowledge of the mysterious black glass jars is a key piece of the puzzle — give the player a new way to learn about the cargo that's been wrecking ships.\", \"npc_id\": \"finn\", \"quest\": {\"id\": \"glass_jars\", \"name\": \"Mysterious Cargo\", \"description\": \"Finn found a melted piece of glass on the beach near the lighthouse. He remembers seeing a hooded figure carrying a sealed black glass jar three nights ago. Can you help him learn more about the cargo the Red Tide is moving at the Shoals?\", \"reward\": \"A chance to join a crew and sail past the Shoals, if you can figure out the cargo's secret origin.\", \"objectives\": [\"Investigate the cargo the Red Tide brought in last week and find out what the sealed black glass jars are.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Finn's secret knowledge of the mysterious black glass jars is a key piece of the puzzle — give the player a new way to learn about the cargo that's been wrecking ships.",
+            "npc_id": "finn",
+            "quest": {
+              "id": "glass_jars",
+              "name": "Mysterious Cargo",
+              "description": "Finn found a melted piece of glass on the beach near the lighthouse. He remembers seeing a hooded figure carrying a sealed black glass jar three nights ago. Can you help him learn more about the cargo the Red Tide is moving at the Shoals?",
+              "reward": "A chance to join a crew and sail past the Shoals, if you can figure out the cargo's secret origin.",
+              "objectives": [
+                "Investigate the cargo the Red Tide brought in last week and find out what the sealed black glass jars are."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "finn",
+            "quest_id": "glass_jars"
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has learned of Finn's discovery and knows it could be a clue to the lighthouse mystery.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has learned of Finn's discovery and knows it could be a clue to the lighthouse mystery.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.748,
+              "matches_text": "Finn found a melted piece of glass on the beach near the lighthouse. He remembers seeing a hooded figure carrying a sealed black glass jar three nights ago. Can you help him learn more about the cargo the Red Tide is moving at the Shoals?",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.994,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.001,
+                  "neutral": 0.994
+                }
+              }
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 2",
+        "+quest(finn): glass_jars",
+        "+events(finn): 1",
+        "+events(old_bones): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva has a nagging feeling that the governor's letter isn't just a formality. She needs to take a closer look at it.",
+        "target": "captain_reva",
+        "event": "Captain Reva walks to her desk, frowning. She reaches for the letter in her desk and then stops, her hand hovering above it. Her eyes dart around, as if expecting someone to interrupt her."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva"
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 3,
+      "elapsed": 8.219,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Avoid using direct quotes from the setting bible or previous beats.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva notices a subtle change in the air as she walks to her desk.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva walks to her desk, her eyes scanning the room as if searching for something unseen. Her brow furrows slightly, and she runs a hand through her short, salt-and-pepper hair. She notices a faint, almost imperceptible breeze coming from the open window, which she hadn't noticed before. It's not a strong wind, but it feels different, as if the air has a slight chill to it, uncharacteristic of the mild weather today.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva notices a subtle change in the air as she walks to her desk.",
+            "target": "captain_reva",
+            "event": "Captain Reva walks to her desk, her eyes scanning the room as if searching for something unseen. Her brow furrows slightly, and she runs a hand through her short, salt-and-pepper hair. She notices a faint, almost imperceptible breeze coming from the open window, which she hadn't noticed before. It's not a strong wind, but it feels different, as if the air has a slight chill to it, uncharacteristic of the mild weather today."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.615,
+              "matches_text": "Captain Reva walks to her desk, frowning. She reaches for the letter in her desk and then stops, her hand hovering above it. Her eyes dart around, as if expecting someone to interrupt her.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.98,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.019,
+                  "neutral": 0.98
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has learned that the Red Tide fleet is smuggling through the tunnels under the Drowned Rat tavern.\", \"npc_id\": \"finn\", \"fact\": \"Finn has pieced together clues from the shard he found and the crew he saw in the tavern. The smugglers are using the tunnels to move contraband through the port. The Red Tide is the only fleet to have moved in and out constantly since the lighthouse went dark. They must be hiding something big.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has learned that the Red Tide fleet is smuggling through the tunnels under the Drowned Rat tavern.",
+            "npc_id": "finn",
+            "fact": "Finn has pieced together clues from the shard he found and the crew he saw in the tavern. The smugglers are using the tunnels to move contraband through the port. The Red Tide is the only fleet to have moved in and out constantly since the lighthouse went dark. They must be hiding something big."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.689,
+              "matches_text": "Finn found a melted piece of glass on the beach near the lighthouse. He remembers seeing a hooded figure carrying a sealed black glass jar three nights ago. Can you help him learn more about the cargo the Red Tide is moving at the Shoals?",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.0,
+                  "neutral": 0.997
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones has heard strange singing from the Shoals, and now he wants to check it out.\", \"target\": \"old_bones\", \"event\": \"Old Bones, cackling as he always does, starts talking to Finn the Dock Worker about the strange singing from the Shoals. 'I've heard it a few nights now, a low, mournful voice. It sounds like... like something old. You know anything about it?' Finn looks uncomfortable, but nods. 'I have a secret, old friend. Something that might help you find out what's going on. It's not a good secret, but it could be useful. I'll tell you if you promise to keep it to yourself.' Old Bones grins and claps Finn on the shoulder. 'Of course, of course.' Finn's eyes flick to the door and back again. He'll have to think of a way to get Old Bones into the cellar tunnels to check it out. Old Bones will be back soon, curious and eager to learn more.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones has heard strange singing from the Shoals, and now he wants to check it out.",
+            "target": "old_bones",
+            "event": "Old Bones, cackling as he always does, starts talking to Finn the Dock Worker about the strange singing from the Shoals. 'I've heard it a few nights now, a low, mournful voice. It sounds like... like something old. You know anything about it?' Finn looks uncomfortable, but nods. 'I have a secret, old friend. Something that might help you find out what's going on. It's not a good secret, but it could be useful. I'll tell you if you promise to keep it to yourself.' Old Bones grins and claps Finn on the shoulder. 'Of course, of course.' Finn's eyes flick to the door and back again. He'll have to think of a way to get Old Bones into the cellar tunnels to check it out. Old Bones will be back soon, curious and eager to learn more."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.641,
+              "matches_text": "Old Bones heard strange singing coming from the Shoals last week — not human but something older. He saw a hooded figure climbing the lighthouse path carrying one of those black glass jars three nights ago. The figure was moving quickly, an",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva notices a subtle change in the air as she walks to her desk.",
+        "target": "captain_reva",
+        "event": "Captain Reva walks to her desk, her eyes scanning the room as if searching for something unseen. Her brow furrows slightly, and she runs a hand through her short, salt-and-pepper hair. She notices a faint, almost imperceptible breeze coming from the open window, which she hadn't noticed before. It's not a strong wind, but it feels different, as if the air has a slight chill to it, uncharacteristic of the mild weather today."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.615,
+          "matches_text": "Captain Reva walks to her desk, frowning. She reaches for the letter in her desk and then stops, her hand hovering above it. Her eyes dart around, as if expecting someone to interrupt her.",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 2,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.98,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.0,
+              "entailment": 0.019,
+              "neutral": 0.98
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 4,
+      "elapsed": 7.984,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Captain Reva needs a new challenge to keep her mind occupied as the lighthouse mystery deepens.\", \"npc_id\": \"captain_reva\", \"quest\": {\"id\": \"lighthouse_repair\", \"name\": \"Lighthouse Maintenance\", \"description\": \"The north-cliff lighthouse has been dark for two months. Captain Reva needs to raise funds to repair it and restore the light. She wants to commission a new lighthouse keeper and hire a crew to work on the repairs.\", \"reward\": \"Captain Reva owes you a favor for helping fund repairs and hiring a new keeper.\", \"objectives\": [\"Raise funds by selling a crate of mugs to the Red Tide fleet\", \"Hire a new lighthouse keeper\", \"Hire a crew to work on the repairs\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Captain Reva needs a new challenge to keep her mind occupied as the lighthouse mystery deepens.",
+            "npc_id": "captain_reva",
+            "quest": {
+              "id": "lighthouse_repair",
+              "name": "Lighthouse Maintenance",
+              "description": "The north-cliff lighthouse has been dark for two months. Captain Reva needs to raise funds to repair it and restore the light. She wants to commission a new lighthouse keeper and hire a crew to work on the repairs.",
+              "reward": "Captain Reva owes you a favor for helping fund repairs and hiring a new keeper.",
+              "objectives": [
+                "Raise funds by selling a crate of mugs to the Red Tide fleet",
+                "Hire a new lighthouse keeper",
+                "Hire a crew to work on the repairs"
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "captain_reva",
+            "quest_id": "lighthouse_repair"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn, the Dock Worker, has learned that the glass shard he found has markings that glow faintly in moonlight — they look like old sea-tongue script.\", \"npc_id\": \"finn\", \"fact\": \"The glass shard has strange markings that glow faintly in moonlight, like the old sea-tongue script. I know what it is now, though I don't know what it means. It's something from the past, but I don't know if it's good or bad. I need to keep it hidden, but I can't tell anyone. It's like a secret I can't shake, and I don't know where it came from.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn, the Dock Worker, has learned that the glass shard he found has markings that glow faintly in moonlight — they look like old sea-tongue script.",
+            "npc_id": "finn",
+            "fact": "The glass shard has strange markings that glow faintly in moonlight, like the old sea-tongue script. I know what it is now, though I don't know what it means. It's something from the past, but I don't know if it's good or bad. I need to keep it hidden, but I can't tell anyone. It's like a secret I can't shake, and I don't know where it came from.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "personal"
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"event\", \"reason\": \"Old Bones, the tavern owner, is seen looking out the window at the dock. His eyes are sharp and he seems to be contemplating something.\", \"target\": \"old_bones\", \"event\": \"Old Bones, the tavern owner, leans out the window and watches the dock below. His expression is thoughtful, as if he's considering something important. He then turns to his bar and pours himself a drink, sipping it slowly as he watches the sea.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones, the tavern owner, is seen looking out the window at the dock. His eyes are sharp and he seems to be contemplating something.",
+            "target": "old_bones",
+            "event": "Old Bones, the tavern owner, leans out the window and watches the dock below. His expression is thoughtful, as if he's considering something important. He then turns to his bar and pours himself a drink, sipping it slowly as he watches the sea."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.6,
+              "matches_text": "Old Bones, cackling as he always does, starts talking to Finn the Dock Worker about the strange singing from the Shoals. 'I've heard it a few nights now, a low, mournful voice. It sounds like... like something old. You know anything about i",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "contradiction",
+                "confidence": 0.995,
+                "is_contradiction": true,
+                "scores": {
+                  "contradiction": 0.995,
+                  "entailment": 0.0,
+                  "neutral": 0.005
+                }
+              },
+              "contradiction": true
+            },
+            "retried_after_self_repetition": true
+          }
+        }
+      ],
+      "world_changes": [
+        "+quest(captain_reva): lighthouse_repair",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 2"
+      ],
+      "action": {
+        "action": "quest",
+        "reason": "Captain Reva needs a new challenge to keep her mind occupied as the lighthouse mystery deepens.",
+        "npc_id": "captain_reva",
+        "quest": {
+          "id": "lighthouse_repair",
+          "name": "Lighthouse Maintenance",
+          "description": "The north-cliff lighthouse has been dark for two months. Captain Reva needs to raise funds to repair it and restore the light. She wants to commission a new lighthouse keeper and hire a crew to work on the repairs.",
+          "reward": "Captain Reva owes you a favor for helping fund repairs and hiring a new keeper.",
+          "objectives": [
+            "Raise funds by selling a crate of mugs to the Red Tide fleet",
+            "Hire a new lighthouse keeper",
+            "Hire a crew to work on the repairs"
+          ]
+        }
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "quest",
+        "npc_id": "captain_reva",
+        "quest_id": "lighthouse_repair"
+      },
+      "outcome": "OK[quest]"
+    },
+    {
+      "tick": 5,
+      "elapsed": 9.547,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made, suggesting sabotage.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made. The keeper said the rocks are not as jagged as they should be, and the water is warmer than it should be. He told her the rocks are not natural, but man-made, and that something is causing the ships to wreck, but he didn't know what it is.\", \"fact_type\": \"world\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made, suggesting sabotage.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made. The keeper said the rocks are not as jagged as they should be, and the water is warmer than it should be. He told her the rocks are not natural, but man-made, and that something is causing the ships to wreck, but he didn't know what it is.",
+            "fact_type": "world"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn is eager to share his discovery with someone who might understand — he decides to confide in Old Bones at the Drowned Rat.\", \"target\": \"finn\", \"event\": \"Finn approaches Old Bones at the Drowned Rat, his face aglow with excitement. 'Old Bones, I found something! A piece of the lighthouse lens on the beach! I saw a hooded figure climbing the lighthouse path three nights ago. I don’t know what it means, but it’s something to tell someone. You understand?' Old Bones raises an eyebrow, intrigued. 'Of course, Finn. That’s a good find. I’ll have a look at it.' Finn’s eyes widen as he nods eagerly, 'Thank you, Old Bones. I’ll be back with a map of the docks and the lighthouse path soon.'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn is eager to share his discovery with someone who might understand — he decides to confide in Old Bones at the Drowned Rat.",
+            "target": "finn",
+            "event": "Finn approaches Old Bones at the Drowned Rat, his face aglow with excitement. 'Old Bones, I found something! A piece of the lighthouse lens on the beach! I saw a hooded figure climbing the lighthouse path three nights ago. I don’t know what it means, but it’s something to tell someone. You understand?' Old Bones raises an eyebrow, intrigued. 'Of course, Finn. That’s a good find. I’ll have a look at it.' Finn’s eyes widen as he nods eagerly, 'Thank you, Old Bones. I’ll be back with a map of the docks and the lighthouse path soon.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.845,
+              "matches_text": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "Avoid writing a new fact about this NPC.\n\nACTION:\n{\"action\": \"quest\", \"reason\": \"Old Bones learns Finn's discovery of the lighthouse lens and realizes it could be a key to the mystery — he'll gather information from the docks.\", \"npc_id\": \"old_bones\", \"quest\": {\"id\": \"lighthouse_lens\", \"name\": \"The Lighthouse Lens Clue\", \"description\": \"Old Bones has heard Finn found a piece of the lighthouse lens on the beach. He wants to know what the shards are for and if they could help solve the mystery of the dark lighthouse. He will visit the docks and gather any information he can.\", \"reward\": \"A map of the hidden smuggling tunnels under the Drowned Rat and a lantern with a lens that has been polished to a shine.\", \"objectives\": [\"Visit the docks and talk to any crew that has docked here in the last month. Find out if anyone has seen or heard of the lighthouse lens. Ask if anyone is looking for the same pieces that Finn found.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Old Bones learns Finn's discovery of the lighthouse lens and realizes it could be a key to the mystery — he'll gather information from the docks.",
+            "npc_id": "old_bones",
+            "quest": {
+              "id": "lighthouse_lens",
+              "name": "The Lighthouse Lens Clue",
+              "description": "Old Bones has heard Finn found a piece of the lighthouse lens on the beach. He wants to know what the shards are for and if they could help solve the mystery of the dark lighthouse. He will visit the docks and gather any information he can.",
+              "reward": "A map of the hidden smuggling tunnels under the Drowned Rat and a lantern with a lens that has been polished to a shine.",
+              "objectives": [
+                "Visit the docks and talk to any crew that has docked here in the last month. Find out if anyone has seen or heard of the lighthouse lens. Ask if anyone is looking for the same pieces that Finn found."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "old_bones",
+            "quest_id": "lighthouse_lens",
+            "similarity_warning": {
+              "similarity": 0.927,
+              "matches_text": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(captain_reva): 1",
+        "+events(finn): 2",
+        "+quest(old_bones): lighthouse_lens",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made, suggesting sabotage.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva learned from the lighthouse keeper, who vanished the night the light went out, that the Shoals are not natural, but man-made. The keeper said the rocks are not as jagged as they should be, and the water is warmer than it should be. He told her the rocks are not natural, but man-made, and that something is causing the ships to wreck, but he didn't know what it is.",
+        "fact_type": "world"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world"
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 6,
+      "elapsed": 7.719,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva learned from the lighthouse keeper, who vanished the night the lighthouse went dark, that the keeper had a map of the underwater tunnels beneath the port, including the one that connects to the caves below the cliff.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva pored over the map the lighthouse keeper left behind before the light went out. The map shows a network of underwater tunnels beneath the port, including one that leads to caves below the cliff. The map is marked with the lighthouse keeper's personal seal and his signature. Captain Reva is now more determined to discover the truth behind the lighthouse's disappearance and the dark ships that have been wrecking on the Shoals.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva learned from the lighthouse keeper, who vanished the night the lighthouse went dark, that the keeper had a map of the underwater tunnels beneath the port, including the one that connects to the caves below the cliff.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva pored over the map the lighthouse keeper left behind before the light went out. The map shows a network of underwater tunnels beneath the port, including one that leads to caves below the cliff. The map is marked with the lighthouse keeper's personal seal and his signature. Captain Reva is now more determined to discover the truth behind the lighthouse's disappearance and the dark ships that have been wrecking on the Shoals."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.669,
+              "matches_text": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. ",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.0,
+                  "neutral": 0.997
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn has been keeping his secret shard of the lighthouse lens hidden under a loose plank at the end of dock three. The night of the lighthouse's darkness, a hooded figure was seen climbing the lighthouse path, carrying one of those black glass jars. Finn feels a chill as he remembers the sight. He's unsure what to do with the shard now.\", \"target\": \"finn\", \"event\": \"Finn tosses his dreams aside and heads to the end of dock three, where he retrieves the glass shard hidden under the loose plank. He fumbles with it, feeling its cold, heavy weight. He knows he must keep it secret, but the shard's glow in the moonlight is unnerving. He decides to take it with him, hoping to find a way to use it without drawing attention.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Finn has been keeping his secret shard of the lighthouse lens hidden under a loose plank at the end of dock three. The night of the lighthouse's darkness, a hooded figure was seen climbing the lighthouse path, carrying one of those black glass jars. Finn feels a chill as he remembers the sight. He's unsure what to do with the shard now.",
+            "target": "finn",
+            "event": "Finn tosses his dreams aside and heads to the end of dock three, where he retrieves the glass shard hidden under the loose plank. He fumbles with it, feeling its cold, heavy weight. He knows he must keep it secret, but the shard's glow in the moonlight is unnerving. He decides to take it with him, hoping to find a way to use it without drawing attention."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.627,
+              "matches_text": "Old Bones has heard Finn found a piece of the lighthouse lens on the beach. He wants to know what the shards are for and if they could help solve the mystery of the dark lighthouse. He will visit the docks and gather any information he can.",
+              "matches_npc": "old_bones",
+              "matches_kind": "quest",
+              "matches_tick": 5,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.004,
+                  "entailment": 0.001,
+                  "neutral": 0.995
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "Here is a DIFFERENT beat for old_bones:\n\nACTION:\n{\"action\": \"fact\", \"reason\": \"Old Bones learned that the Iron Wake fleet has been moving cargo through the tunnels beneath the Drowned Rat. He's planning a raid to seize the evidence.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones caught a glimpse of the Iron Wake's captain as he walked by the tavern. The man was carrying a heavy briefcase, and Old Bones's gut told him it was filled with stolen goods. He'll make sure to report him to Captain Reva tonight.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones learned that the Iron Wake fleet has been moving cargo through the tunnels beneath the Drowned Rat. He's planning a raid to seize the evidence.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones caught a glimpse of the Iron Wake's captain as he walked by the tavern. The man was carrying a heavy briefcase, and Old Bones's gut told him it was filled with stolen goods. He'll make sure to report him to Captain Reva tonight."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "retried_after_self_repetition": true
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva learned from the lighthouse keeper, who vanished the night the lighthouse went dark, that the keeper had a map of the underwater tunnels beneath the port, including the one that connects to the caves below the cliff.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva pored over the map the lighthouse keeper left behind before the light went out. The map shows a network of underwater tunnels beneath the port, including one that leads to caves below the cliff. The map is marked with the lighthouse keeper's personal seal and his signature. Captain Reva is now more determined to discover the truth behind the lighthouse's disappearance and the dark ships that have been wrecking on the Shoals."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.669,
+          "matches_text": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. ",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 1,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.0,
+              "neutral": 0.997
+            }
+          }
+        }
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 7,
+      "elapsed": 9.375,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva, in her office, begins to examine the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva, in her office, begins to examine the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery.",
+            "target": "captain_reva",
+            "event": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.866,
+              "matches_text": "Captain Reva pored over the map the lighthouse keeper left behind before the light went out. The map shows a network of underwater tunnels beneath the port, including one that leads to caves below the cliff. The map is marked with the light",
+              "matches_npc": "captain_reva",
+              "matches_kind": "fact",
+              "matches_tick": 6,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.004,
+                  "entailment": 0.001,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "retried_after_contradiction": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn learned that the Red Tide is the only fleet that has been in and out constantly since the lighthouse went dark. He's worried the ships are all missing crew.\", \"npc_id\": \"finn\", \"fact\": \"I learned from the dock workers that the Red Tide has been the only fleet to use Port Blackwater since the lighthouse went dark. They always come in and out in their own ships, not with stolen crews from other ports. But three men are missing from their ships now. That's not right. They don't usually lose men like that.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn learned that the Red Tide is the only fleet that has been in and out constantly since the lighthouse went dark. He's worried the ships are all missing crew.",
+            "npc_id": "finn",
+            "fact": "I learned from the dock workers that the Red Tide has been the only fleet to use Port Blackwater since the lighthouse went dark. They always come in and out in their own ships, not with stolen crews from other ports. But three men are missing from their ships now. That's not right. They don't usually lose men like that.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.607,
+              "matches_text": "Finn has pieced together clues from the shard he found and the crew he saw in the tavern. The smugglers are using the tunnels to move contraband through the port. The Red Tide is the only fleet to have moved in and out constantly since the ",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.99,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.009,
+                  "entailment": 0.001,
+                  "neutral": 0.99
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones overheard a conversation in the Drowned Rat, learning more about Finn's discovery of the lighthouse lens shard.\", \"target\": \"old_bones\", \"event\": \"Old Bones, overheard a group of sailors talking in the tavern about Finn's discovery. He heard them mention the shard was melted and had faint script on it. He plans to ask Finn about it more privately tonight.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones overheard a conversation in the Drowned Rat, learning more about Finn's discovery of the lighthouse lens shard.",
+            "target": "old_bones",
+            "event": "Old Bones, overheard a group of sailors talking in the tavern about Finn's discovery. He heard them mention the shard was melted and had faint script on it. He plans to ask Finn about it more privately tonight."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.677,
+              "matches_text": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.0,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva, in her office, begins to examine the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery.",
+        "target": "captain_reva",
+        "event": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its darkness and wonders if the tunnels are connected to the Shoals mystery."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.866,
+          "matches_text": "Captain Reva pored over the map the lighthouse keeper left behind before the light went out. The map shows a network of underwater tunnels beneath the port, including one that leads to caves below the cliff. The map is marked with the light",
+          "matches_npc": "captain_reva",
+          "matches_kind": "fact",
+          "matches_tick": 6,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.996,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.004,
+              "entailment": 0.001,
+              "neutral": 0.996
+            }
+          }
+        },
+        "retried_after_contradiction": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 8,
+      "elapsed": 7.593,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Captain Reva learned a new piece of information from her daily review of the lighthouse's logs — there were unexplained disappearances of sailors who last went to the Shoals.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva paces her office, her eyes fixed on the map of the port's tunnels. She glances at the logs she reviewed this morning, then looks up to the ceiling. 'There were three sailors who went to the Shoals last week. All vanished, no sign of them. Something is not right. I need to find out what happened to them.'\", \"fact_type\": \"world\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva learned a new piece of information from her daily review of the lighthouse's logs — there were unexplained disappearances of sailors who last went to the Shoals.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva paces her office, her eyes fixed on the map of the port's tunnels. She glances at the logs she reviewed this morning, then looks up to the ceiling. 'There were three sailors who went to the Shoals last week. All vanished, no sign of them. Something is not right. I need to find out what happened to them.'",
+            "fact_type": "world"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.739,
+              "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 7,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.0,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn's secret glass shard discovery is a growing threat — make it personal by affecting him directly.\", \"target\": \"finn\", \"event\": \"Finn, as he trudges home from another day's dock work, slips and falls into a pile of crates. He scrapes his knee on a sharp edge. As he's wiping the blood from his hand, he stumbles and drops the glass shard he's been hiding under a loose plank at the end of dock three. He gasps, startled, and quickly picks up the shard. He looks around nervously, then runs back to the Drowned Rat, where he'll hide the shard once Old Bones isn't looking.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn's secret glass shard discovery is a growing threat — make it personal by affecting him directly.",
+            "target": "finn",
+            "event": "Finn, as he trudges home from another day's dock work, slips and falls into a pile of crates. He scrapes his knee on a sharp edge. As he's wiping the blood from his hand, he stumbles and drops the glass shard he's been hiding under a loose plank at the end of dock three. He gasps, startled, and quickly picks up the shard. He looks around nervously, then runs back to the Drowned Rat, where he'll hide the shard once Old Bones isn't looking."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.796,
+              "matches_text": "Finn tosses his dreams aside and heads to the end of dock three, where he retrieves the glass shard hidden under the loose plank. He fumbles with it, feeling its cold, heavy weight. He knows he must keep it secret, but the shard's glow in t",
+              "matches_npc": "finn",
+              "matches_kind": "event",
+              "matches_tick": 6,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.61,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.39,
+                  "entailment": 0.0,
+                  "neutral": 0.61
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.796,
+              "matches_tick": 6
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones learns that Finn found a piece of the lighthouse lens on the beach. He must act on this discovery and use it to gather more information.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones ponders the shard of the lighthouse lens Finn found and realizes it is a crucial clue to the lighthouse mystery. He plans to visit the docks and ask Finn for more details about the shard, hoping to gather more information about what happened to the lighthouse, and possibly the mysterious figure that visited the lighthouse path three nights ago.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones learns that Finn found a piece of the lighthouse lens on the beach. He must act on this discovery and use it to gather more information.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones ponders the shard of the lighthouse lens Finn found and realizes it is a crucial clue to the lighthouse mystery. He plans to visit the docks and ask Finn for more details about the shard, hoping to gather more information about what happened to the lighthouse, and possibly the mysterious figure that visited the lighthouse path three nights ago."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.868,
+              "matches_text": "Old Bones has heard Finn found a piece of the lighthouse lens on the beach. He wants to know what the shards are for and if they could help solve the mystery of the dark lighthouse. He will visit the docks and gather any information he can.",
+              "matches_npc": "old_bones",
+              "matches_kind": "quest",
+              "matches_tick": 5,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.004,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.868,
+              "matches_tick": 5
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva learned a new piece of information from her daily review of the lighthouse's logs — there were unexplained disappearances of sailors who last went to the Shoals.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva paces her office, her eyes fixed on the map of the port's tunnels. She glances at the logs she reviewed this morning, then looks up to the ceiling. 'There were three sailors who went to the Shoals last week. All vanished, no sign of them. Something is not right. I need to find out what happened to them.'",
+        "fact_type": "world"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.739,
+          "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 7,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.003,
+              "entailment": 0.0,
+              "neutral": 0.997
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 9,
+      "elapsed": 8.703,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Use the world state and NPC bio above to construct a new, original beat.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva notices a slight tremor in the dock area, perhaps from the Shoals. She studies the map of tunnels again, her mind racing.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva notices a slight tremor in the dock area, perhaps from the Shoals. She studies the map of tunnels again, her mind racing.",
+            "target": "captain_reva",
+            "event": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.85,
+              "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 7,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.002,
+                  "neutral": 0.995
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has learned that Captain Reva has a letter from the governor of Meridia in her desk. He's been keeping it hidden from the tavern owner, who'd expose him.\", \"npc_id\": \"finn\", \"fact\": \"Finn, sitting on the dock with his feet in the water, thinks about the letter from the governor. He knows it's there, hidden under a loose plank in his room. He can't tell Old Bones because he'd expose him. He'll have to keep it secret, even if it means not sharing with the tavern owner.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has learned that Captain Reva has a letter from the governor of Meridia in her desk. He's been keeping it hidden from the tavern owner, who'd expose him.",
+            "npc_id": "finn",
+            "fact": "Finn, sitting on the dock with his feet in the water, thinks about the letter from the governor. He knows it's there, hidden under a loose plank in his room. He can't tell Old Bones because he'd expose him. He'll have to keep it secret, even if it means not sharing with the tavern owner."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.684,
+              "matches_text": "Finn, as he trudges home from another day's dock work, slips and falls into a pile of crates. He scrapes his knee on a sharp edge. As he's wiping the blood from his hand, he stumbles and drops the glass shard he's been hiding under a loose ",
+              "matches_npc": "finn",
+              "matches_kind": "event",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.94,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.059,
+                  "entailment": 0.001,
+                  "neutral": 0.94
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones learns Finn's secret about the lighthouse lens shard — this is a personal blow to his smuggling operation.\", \"target\": \"old_bones\", \"event\": \"Old Bones, in his secret room behind the bar, discovers a small, hidden map of the tunnels in the cliff. His cackling stops as he recognizes the shard Finn found as a piece from the lighthouse lens. He realizes Finn's discovery could be a key to the smuggling operation and the lighthouse mystery. He feels a chill run down his spine.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones learns Finn's secret about the lighthouse lens shard — this is a personal blow to his smuggling operation.",
+            "target": "old_bones",
+            "event": "Old Bones, in his secret room behind the bar, discovers a small, hidden map of the tunnels in the cliff. His cackling stops as he recognizes the shard Finn found as a piece from the lighthouse lens. He realizes Finn's discovery could be a key to the smuggling operation and the lighthouse mystery. He feels a chill run down his spine."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.881,
+              "matches_text": "Old Bones ponders the shard of the lighthouse lens Finn found and realizes it is a crucial clue to the lighthouse mystery. He plans to visit the docks and ask Finn for more details about the shard, hoping to gather more information about wh",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.881,
+              "matches_tick": 8
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva notices a slight tremor in the dock area, perhaps from the Shoals. She studies the map of tunnels again, her mind racing.",
+        "target": "captain_reva",
+        "event": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.85,
+          "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 7,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.995,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.003,
+              "entailment": 0.002,
+              "neutral": 0.995
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 10,
+      "elapsed": 10.0,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva has learned that the sealed letter from the governor of Meridia is a forgery, written by someone who wants the port to be in crown hands.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, in her office, picks up the letter and runs her fingers over the ink. It feels like a forgery, but she can't be sure. She leaves it on her desk, her mind racing at the implications of such a document being in her possession.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva has learned that the sealed letter from the governor of Meridia is a forgery, written by someone who wants the port to be in crown hands.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, in her office, picks up the letter and runs her fingers over the ink. It feels like a forgery, but she can't be sure. She leaves it on her desk, her mind racing at the implications of such a document being in her possession."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.649,
+              "matches_text": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. ",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.986,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.013,
+                  "entailment": 0.001,
+                  "neutral": 0.986
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Pick a new option.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Finn, as he trudges home from the docks, hears a faint singing coming from the direction of the Shoals. He stops to listen, his curiosity piqued.\", \"target\": \"finn\", \"event\": \"Finn, as he trudges home from the docks, hears a faint singing coming from the direction of the Shoals. He stops to listen, his curiosity piqued. He squints at the horizon, the singing seems to be coming from a distance, but it's not human singing. It's older, more ancient. He feels a shiver run down his spine as he listens, wondering if it's the same singing he heard three nights ago when he found a piece of the lighthouse lens on the beach.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn, as he trudges home from the docks, hears a faint singing coming from the direction of the Shoals. He stops to listen, his curiosity piqued.",
+            "target": "finn",
+            "event": "Finn, as he trudges home from the docks, hears a faint singing coming from the direction of the Shoals. He stops to listen, his curiosity piqued. He squints at the horizon, the singing seems to be coming from a distance, but it's not human singing. It's older, more ancient. He feels a shiver run down his spine as he listens, wondering if it's the same singing he heard three nights ago when he found a piece of the lighthouse lens on the beach."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.685,
+              "matches_text": "Old Bones, cackling as he always does, starts talking to Finn the Dock Worker about the strange singing from the Shoals. 'I've heard it a few nights now, a low, mournful voice. It sounds like... like something old. You know anything about i",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has learned about Finn's discovery of the lighthouse shard — plant it as a personal knowledge he'll act on.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones heard Finn talking in his sleep the other night. The dock worker mentioned finding a shard of the lighthouse lens and saw a hooded figure climbing the path to the lighthouse. He thinks it might be a clue to what's happening at the Shoals. I'll keep an eye on Finn and see if he's been in contact with anyone suspicious.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has learned about Finn's discovery of the lighthouse shard — plant it as a personal knowledge he'll act on.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones heard Finn talking in his sleep the other night. The dock worker mentioned finding a shard of the lighthouse lens and saw a hooded figure climbing the path to the lighthouse. He thinks it might be a clue to what's happening at the Shoals. I'll keep an eye on Finn and see if he's been in contact with anyone suspicious.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.832,
+              "matches_text": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.832,
+              "matches_tick": 2
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva has learned that the sealed letter from the governor of Meridia is a forgery, written by someone who wants the port to be in crown hands.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, in her office, picks up the letter and runs her fingers over the ink. It feels like a forgery, but she can't be sure. She leaves it on her desk, her mind racing at the implications of such a document being in her possession."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.649,
+          "matches_text": "Captain Reva pored over the sealed letter from the governor of Meridia, her grip on the paper tightening as she read. She must decide whether to hand over Port Blackwater to the crown or keep it free — a choice that could shape her future. ",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 1,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.986,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.013,
+              "entailment": 0.001,
+              "neutral": 0.986
+            }
+          }
+        }
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 11,
+      "elapsed": 11.032,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva ponders the governor's letter, considering her options. The pardon she seeks is tied to the lighthouse's fate.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. 'The lighthouse needs to be fixed, and the Shoals need to be cleared.' She runs her fingers over the map of the port's tunnels, her mind racing. She needs to act soon, before the Red Tide fleet returns and the situation escalates.'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva ponders the governor's letter, considering her options. The pardon she seeks is tied to the lighthouse's fate.",
+            "target": "captain_reva",
+            "event": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. 'The lighthouse needs to be fixed, and the Shoals need to be cleared.' She runs her fingers over the map of the port's tunnels, her mind racing. She needs to act soon, before the Red Tide fleet returns and the situation escalates.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.783,
+              "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 7,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.0,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has learned that Old Bones has been watching him closely since he found the shard. The tavern keeper is not as innocent as he pretends.\", \"npc_id\": \"finn\", \"fact\": \"Finn watched as Old Bones, the tavern owner, followed him around the docks after he found the piece of the lighthouse lens on the beach. I can't shake the feeling that the old man knows something I don't. Maybe he's been keeping an eye on me to see if I'm the one who found it. Or maybe he's just trying to intimidate me. I hope he's not going to use it against me.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has learned that Old Bones has been watching him closely since he found the shard. The tavern keeper is not as innocent as he pretends.",
+            "npc_id": "finn",
+            "fact": "Finn watched as Old Bones, the tavern owner, followed him around the docks after he found the piece of the lighthouse lens on the beach. I can't shake the feeling that the old man knows something I don't. Maybe he's been keeping an eye on me to see if I'm the one who found it. Or maybe he's just trying to intimidate me. I hope he's not going to use it against me."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.816,
+              "matches_text": "Old Bones heard Finn talking in his sleep the other night. The dock worker mentioned finding a shard of the lighthouse lens and saw a hooded figure climbing the path to the lighthouse. He thinks it might be a clue to what's happening at the",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 10,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.987,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.011,
+                  "entailment": 0.002,
+                  "neutral": 0.987
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.795,
+              "matches_tick": 5
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones, ever the gossip, is overheard by Finn as he passes by the tavern.\", \"target\": \"old_bones\", \"event\": \"Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himself, his mind already racing with possibilities.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones, ever the gossip, is overheard by Finn as he passes by the tavern.",
+            "target": "old_bones",
+            "event": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himself, his mind already racing with possibilities."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.853,
+              "matches_text": "Old Bones, in his secret room behind the bar, discovers a small, hidden map of the tunnels in the cliff. His cackling stops as he recognizes the shard Finn found as a piece from the lighthouse lens. He realizes Finn's discovery could be a k",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.991,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.004,
+                  "entailment": 0.005,
+                  "neutral": 0.991
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.853,
+              "matches_tick": 9
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva ponders the governor's letter, considering her options. The pardon she seeks is tied to the lighthouse's fate.",
+        "target": "captain_reva",
+        "event": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. 'The lighthouse needs to be fixed, and the Shoals need to be cleared.' She runs her fingers over the map of the port's tunnels, her mind racing. She needs to act soon, before the Red Tide fleet returns and the situation escalates.'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.783,
+          "matches_text": "Captain Reva, in her office, examines the map of the port's tunnels again. She frowns at the map, her gaze fixed on the underwater passageways beneath the Drowned Rat tavern. She thinks of the lighthouse keeper who vanished the night of its",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 7,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.998,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.0,
+              "neutral": 0.998
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 12,
+      "elapsed": 10.89,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva has just walked the docks and noticed something odd — a crate with a strange, rattling sound. She will report this to her office.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, in her office, flips through the map of the port's tunnels. She notices a crate rattling at the end of dock three, where Finn had just unloaded crates. The sound is like thin glass but lighter than other crates, and the crate feels oddly warm. She paces and feels a shiver run down her spine, knowing something is amiss.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva has just walked the docks and noticed something odd — a crate with a strange, rattling sound. She will report this to her office.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, in her office, flips through the map of the port's tunnels. She notices a crate rattling at the end of dock three, where Finn had just unloaded crates. The sound is like thin glass but lighter than other crates, and the crate feels oddly warm. She paces and feels a shiver run down her spine, knowing something is amiss.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.686,
+              "matches_text": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.994,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.004,
+                  "entailment": 0.001,
+                  "neutral": 0.994
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Your action field MUST be \"event\" and target MUST be \"finn\" (do NOT use \"all\" or any other NPC id).\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Finn, in a fit of excitement, approaches the docks to check on a new cargo shipment from the Red Tide fleet. He wants to see the sealed black glass jars and discuss his discovery with Captain Reva.\", \"target\": \"finn\", \"event\": \"Finn, his eyes shining with hope, rushes to the docks to greet the Red Tide's latest shipment. He points at a crate of sealed black glass jars and asks Captain Reva, 'Sir, do you know what these jars are? I found a piece of the lighthouse lens on the beach. Could these jars be related?'\"} To advance the narrative thread with Finn's new discovery and interaction, I will incorporate the following elements:\n\n1. **New Cargo Inquiry**: Finn approaches the docks to check on a new shipment from the Red Tide fleet. He points out the sealed black glass jars and inquires about their nature.\n2. **Discussion with Captain Reva**: Finn discusses his discovery of the lighthouse lens shard with Captain Reva, leading to a potential connection between the jars and the mysterious lighthouse.\n\nThis action field and target maintains the focus on Finn while moving the story forward by incorporating his interaction with Captain Reva and the Red Tide's recent shipment. \n\nACTION:\n{\"action\": \"event\", \"reason\": \"Finn approaches the docks to check on a new shipment from the Red Tide fleet, eager to discuss his discovery of the lighthouse lens shard with Captain Reva.\", \"target\": \"finn\", \"event\": \"Finn, his eyes gleaming with excitement, rushes to the docks. He points at a crate of sealed black glass jars and asks Captain Reva, 'Sir, do you know what these jars are? I found a piece of the lighthouse lens",
+          "action": {
+            "action": "event",
+            "reason": "Finn, in a fit of excitement, approaches the docks to check on a new cargo shipment from the Red Tide fleet. He wants to see the sealed black glass jars and discuss his discovery with Captain Reva.",
+            "target": "finn",
+            "event": "Finn, his eyes shining with hope, rushes to the docks to greet the Red Tide's latest shipment. He points at a crate of sealed black glass jars and asks Captain Reva, 'Sir, do you know what these jars are? I found a piece of the lighthouse lens on the beach. Could these jars be related?'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.774,
+              "matches_text": "Finn found a melted piece of glass on the beach near the lighthouse. He remembers seeing a hooded figure carrying a sealed black glass jar three nights ago. Can you help him learn more about the cargo the Red Tide is moving at the Shoals?",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.002,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones, overheard Finn's secret and now knows that a piece of the lighthouse lens has been found. He plans to use this as leverage against the dock worker, Finn, to learn more about the Shoals and the lighthouse.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones, overheard Finn's secret and now knows that a piece of the lighthouse lens has been found. He plans to use this as leverage against the dock worker, Finn, to learn more about the Shoals and the lighthouse."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.886,
+              "matches_text": "Old Bones has learned of Finn's discovery of a piece of the lighthouse lens on the beach. He knows it could be a clue to the lighthouse mystery. He'll keep an eye on Finn and see if he has any more information.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.886,
+              "matches_tick": 2
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva has just walked the docks and noticed something odd — a crate with a strange, rattling sound. She will report this to her office.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, in her office, flips through the map of the port's tunnels. She notices a crate rattling at the end of dock three, where Finn had just unloaded crates. The sound is like thin glass but lighter than other crates, and the crate feels oddly warm. She paces and feels a shiver run down her spine, knowing something is amiss.",
+        "fact_type": "personal"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "personal",
+        "similarity_warning": {
+          "similarity": 0.686,
+          "matches_text": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again.",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 9,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.994,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.004,
+              "entailment": 0.001,
+              "neutral": 0.994
+            }
+          }
+        }
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 13,
+      "elapsed": 4.719,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva ponders the upcoming shipment of black glass jars from the Red Tide fleet. She knows something is off about the cargo, but she cannot prove it.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chance to escape her fate. She must act.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva ponders the upcoming shipment of black glass jars from the Red Tide fleet. She knows something is off about the cargo, but she cannot prove it.",
+            "target": "captain_reva",
+            "event": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chance to escape her fate. She must act."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.863,
+              "matches_text": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. '",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.972,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.023,
+                  "entailment": 0.005,
+                  "neutral": 0.972
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has been watching Old Bones' movements more closely, noticing him acting odd lately.\", \"npc_id\": \"finn\", \"fact\": \"Finn has been following Old Bones around the docks. He noticed Old Bones taking extra time to clean the Drowned Rat's tables and not speaking to anyone. He's been keeping a note on the shard he found and wondering if he should tell anyone about the strange behavior or if he should keep it to himself.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has been watching Old Bones' movements more closely, noticing him acting odd lately.",
+            "npc_id": "finn",
+            "fact": "Finn has been following Old Bones around the docks. He noticed Old Bones taking extra time to clean the Drowned Rat's tables and not speaking to anyone. He's been keeping a note on the shard he found and wondering if he should tell anyone about the strange behavior or if he should keep it to himself."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.751,
+              "matches_text": "Finn, sitting on the dock with his feet in the water, thinks about the letter from the governor. He knows it's there, hidden under a loose plank in his room. He can't tell Old Bones because he'd expose him. He'll have to keep it secret, eve",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.992,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.002,
+                  "neutral": 0.992
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.751,
+              "matches_tick": 9
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones' hidden room is a key plot point — make it a focus of attention.\", \"target\": \"old_bones\", \"event\": \"Old Bones, with a sly grin, pulls open the secret door behind the bar and reveals a room filled with maps and notes. He points to a map of the tunnel network, whispering, 'This is the heart of the city, my friend. Not many know of it.'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones' hidden room is a key plot point — make it a focus of attention.",
+            "target": "old_bones",
+            "event": "Old Bones, with a sly grin, pulls open the secret door behind the bar and reveals a room filled with maps and notes. He points to a map of the tunnel network, whispering, 'This is the heart of the city, my friend. Not many know of it.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.673,
+              "matches_text": "Old Bones, in his secret room behind the bar, discovers a small, hidden map of the tunnels in the cliff. His cackling stops as he recognizes the shard Finn found as a piece from the lighthouse lens. He realizes Finn's discovery could be a k",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.991,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.008,
+                  "entailment": 0.002,
+                  "neutral": 0.991
+                }
+              }
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva ponders the upcoming shipment of black glass jars from the Red Tide fleet. She knows something is off about the cargo, but she cannot prove it.",
+        "target": "captain_reva",
+        "event": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chance to escape her fate. She must act."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.863,
+          "matches_text": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. '",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 11,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.972,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.023,
+              "entailment": 0.005,
+              "neutral": 0.972
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 14,
+      "elapsed": 7.031,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "Make sure your chosen action is a valid option.\n\nACTION:\n{\"action\": \"fact\", \"reason\": \"Captain Reva notices a slight tremor in the dock area. She glances at the map of the port's tunnels and feels a chill. She muses aloud, 'The Shoals are alive tonight.'\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, in her office, glances at the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow and she muses aloud, 'The Shoals are alive tonight. Something at the Shoals is stirring.'\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva notices a slight tremor in the dock area. She glances at the map of the port's tunnels and feels a chill. She muses aloud, 'The Shoals are alive tonight.'",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, in her office, glances at the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow and she muses aloud, 'The Shoals are alive tonight. Something at the Shoals is stirring.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.819,
+              "matches_text": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.002,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn has been observing the dark lighthouse and the strange singing at night. He starts to feel uneasy.\", \"target\": \"finn\", \"event\": \"Finn stumbles back to his cabin on dock three, his heart pounding. He sees the loose plank that he hid the shard under, but he hesitates. He's not sure if he should take the shard to Captain Reva or Old Bones. His dreams keep telling him to keep the secret, but he can't shake the feeling that something is really wrong.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn has been observing the dark lighthouse and the strange singing at night. He starts to feel uneasy.",
+            "target": "finn",
+            "event": "Finn stumbles back to his cabin on dock three, his heart pounding. He sees the loose plank that he hid the shard under, but he hesitates. He's not sure if he should take the shard to Captain Reva or Old Bones. His dreams keep telling him to keep the secret, but he can't shake the feeling that something is really wrong."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.79,
+              "matches_text": "Finn, as he trudges home from another day's dock work, slips and falls into a pile of crates. He scrapes his knee on a sharp edge. As he's wiping the blood from his hand, he stumbles and drops the glass shard he's been hiding under a loose ",
+              "matches_npc": "finn",
+              "matches_kind": "event",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.0,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.79,
+              "matches_tick": 8
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones, ever curious, hears whispers among the dock workers about a mysterious figure seen near the lighthouse at night.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones, leaning on the bar, hears whispers among the dock workers about a hooded figure seen near the lighthouse at night. They say the figure carried a sealed black glass jar, and they heard singing from the Shoals. I'll have to watch the lighthouse tonight to see if I can catch that figure again.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones, ever curious, hears whispers among the dock workers about a mysterious figure seen near the lighthouse at night.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones, leaning on the bar, hears whispers among the dock workers about a hooded figure seen near the lighthouse at night. They say the figure carried a sealed black glass jar, and they heard singing from the Shoals. I'll have to watch the lighthouse tonight to see if I can catch that figure again."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.826,
+              "matches_text": "Old Bones heard strange singing coming from the Shoals last week — not human but something older. He saw a hooded figure climbing the lighthouse path carrying one of those black glass jars three nights ago. The figure was moving quickly, an",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.826,
+              "matches_tick": 1
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva notices a slight tremor in the dock area. She glances at the map of the port's tunnels and feels a chill. She muses aloud, 'The Shoals are alive tonight.'",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, in her office, glances at the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow and she muses aloud, 'The Shoals are alive tonight. Something at the Shoals is stirring.'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.819,
+          "matches_text": "Captain Reva, in her office, taps the map of the port's tunnels. She feels a slight tremor in the dock area and glances at the map. Her eyes narrow as she considers the map's hidden paths, wondering if the Shoals are stirring again.",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 9,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.001,
+              "entailment": 0.002,
+              "neutral": 0.997
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 15,
+      "elapsed": 5.766,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva, pacing in her office, flips through the map of the port's tunnels. She notices a seam of tunnels that connect to the lighthouse. She considers the implications of the dark lighthouse and the mysterious singing at night.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, her eyes narrowing, runs her finger along the seam of tunnels that connects the lighthouse to the port. She hears the sound of halyards slapping masts as ships pass by, and the distant hum of the Shoals. She stops, a frown creasing her brow. She whispers to herself, 'Something is pulling ships to their doom. And I can't fix it.'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva, pacing in her office, flips through the map of the port's tunnels. She notices a seam of tunnels that connect to the lighthouse. She considers the implications of the dark lighthouse and the mysterious singing at night.",
+            "target": "captain_reva",
+            "event": "Captain Reva, her eyes narrowing, runs her finger along the seam of tunnels that connects the lighthouse to the port. She hears the sound of halyards slapping masts as ships pass by, and the distant hum of the Shoals. She stops, a frown creasing her brow. She whispers to herself, 'Something is pulling ships to their doom. And I can't fix it.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.831,
+              "matches_text": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. '",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.985,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.014,
+                  "entailment": 0.001,
+                  "neutral": 0.985
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has been listening to the conversations at the Drowned Rat. He heard Old Bones mention the shard and the smuggling tunnels. Finn's dream of joining a crew now has a new twist.\", \"npc_id\": \"finn\", \"fact\": \"Finn has learned that Old Bones is involved in the smuggling tunnels beneath the Drowned Rat and that a mysterious shard found under the dock may be related to the lighthouse mystery. He dreams of joining a crew and sailing past the Shoals, but now he wonders if he might be able to help uncover the truth.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has been listening to the conversations at the Drowned Rat. He heard Old Bones mention the shard and the smuggling tunnels. Finn's dream of joining a crew now has a new twist.",
+            "npc_id": "finn",
+            "fact": "Finn has learned that Old Bones is involved in the smuggling tunnels beneath the Drowned Rat and that a mysterious shard found under the dock may be related to the lighthouse mystery. He dreams of joining a crew and sailing past the Shoals, but now he wonders if he might be able to help uncover the truth."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.863,
+              "matches_text": "Old Bones, in his secret room behind the bar, discovers a small, hidden map of the tunnels in the cliff. His cackling stops as he recognizes the shard Finn found as a piece from the lighthouse lens. He realizes Finn's discovery could be a k",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.99,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.01,
+                  "entailment": 0.0,
+                  "neutral": 0.99
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.79,
+              "matches_tick": 5
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones is slyly amused by Finn's secret and knows more than he's letting on.\", \"target\": \"old_bones\", \"event\": \"Old Bones chuckles to himself as he pours a fresh batch of mead. He glances over at Finn, who is sipping his ale in the corner. Old Bones's eyes twinkle with hidden knowledge, and he leans in closer, whispering, 'You know, Finn, there's a lot of water beneath the tavern. Maybe that piece of glass you found was a clue to something more.'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones is slyly amused by Finn's secret and knows more than he's letting on.",
+            "target": "old_bones",
+            "event": "Old Bones chuckles to himself as he pours a fresh batch of mead. He glances over at Finn, who is sipping his ale in the corner. Old Bones's eyes twinkle with hidden knowledge, and he leans in closer, whispering, 'You know, Finn, there's a lot of water beneath the tavern. Maybe that piece of glass you found was a clue to something more.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.716,
+              "matches_text": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himse",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.0,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.716,
+              "matches_tick": 11
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva, pacing in her office, flips through the map of the port's tunnels. She notices a seam of tunnels that connect to the lighthouse. She considers the implications of the dark lighthouse and the mysterious singing at night.",
+        "target": "captain_reva",
+        "event": "Captain Reva, her eyes narrowing, runs her finger along the seam of tunnels that connects the lighthouse to the port. She hears the sound of halyards slapping masts as ships pass by, and the distant hum of the Shoals. She stops, a frown creasing her brow. She whispers to herself, 'Something is pulling ships to their doom. And I can't fix it.'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.831,
+          "matches_text": "Captain Reva, pacing in her office, flips through the governor's letter. She stops at a passage about the lighthouse keeper's disappearance and the sealed glass jars. Her eyes narrow. 'This is our last chance,' she whispers to the letter. '",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 11,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.985,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.014,
+              "entailment": 0.001,
+              "neutral": 0.985
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 16,
+      "elapsed": 7.5,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Captain Reva ponders the governor's letter, finding a new passage that hints at a wider conspiracy involving the lighthouse and the Shoals.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, deep in thought, turns the governor's letter to a passage about the lighthouse keeper's disappearance and the sealed glass jars. She notices a new section that talks about a mysterious figure at the Shoals, singing in the dark. This adds to her suspicion that the lighthouse keeper and the Shoals are connected to the governor's pardon offer.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva ponders the governor's letter, finding a new passage that hints at a wider conspiracy involving the lighthouse and the Shoals.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, deep in thought, turns the governor's letter to a passage about the lighthouse keeper's disappearance and the sealed glass jars. She notices a new section that talks about a mysterious figure at the Shoals, singing in the dark. This adds to her suspicion that the lighthouse keeper and the Shoals are connected to the governor's pardon offer.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.847,
+              "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 13,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn overhears Old Bones talking at the Drowned Rat. Old Bones mentions the shard he found and the smuggling tunnels. Finn's eyes widen with intrigue.\", \"target\": \"finn\", \"event\": \"Finn peeked out from behind the bar, listening intently as Old Bones told the tavern's patrons about the black glass shard and the tunnels beneath the Drowned Rat. Finn's eyes widened with intrigue, his mind racing with possibilities. He realized he had stumbled upon a secret that could be his ticket to the sea. He couldn't wait to find out more.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn overhears Old Bones talking at the Drowned Rat. Old Bones mentions the shard he found and the smuggling tunnels. Finn's eyes widen with intrigue.",
+            "target": "finn",
+            "event": "Finn peeked out from behind the bar, listening intently as Old Bones told the tavern's patrons about the black glass shard and the tunnels beneath the Drowned Rat. Finn's eyes widened with intrigue, his mind racing with possibilities. He realized he had stumbled upon a secret that could be his ticket to the sea. He couldn't wait to find out more."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.817,
+              "matches_text": "Finn has learned that Old Bones is involved in the smuggling tunnels beneath the Drowned Rat and that a mysterious shard found under the dock may be related to the lighthouse mystery. He dreams of joining a crew and sailing past the Shoals,",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 15,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.817,
+              "matches_tick": 15
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has learned about Finn's discovery of the lighthouse shard and is intrigued by his secret. He wants to know more.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones, sipping his ale, listens to Finn's tale of the shard he found under the dock. He nods knowingly, his eyes twinkling with hidden knowledge. 'Finn, you have a sharp eye for detail. I bet you'll find more secrets under the docks. Perhaps you could show me them, if you're not too busy with your dreams.' He grins, his lips curling into a sly smile.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has learned about Finn's discovery of the lighthouse shard and is intrigued by his secret. He wants to know more.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones, sipping his ale, listens to Finn's tale of the shard he found under the dock. He nods knowingly, his eyes twinkling with hidden knowledge. 'Finn, you have a sharp eye for detail. I bet you'll find more secrets under the docks. Perhaps you could show me them, if you're not too busy with your dreams.' He grins, his lips curling into a sly smile."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.826,
+              "matches_text": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himse",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.826,
+              "matches_tick": 11
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva ponders the governor's letter, finding a new passage that hints at a wider conspiracy involving the lighthouse and the Shoals.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, deep in thought, turns the governor's letter to a passage about the lighthouse keeper's disappearance and the sealed glass jars. She notices a new section that talks about a mysterious figure at the Shoals, singing in the dark. This adds to her suspicion that the lighthouse keeper and the Shoals are connected to the governor's pardon offer.",
+        "fact_type": "personal"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "personal",
+        "similarity_warning": {
+          "similarity": 0.847,
+          "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 13,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.996,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.001,
+              "neutral": 0.996
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 17,
+      "elapsed": 6.875,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Ensure your action is a single JSON object with no additional text. Allowed actions:\n{\"action\": \"event\", \"reason\": \"...\", \"target\": \"captain_reva\", \"event\": \"...\"}",
+          "action": {
+            "action": "event",
+            "reason": "...",
+            "target": "captain_reva",
+            "event": "..."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn has overheard Old Bones discussing the lighthouse shard and the smuggling tunnels. He remembers the strange markings on the shard and the last time he saw Old Bones. Finn feels a chill, knowing he might know more than he thinks.\", \"npc_id\": \"finn\", \"fact\": \"Finn, standing on the end of dock three, feels a chill in the air. He remembers the strange markings on the shard and the last time he saw Old Bones. Old Bones told him about the smuggling tunnels and the black glass jars. Finn feels uneasy, thinking he might know more than he thinks and that the shard could be a clue.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn has overheard Old Bones discussing the lighthouse shard and the smuggling tunnels. He remembers the strange markings on the shard and the last time he saw Old Bones. Finn feels a chill, knowing he might know more than he thinks.",
+            "npc_id": "finn",
+            "fact": "Finn, standing on the end of dock three, feels a chill in the air. He remembers the strange markings on the shard and the last time he saw Old Bones. Old Bones told him about the smuggling tunnels and the black glass jars. Finn feels uneasy, thinking he might know more than he thinks and that the shard could be a clue."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.831,
+              "matches_text": "Finn stumbles back to his cabin on dock three, his heart pounding. He sees the loose plank that he hid the shard under, but he hesitates. He's not sure if he should take the shard to Captain Reva or Old Bones. His dreams keep telling him to",
+              "matches_npc": "finn",
+              "matches_kind": "event",
+              "matches_tick": 14,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.831,
+              "matches_tick": 14
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones is a key player in the smuggling operation and the lighthouse mystery — advance his role in a subtle way.\", \"target\": \"old_bones\", \"event\": \"Old Bones, sipping a drink and watching the dock workers, suddenly calls out to Finn, his voice dripping with false innocence. 'Hey Finn, you ever seen those black glass jars in the cargo hold? Wonder what they're for?' Finn, startled, glances over his shoulder, his mind racing with the shard he found.\"} ===\nACTION: {\"action\": \"event\", \"reason\": \"Old Bones is a key player in the smuggling operation and the lighthouse mystery — advance his role in a subtle way.\", \"target\": \"old_bones\", \"event\": \"Old Bones, sipping a drink and watching the dock workers, suddenly calls out to Finn, his voice dripping with false innocence. 'Hey Finn, you ever seen those black glass jars in the cargo hold? Wonder what they're for?' Finn, startled, glances over his shoulder, his mind racing with the shard he found.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones is a key player in the smuggling operation and the lighthouse mystery — advance his role in a subtle way.",
+            "target": "old_bones",
+            "event": "Old Bones, sipping a drink and watching the dock workers, suddenly calls out to Finn, his voice dripping with false innocence. 'Hey Finn, you ever seen those black glass jars in the cargo hold? Wonder what they're for?' Finn, startled, glances over his shoulder, his mind racing with the shard he found."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.815,
+              "matches_text": "Finn, standing on the end of dock three, feels a chill in the air. He remembers the strange markings on the shard and the last time he saw Old Bones. Old Bones told him about the smuggling tunnels and the black glass jars. Finn feels uneasy",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 17,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.814,
+              "matches_tick": 11
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "...",
+        "target": "captain_reva",
+        "event": "..."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 18,
+      "elapsed": 6.984,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Captain Reva notices an unusual pattern of ships disappearing at night near the Shoals and remembers the strange singing she heard last week. She suspects the Shoals may be the source of the problem.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, in her office, leans back in her chair and rubs her temples. 'There's something about the Shoals that gives off a strange, eerie vibe. Last week, I heard singing come from there — not human, something older. And every night, ships vanish without a trace. I need to dig deeper.'\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva notices an unusual pattern of ships disappearing at night near the Shoals and remembers the strange singing she heard last week. She suspects the Shoals may be the source of the problem.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, in her office, leans back in her chair and rubs her temples. 'There's something about the Shoals that gives off a strange, eerie vibe. Last week, I heard singing come from there — not human, something older. And every night, ships vanish without a trace. I need to dig deeper.'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.738,
+              "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 13,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.0,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels, adding urgency to his quest for the shard.\", \"target\": \"finn\", \"event\": \"Finn sits on the dock, listening intently as Old Bones speaks in hushed tones about the lighthouse shard and the tunnels beneath the Drowned Rat. Old Bones mentions that the shard might belong to someone planning to sabotage the lighthouse, but he doesn't want to reveal too much. Finn's eyes widen as he realizes the shard could be a key to stopping something dangerous and is determined to find out more. He decides to ask Old Bones for more information later.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels, adding urgency to his quest for the shard.",
+            "target": "finn",
+            "event": "Finn sits on the dock, listening intently as Old Bones speaks in hushed tones about the lighthouse shard and the tunnels beneath the Drowned Rat. Old Bones mentions that the shard might belong to someone planning to sabotage the lighthouse, but he doesn't want to reveal too much. Finn's eyes widen as he realizes the shard could be a key to stopping something dangerous and is determined to find out more. He decides to ask Old Bones for more information later."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.89,
+              "matches_text": "Finn has learned that Old Bones is involved in the smuggling tunnels beneath the Drowned Rat and that a mysterious shard found under the dock may be related to the lighthouse mystery. He dreams of joining a crew and sailing past the Shoals,",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 15,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.89,
+              "matches_tick": 15
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones, sipping his ale, listens to Finn's secret shard and wonders who the hooded figure is. He remembers the singing from the Shoals and the melted lens. But he doesn't trust Finn, not yet.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones, sipping his ale, listens to Finn's secret shard and wonders who the hooded figure is. He remembers the singing from the Shoals and the melted lens. But he doesn't trust Finn, not yet.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones, sipping his ale, listens to Finn's secret shard and wonders who the hooded figure is. He remembers the singing from the Shoals and the melted lens. But he doesn't trust Finn, not yet.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones, sipping his ale, listens to Finn's secret shard and wonders who the hooded figure is. He remembers the singing from the Shoals and the melted lens. But he doesn't trust Finn, not yet.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.776,
+              "matches_text": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himse",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.0,
+                  "neutral": 0.995
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.776,
+              "matches_tick": 11
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva notices an unusual pattern of ships disappearing at night near the Shoals and remembers the strange singing she heard last week. She suspects the Shoals may be the source of the problem.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, in her office, leans back in her chair and rubs her temples. 'There's something about the Shoals that gives off a strange, eerie vibe. Last week, I heard singing come from there — not human, something older. And every night, ships vanish without a trace. I need to dig deeper.'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.738,
+          "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 13,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.003,
+              "entailment": 0.0,
+              "neutral": 0.997
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 19,
+      "elapsed": 9.063,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures. She clenches her fists, her mind racing. She doesn't trust the Red Tide, and the whispers could be a sign of something even more sinister.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures.",
+            "target": "captain_reva",
+            "event": "Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures. She clenches her fists, her mind racing. She doesn't trust the Red Tide, and the whispers could be a sign of something even more sinister."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.778,
+              "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 13,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.004,
+                  "entailment": 0.0,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "retried_after_contradiction": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Finn, leaning against the docks, notices a small, faintly glowing mark on the glass shard he found. It looks like the script of a sea-tongue language, but the light is too dim to read it clearly.\", \"npc_id\": \"finn\", \"fact\": \"Finn, looking closely at the shard hidden under the loose plank on dock three, notices a small, faintly glowing mark. He thinks it might be the script of a sea-tongue language, but the light is too dim to read it clearly.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn, leaning against the docks, notices a small, faintly glowing mark on the glass shard he found. It looks like the script of a sea-tongue language, but the light is too dim to read it clearly.",
+            "npc_id": "finn",
+            "fact": "Finn, looking closely at the shard hidden under the loose plank on dock three, notices a small, faintly glowing mark. He thinks it might be the script of a sea-tongue language, but the light is too dim to read it clearly."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.707,
+              "matches_text": "Finn, standing on the end of dock three, feels a chill in the air. He remembers the strange markings on the shard and the last time he saw Old Bones. Old Bones told him about the smuggling tunnels and the black glass jars. Finn feels uneasy",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 17,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Old Bones is known for his sly wit and his ability to keep secrets. This tick, he decides to play a trick on Finn, the dock worker, to see how much he knows.\", \"target\": \"old_bones\", \"event\": \"Old Bones, amused by Finn's curiosity, pulls a secret, sealed letter from beneath the counter of the Drowned Rat and places it in Finn's hands. 'Here,' he says with a grin, 'a piece of information you might find useful.' Finn's eyes widen as he realizes the letter is old, with faded handwriting. Old Bones chuckles and adds, 'I hear you've been hearing strange noises coming from the lighthouse. Care to share?' Finn, taken aback, looks at Old Bones, who is now playing a game of cat and mouse, watching Finn's reactions.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Old Bones is known for his sly wit and his ability to keep secrets. This tick, he decides to play a trick on Finn, the dock worker, to see how much he knows.",
+            "target": "old_bones",
+            "event": "Old Bones, amused by Finn's curiosity, pulls a secret, sealed letter from beneath the counter of the Drowned Rat and places it in Finn's hands. 'Here,' he says with a grin, 'a piece of information you might find useful.' Finn's eyes widen as he realizes the letter is old, with faded handwriting. Old Bones chuckles and adds, 'I hear you've been hearing strange noises coming from the lighthouse. Care to share?' Finn, taken aback, looks at Old Bones, who is now playing a game of cat and mouse, watching Finn's reactions."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "old_bones",
+            "similarity_warning": {
+              "similarity": 0.824,
+              "matches_text": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himse",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.991,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.004,
+                  "neutral": 0.991
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.824,
+              "matches_tick": 11
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+facts(finn): 1",
+        "+events(old_bones): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures.",
+        "target": "captain_reva",
+        "event": "Captain Reva, in her office, hears a faint whispering from the hall beyond her door. It sounds like the distant song of water creatures. She clenches her fists, her mind racing. She doesn't trust the Red Tide, and the whispers could be a sign of something even more sinister."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.778,
+          "matches_text": "Captain Reva, her eyes narrowing, taps the map of the port's tunnels in her office. She thinks of the dark lighthouse and the strange singing she heard last week. She feels the letter from the governor in her pocket, a reminder of her chanc",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 13,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.996,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.004,
+              "entailment": 0.0,
+              "neutral": 0.996
+            }
+          }
+        },
+        "retried_after_contradiction": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 20,
+      "elapsed": 7.328,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Captain Reva pored over the governor's letter again, her eyes narrowing as she read the passage about the smugglers' tunnels. She noted the map's markings and their alignment with the dark lighthouse's location. This could mean something dangerous is under the port.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva, her eyes narrowing, pored over the governor's letter again. She noted the passages about smugglers' tunnels and their alignment with the dark lighthouse. She suspects something is up with the lighthouse, and it's not just a simple case of old sea-tongue script on the glass shard.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva pored over the governor's letter again, her eyes narrowing as she read the passage about the smugglers' tunnels. She noted the map's markings and their alignment with the dark lighthouse's location. This could mean something dangerous is under the port.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva, her eyes narrowing, pored over the governor's letter again. She noted the passages about smugglers' tunnels and their alignment with the dark lighthouse. She suspects something is up with the lighthouse, and it's not just a simple case of old sea-tongue script on the glass shard."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.867,
+              "matches_text": "Captain Reva, deep in thought, turns the governor's letter to a passage about the lighthouse keeper's disappearance and the sealed glass jars. She notices a new section that talks about a mysterious figure at the Shoals, singing in the dark",
+              "matches_npc": "captain_reva",
+              "matches_kind": "fact",
+              "matches_tick": 16,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels.\", \"target\": \"finn\", \"event\": \"Finn's ears perk up as he hears Old Bones talking at the Drowned Rat, his voice low and amused. 'That shard you found... it's the same kind we use to seal the smuggling tunnels beneath the Drowned Rat,' Old Bones says with a grin. 'And the singing we heard at night, it's the same old sea-tongue language we use to communicate with the smugglers. But you shouldn't be listening to that, Finn. There's a lot of secrets in this town, and you're just a kid.' Finn's heart sinks as he realizes the truth, but he nods, determined to find out more, even if it means risking his dreams of sailing.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels.",
+            "target": "finn",
+            "event": "Finn's ears perk up as he hears Old Bones talking at the Drowned Rat, his voice low and amused. 'That shard you found... it's the same kind we use to seal the smuggling tunnels beneath the Drowned Rat,' Old Bones says with a grin. 'And the singing we heard at night, it's the same old sea-tongue language we use to communicate with the smugglers. But you shouldn't be listening to that, Finn. There's a lot of secrets in this town, and you're just a kid.' Finn's heart sinks as he realizes the truth, but he nods, determined to find out more, even if it means risking his dreams of sailing."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.832,
+              "matches_text": "Finn overhears Old Bones discussing the lighthouse shard and the smuggling tunnels. Old Bones is slyly amused, his eyes twinkling with hidden knowledge. Finn's stomach tightens, knowing he has uncovered something important. He nods to himse",
+              "matches_npc": "old_bones",
+              "matches_kind": "event",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.82,
+              "matches_tick": 16
+            }
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones has learned that Finn found a shard from the lighthouse lens. He can use this to blackmail Finn into sharing information.\", \"npc_id\": \"old_bones\", \"fact\": \"Old Bones has seen Finn's face the last time he saw the shard. He knows it's the one from the lighthouse. Now he has a new weapon to threaten Finn with.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones has learned that Finn found a shard from the lighthouse lens. He can use this to blackmail Finn into sharing information.",
+            "npc_id": "old_bones",
+            "fact": "Old Bones has seen Finn's face the last time he saw the shard. He knows it's the one from the lighthouse. Now he has a new weapon to threaten Finn with."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.826,
+              "matches_text": "Finn sits on the dock, listening intently as Old Bones speaks in hushed tones about the lighthouse shard and the tunnels beneath the Drowned Rat. Old Bones mentions that the shard might belong to someone planning to sabotage the lighthouse,",
+              "matches_npc": "finn",
+              "matches_kind": "event",
+              "matches_tick": 18,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.0,
+                  "neutral": 0.995
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.817,
+              "matches_tick": 8
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+facts(captain_reva): 1",
+        "+events(finn): 1",
+        "+facts(old_bones): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Captain Reva pored over the governor's letter again, her eyes narrowing as she read the passage about the smugglers' tunnels. She noted the map's markings and their alignment with the dark lighthouse's location. This could mean something dangerous is under the port.",
+        "npc_id": "captain_reva",
+        "fact": "Captain Reva, her eyes narrowing, pored over the governor's letter again. She noted the passages about smugglers' tunnels and their alignment with the dark lighthouse. She suspects something is up with the lighthouse, and it's not just a simple case of old sea-tongue script on the glass shard."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "captain_reva",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.867,
+          "matches_text": "Captain Reva, deep in thought, turns the governor's letter to a passage about the lighthouse keeper's disappearance and the sealed glass jars. She notices a new section that talks about a mysterious figure at the Shoals, singing in the dark",
+          "matches_npc": "captain_reva",
+          "matches_kind": "fact",
+          "matches_tick": 16,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.999,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.001,
+              "entailment": 0.001,
+              "neutral": 0.999
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    }
+  ]
+}

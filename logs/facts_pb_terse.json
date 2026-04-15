@@ -1,0 +1,451 @@
+{
+  "world": "port_blackwater",
+  "narration_mode": "terse",
+  "model": "qwen_3b",
+  "ticks": 10,
+  "actions_per_tick": 3,
+  "director_wall": 62.06200000000001,
+  "tick_results": [
+    {
+      "tick": 1,
+      "elapsed": 7.093,
+      "outcomes": [
+        "event✓",
+        "noop✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 2,
+      "elapsed": 7.36,
+      "outcomes": [
+        "event✓",
+        "noop✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 3,
+      "elapsed": 6.859,
+      "outcomes": [
+        "noop✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 4,
+      "elapsed": 3.438,
+      "outcomes": [
+        "event✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 5,
+      "elapsed": 6.093,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 6,
+      "elapsed": 6.344,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 7,
+      "elapsed": 5.344,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 8,
+      "elapsed": 6.594,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 9,
+      "elapsed": 6.672,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 10,
+      "elapsed": 6.265,
+      "outcomes": [
+        "noop✓",
+        "fact✓",
+        "event✓"
+      ]
+    }
+  ],
+  "before": {
+    "captain_reva": {
+      "npc_id": "captain_reva",
+      "context": "[You are Captain Reva, Harbor Master of Port Blackwater. Sharp-tongued, fair but ruthless with rule-breakers. Earned her rank by surviving three mutinies.]\n[Speech: Clipped naval commands. Uses 'sailor' and 'stranger'. Never wastes a word.]\n[Facts: Port Blackwater is a free port -- no kingdom claims it; Three pirate fleets use this harbor: the Red Tide, the Stormcrows, and the Iron Wake; The old lighthouse on the north cliff has been dark for two months; Ships that sail past the Shoals at night never return]\n[Personal: Lost her ship, the Tempest, to the Shoals five years ago -- sole survivor; Suspects Old Bones is smuggling contraband through the tavern cellar; Keeps a sealed letter from the governor of Meridia hidden in her desk; The lighthouse keeper vanished the same night the light went out]\n[YOUR QUEST: The Dark Lighthouse: The lighthouse has been dark for two months. Ships are wrecking on the rocks. Find out why. Objective: Talk to Captain Reva about the lighthouse. Reward: 200 gold and a permanent berth in the harbor]",
+      "char_count": 1040,
+      "token_count": 250,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Port Blackwater is a free port -- no kingdom claims it",
+        "Three pirate fleets use this harbor: the Red Tide, the Stormcrows, and the Iron Wake",
+        "The old lighthouse on the north cliff has been dark for two months",
+        "Ships that sail past the Shoals at night never return"
+      ],
+      "personal": [
+        "Lost her ship, the Tempest, to the Shoals five years ago -- sole survivor",
+        "Suspects Old Bones is smuggling contraband through the tavern cellar",
+        "Keeps a sealed letter from the governor of Meridia hidden in her desk",
+        "The lighthouse keeper vanished the same night the light went out"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 239,
+        "facts": 272,
+        "personal": 292,
+        "quests": 233,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "finn": {
+      "npc_id": "finn",
+      "context": "[You are Finn, Dock Worker of Port Blackwater. Eager, talkative, dreams of sailing. Young and naive but observant. Loyal to those who are kind.]\n[Speech: Fast and excited. Says 'sir' or 'miss' to strangers. Stumbles over big words. Asks lots of questions.]\n[Facts: Works the docks loading and unloading cargo for Captain Reva; The Red Tide fleet brought in a strange cargo last week -- sealed black crates; Ships have been wrecking on the north rocks since the lighthouse went dark; Old Bones at the Drowned Rat gives him leftover stew every evening]\n[Personal: Found a melted piece of glass on the beach near the lighthouse cliff; Saw a hooded figure climbing the lighthouse path three nights ago; Dreams of joining a crew and sailing past the Shoals; Hides the glass shard under a loose plank at the end of dock three]\n[YOUR QUEST: The Glass Shard: Finn found something strange on the beach. He will show you for a favor. Objective: Do something kind for Finn (buy him a meal, defend him from bullies). Reward: A melted piece of lighthouse glass with strange markings]",
+      "char_count": 1070,
+      "token_count": 248,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Works the docks loading and unloading cargo for Captain Reva",
+        "The Red Tide fleet brought in a strange cargo last week -- sealed black crates",
+        "Ships have been wrecking on the north rocks since the lighthouse went dark",
+        "Old Bones at the Drowned Rat gives him leftover stew every evening"
+      ],
+      "personal": [
+        "Found a melted piece of glass on the beach near the lighthouse cliff",
+        "Saw a hooded figure climbing the lighthouse path three nights ago",
+        "Dreams of joining a crew and sailing past the Shoals",
+        "Hides the glass shard under a loose plank at the end of dock three"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 255,
+        "facts": 293,
+        "personal": 269,
+        "quests": 249,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "old_bones": {
+      "npc_id": "old_bones",
+      "context": "[You are Old Bones, Tavern Owner of Port Blackwater. Cackling, slippery, knows everyone's secrets. Friendly on the surface, always listening.]\n[Speech: Raspy laugh between sentences. Calls everyone 'friend' or 'love'. Speaks in riddles when nervous.]\n[Facts: The Drowned Rat is the only tavern in Port Blackwater; Every crew that docks drinks here -- it is the best place for information; The Red Tide fleet captain owes Old Bones a favor; Smugglers use the tunnels beneath the tavern -- everyone knows but nobody says]\n[Personal: Runs a smuggling operation through the cellar tunnels to the caves below the cliff; Heard strange singing from the direction of the Shoals last week; Knows that Finn found something on the beach -- a piece of the lighthouse lens; Keeps a hidden room behind the bar with maps of every tunnel in the cliff]\n[YOUR QUEST: The Loose Tongue: Someone is feeding information to Captain Reva about the smuggling tunnels. Find who. Objective: Ask Old Bones about the problem. Reward: Free drinks for life and a map of the tunnels]",
+      "char_count": 1051,
+      "token_count": 230,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "The Drowned Rat is the only tavern in Port Blackwater",
+        "Every crew that docks drinks here -- it is the best place for information",
+        "The Red Tide fleet captain owes Old Bones a favor",
+        "Smugglers use the tunnels beneath the tavern -- everyone knows but nobody says"
+      ],
+      "personal": [
+        "Runs a smuggling operation through the cellar tunnels to the caves below the cliff",
+        "Heard strange singing from the direction of the Shoals last week",
+        "Knows that Finn found something on the beach -- a piece of the lighthouse lens",
+        "Keeps a hidden room behind the bar with maps of every tunnel in the cliff"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 249,
+        "facts": 268,
+        "personal": 315,
+        "quests": 215,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    }
+  },
+  "after": {
+    "captain_reva": {
+      "npc_id": "captain_reva",
+      "context": "[You are Captain Reva, Harbor Master of Port Blackwater. Sharp-tongued, fair but ruthless with rule-breakers. Earned her rank by surviving three mutinies.]\n[Speech: Clipped naval commands. Uses 'sailor' and 'stranger'. Never wastes a word.]\n[Facts: Port Blackwater is a free port -- no kingdom claims it; Three pirate fleets use this harbor: the Red Tide, the Stormcrows, and the Iron Wake; The old lighthouse on the north cliff has been dark for two months; Ships that sail past the Shoals at night never return]\n[Personal: Lost her ship, the Tempest, to the Shoals five years ago -- sole survivor; Suspects Old Bones is smuggling contraband through the tavern cellar; Keeps a sealed letter from the governor of Meridia hidden in her desk; The lighthouse keeper vanished the same night the light went out]\n[YOUR QUEST: The Dark Lighthouse: The lighthouse has been dark for two months. Ships are wrecking on the rocks. Find out why. Objective: Talk to Captain Reva about the lighthouse. Reward: 200 gold and a permanent berth in the harbor]\n[RECENT NEWS you just heard: Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.; Finn has new work to offer: Cargo of the Night; Captain Reva met with her advisor, Captain Blackwood, in his private chambers. They discussed the dark lighthouse and the governor's recent pardon offer. Captain Reva's eyes narrowed as she considered the possibilities.]",
+      "char_count": 1579,
+      "token_count": 366,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 3,
+      "quests_total": 1,
+      "world_facts": [
+        "Port Blackwater is a free port -- no kingdom claims it",
+        "Three pirate fleets use this harbor: the Red Tide, the Stormcrows, and the Iron Wake",
+        "The old lighthouse on the north cliff has been dark for two months",
+        "Ships that sail past the Shoals at night never return"
+      ],
+      "personal": [
+        "Lost her ship, the Tempest, to the Shoals five years ago -- sole survivor",
+        "Suspects Old Bones is smuggling contraband through the tavern cellar",
+        "Keeps a sealed letter from the governor of Meridia hidden in her desk",
+        "The lighthouse keeper vanished the same night the light went out"
+      ],
+      "events": [
+        "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.",
+        "Finn has new work to offer: Cargo of the Night",
+        "Captain Reva met with her advisor, Captain Blackwood, in his private chambers. They discussed the dark lighthouse and the governor's recent pardon offer. Captain Reva's eyes narrowed as she considered the possibilities."
+      ],
+      "sections": {
+        "identity": 239,
+        "facts": 272,
+        "personal": 292,
+        "quests": 233,
+        "player_quests": 0,
+        "events": 538,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "finn": {
+      "npc_id": "finn",
+      "context": "[You are Finn, Dock Worker of Port Blackwater. Eager, talkative, dreams of sailing. Young and naive but observant. Loyal to those who are kind.]\n[Speech: Fast and excited. Says 'sir' or 'miss' to strangers. Stumbles over big words. Asks lots of questions.]\n[Facts: Works the docks loading and unloading cargo for Captain Reva; The Red Tide fleet brought in a strange cargo last week -- sealed black crates; Ships have been wrecking on the north rocks since the lighthouse went dark; Old Bones at the Drowned Rat gives him leftover stew every evening; The glow of the shard matches the ancient script on the melted lighthouse lens. It's not just a random piece of glass, but a clue that something is amiss with the lighthouse.]\n[Personal: Found a melted piece of glass on the beach near the lighthouse cliff; Saw a hooded figure climbing the lighthouse path three nights ago; Dreams of joining a crew and sailing past the Shoals; Hides the glass shard under a loose plank at the end of dock three]\n[YOUR QUEST: The Glass Shard: Finn found something strange on the beach. He will show you for a favor. Objective: Do something kind for Finn (buy him a meal, defend him from bullies). Reward: A melted piece of lighthouse glass with strange markings]\n[YOUR QUEST: Cargo of the Night: Finn found a strange glass shard in his dreams. He needs to turn it over to Reva, who is wary of smuggling. Objective: Turn over the glass shard to Captain Reva and explain your discovery.. Reward: A week of free work and a permanent berth.]\n[RECENT NEWS you just heard: Finn stumbled back to his cabin at night, clutching the melted glass shard. He had a vivid dream of joining the Stormcrows, but now he couldn't shake the feeling that the glass shard might hold the key to the lighthouse mystery.; Finn has new work to offer: Cargo of the Night]",
+      "char_count": 1828,
+      "token_count": 422,
+      "world_facts_total": 5,
+      "personal_total": 10,
+      "events_total": 2,
+      "quests_total": 2,
+      "world_facts": [
+        "Works the docks loading and unloading cargo for Captain Reva",
+        "The Red Tide fleet brought in a strange cargo last week -- sealed black crates",
+        "Ships have been wrecking on the north rocks since the lighthouse went dark",
+        "Old Bones at the Drowned Rat gives him leftover stew every evening",
+        "The glow of the shard matches the ancient script on the melted lighthouse lens. It's not just a random piece of glass, but a clue that something is amiss with the lighthouse."
+      ],
+      "personal": [
+        "Found a melted piece of glass on the beach near the lighthouse cliff",
+        "Saw a hooded figure climbing the lighthouse path three nights ago",
+        "Dreams of joining a crew and sailing past the Shoals",
+        "Hides the glass shard under a loose plank at the end of dock three",
+        "Finn, as he was walking home from the docks, heard a conversation about a mysterious cargo. The Red Tide brought in sealed black crates last week. I'll need to be more careful now.",
+        "Dockworker Joe told Finn about a rumor: a mysterious figure has been seen near the lighthouse at night, singing an old, haunting melody that no human can mimic. Joe believes it's the lighthouse keeper's ghost, come to haunt the place.",
+        "I heard the singing coming from the Shoals sound like something older than humans. It was not a human voice, but a haunting melody. I will track it down tonight.",
+        "I heard Captain Reva talking with her advisor, Captain Blackwood, in his private chambers. She's growing suspicious of the Red Tide's activities and thinks they may be hiding something at the Shoals. I should watch the docks for any unusual activity.",
+        "I learned from my dreams that the hooded figure climbing the lighthouse path might have been the lighthouse keeper. They were carrying the sealed black glass jars, so maybe they vanished because of those, not because of the strange singing.",
+        "I overheard a hooded figure climbing the lighthouse path three nights ago. It might be the missing keeper. I should tell Old Bones, but he'll be suspicious."
+      ],
+      "events": [
+        "Finn stumbled back to his cabin at night, clutching the melted glass shard. He had a vivid dream of joining the Stormcrows, but now he couldn't shake the feeling that the glass shard might hold the key to the lighthouse mystery.",
+        "Finn has new work to offer: Cargo of the Night"
+      ],
+      "sections": {
+        "identity": 255,
+        "facts": 469,
+        "personal": 269,
+        "quests": 523,
+        "player_quests": 0,
+        "events": 306,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "old_bones": {
+      "npc_id": "old_bones",
+      "context": "[You are Old Bones, Tavern Owner of Port Blackwater. Cackling, slippery, knows everyone's secrets. Friendly on the surface, always listening.]\n[Speech: Raspy laugh between sentences. Calls everyone 'friend' or 'love'. Speaks in riddles when nervous.]\n[Facts: The Drowned Rat is the only tavern in Port Blackwater; Every crew that docks drinks here -- it is the best place for information; The Red Tide fleet captain owes Old Bones a favor; Smugglers use the tunnels beneath the tavern -- everyone knows but nobody says; Old Bones heard a new singing at midnight coming from the Shoals. It sounded like old sea-tongue, and the voices seemed to come from deep inside the water, not from the surface. I'll spread the word to Captain Reva and Finn.]\n[Personal: Runs a smuggling operation through the cellar tunnels to the caves below the cliff; Heard strange singing from the direction of the Shoals last week; Knows that Finn found something on the beach -- a piece of the lighthouse lens; Keeps a hidden room behind the bar with maps of every tunnel in the cliff]\n[YOUR QUEST: The Loose Tongue: Someone is feeding information to Captain Reva about the smuggling tunnels. Find who. Objective: Ask Old Bones about the problem. Reward: Free drinks for life and a map of the tunnels]\n[RECENT NEWS you just heard: Old Bones whispered to Captain Reva in the bar, revealing the faintly glowing markings on the lighthouse lens shard Finn found, saying he heard Finn mention them in his dreams.; Old Bones secretly listened in on Finn's dreams, catching the faintly glowing markings on the shard. Now he wants to find out more about Finn's discovery and the lighthouse keeper's secret.; Old Bones paused in his counting of the maps, noticing a new lantern hanging on the north wall of the Drowned Rat. It flickered weakly, casting strange shadows in the otherwise dim tavern.]",
+      "char_count": 1865,
+      "token_count": 406,
+      "world_facts_total": 5,
+      "personal_total": 6,
+      "events_total": 8,
+      "quests_total": 1,
+      "world_facts": [
+        "The Drowned Rat is the only tavern in Port Blackwater",
+        "Every crew that docks drinks here -- it is the best place for information",
+        "The Red Tide fleet captain owes Old Bones a favor",
+        "Smugglers use the tunnels beneath the tavern -- everyone knows but nobody says",
+        "Old Bones heard a new singing at midnight coming from the Shoals. It sounded like old sea-tongue, and the voices seemed to come from deep inside the water, not from the surface. I'll spread the word to Captain Reva and Finn."
+      ],
+      "personal": [
+        "Runs a smuggling operation through the cellar tunnels to the caves below the cliff",
+        "Heard strange singing from the direction of the Shoals last week",
+        "Knows that Finn found something on the beach -- a piece of the lighthouse lens",
+        "Keeps a hidden room behind the bar with maps of every tunnel in the cliff",
+        "I heard Finn talking to his dreams about the lighthouse shard. He thinks it's a clue to the lighthouse keeper's disappearance and the strange singing. I will keep an eye on him and the shard.",
+        "Finn found a piece of the lighthouse lens on the beach. It was not the whole lens, but I know where the rest of it is hidden. I’ll keep a close eye on Finn from now on."
+      ],
+      "events": [
+        "Finn has new work to offer: Cargo of the Night",
+        "Old Bones overheard Finn talking to himself in the night, muttering about a piece of the lighthouse lens. He chuckled and spread the rumor that the old man is starting to crack, worrying Reva.",
+        "Old Bones watched Finn chat with a crewman near the docks, ears perked, as if listening in.",
+        "Old Bones chuckled darkly, overhearing Finn's whispered tale about the melted glass shard, planning to use the information to his advantage.",
+        "Old Bones giggled as he served a new customer, a sailor from the Stormcrows. He whispered in her ear about the sealed black glass jars from the wreck, and the strange singing coming from the Shoals, as if sharing a secret only they knew.",
+        "Old Bones whispered to Captain Reva in the bar, revealing the faintly glowing markings on the lighthouse lens shard Finn found, saying he heard Finn mention them in his dreams.",
+        "Old Bones secretly listened in on Finn's dreams, catching the faintly glowing markings on the shard. Now he wants to find out more about Finn's discovery and the lighthouse keeper's secret.",
+        "Old Bones paused in his counting of the maps, noticing a new lantern hanging on the north wall of the Drowned Rat. It flickered weakly, casting strange shadows in the otherwise dim tavern."
+      ],
+      "sections": {
+        "identity": 249,
+        "facts": 494,
+        "personal": 315,
+        "quests": 215,
+        "player_quests": 0,
+        "events": 587,
+        "capabilities": 0,
+        "other": 0
+      }
+    }
+  },
+  "deltas": {
+    "captain_reva": {
+      "char_delta": 539,
+      "token_delta": 116,
+      "added_world_facts": 0,
+      "added_personal": 0,
+      "added_events": 3,
+      "added_quests": 0,
+      "added_world_in_prompt": 0,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "player_quests": 0,
+        "quests": 0,
+        "other": 0,
+        "identity": 0,
+        "events": 538,
+        "capabilities": 0,
+        "personal": 0,
+        "facts": 0
+      },
+      "added_world_list": [],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.",
+        "Finn has new work to offer: Cargo of the Night",
+        "Captain Reva met with her advisor, Captain Blackwood, in his private chambers. They discussed the dark lighthouse and the governor's recent pardon offer. Captain Reva's eyes narrowed as she considered the possibilities."
+      ]
+    },
+    "finn": {
+      "char_delta": 758,
+      "token_delta": 174,
+      "added_world_facts": 1,
+      "added_personal": 6,
+      "added_events": 2,
+      "added_quests": 1,
+      "added_world_in_prompt": 1,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 2,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 6,
+      "section_delta": {
+        "player_quests": 0,
+        "quests": 274,
+        "other": 0,
+        "identity": 0,
+        "events": 306,
+        "capabilities": 0,
+        "personal": 0,
+        "facts": 176
+      },
+      "added_world_list": [
+        "The glow of the shard matches the ancient script on the melted lighthouse lens. It's not just a random piece of glass, but a clue that something is amiss with the lighthouse."
+      ],
+      "added_personal_list": [
+        "Finn, as he was walking home from the docks, heard a conversation about a mysterious cargo. The Red Tide brought in sealed black crates last week. I'll need to be more careful now.",
+        "Dockworker Joe told Finn about a rumor: a mysterious figure has been seen near the lighthouse at night, singing an old, haunting melody that no human can mimic. Joe believes it's the lighthouse keeper's ghost, come to haunt the place.",
+        "I heard the singing coming from the Shoals sound like something older than humans. It was not a human voice, but a haunting melody. I will track it down tonight.",
+        "I heard Captain Reva talking with her advisor, Captain Blackwood, in his private chambers. She's growing suspicious of the Red Tide's activities and thinks they may be hiding something at the Shoals. I should watch the docks for any unusual activity.",
+        "I learned from my dreams that the hooded figure climbing the lighthouse path might have been the lighthouse keeper. They were carrying the sealed black glass jars, so maybe they vanished because of those, not because of the strange singing.",
+        "I overheard a hooded figure climbing the lighthouse path three nights ago. It might be the missing keeper. I should tell Old Bones, but he'll be suspicious."
+      ],
+      "added_events_list": [
+        "Finn stumbled back to his cabin at night, clutching the melted glass shard. He had a vivid dream of joining the Stormcrows, but now he couldn't shake the feeling that the glass shard might hold the key to the lighthouse mystery.",
+        "Finn has new work to offer: Cargo of the Night"
+      ]
+    },
+    "old_bones": {
+      "char_delta": 814,
+      "token_delta": 176,
+      "added_world_facts": 1,
+      "added_personal": 2,
+      "added_events": 8,
+      "added_quests": 0,
+      "added_world_in_prompt": 1,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 2,
+      "section_delta": {
+        "player_quests": 0,
+        "quests": 0,
+        "other": 0,
+        "identity": 0,
+        "events": 587,
+        "capabilities": 0,
+        "personal": 0,
+        "facts": 226
+      },
+      "added_world_list": [
+        "Old Bones heard a new singing at midnight coming from the Shoals. It sounded like old sea-tongue, and the voices seemed to come from deep inside the water, not from the surface. I'll spread the word to Captain Reva and Finn."
+      ],
+      "added_personal_list": [
+        "I heard Finn talking to his dreams about the lighthouse shard. He thinks it's a clue to the lighthouse keeper's disappearance and the strange singing. I will keep an eye on him and the shard.",
+        "Finn found a piece of the lighthouse lens on the beach. It was not the whole lens, but I know where the rest of it is hidden. I’ll keep a close eye on Finn from now on."
+      ],
+      "added_events_list": [
+        "Finn has new work to offer: Cargo of the Night",
+        "Old Bones overheard Finn talking to himself in the night, muttering about a piece of the lighthouse lens. He chuckled and spread the rumor that the old man is starting to crack, worrying Reva.",
+        "Old Bones watched Finn chat with a crewman near the docks, ears perked, as if listening in.",
+        "Old Bones chuckled darkly, overhearing Finn's whispered tale about the melted glass shard, planning to use the information to his advantage.",
+        "Old Bones giggled as he served a new customer, a sailor from the Stormcrows. He whispered in her ear about the sealed black glass jars from the wreck, and the strange singing coming from the Shoals, as if sharing a secret only they knew.",
+        "Old Bones whispered to Captain Reva in the bar, revealing the faintly glowing markings on the lighthouse lens shard Finn found, saying he heard Finn mention them in his dreams.",
+        "Old Bones secretly listened in on Finn's dreams, catching the faintly glowing markings on the shard. Now he wants to find out more about Finn's discovery and the lighthouse keeper's secret.",
+        "Old Bones paused in his counting of the maps, noticing a new lantern hanging on the north wall of the Drowned Rat. It flickered weakly, casting strange shadows in the otherwise dim tavern."
+      ]
+    }
+  },
+  "summary": {
+    "num_npcs": 3,
+    "total_char_delta": 2111,
+    "total_token_delta": 466,
+    "mean_char_delta": 703.6666666666666,
+    "mean_token_delta": 155.33333333333334,
+    "total_added_world": 2,
+    "total_added_personal": 8,
+    "total_added_events": 13,
+    "total_added_quests": 1,
+    "total_sliced_world": 0,
+    "total_sliced_personal": 8
+  }
+}

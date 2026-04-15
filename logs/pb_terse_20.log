@@ -1,0 +1,478 @@
+Model: qwen2.5-3b-instruct-q4_k_m.gguf
+World: port_blackwater (Port Blackwater)
+Ticks: 20
+Reset: True
+------------------------------------------------------------------------
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-04-14 19:15:17,984 WARNING huggingface_hub.utils._http: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 10294.86it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+llama_new_context_with_model: n_ctx_per_seq (4096) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+Narration mode: terse
+Lore file: D:\LLCWork\npc-engine\data\worlds\port_blackwater\story\lore.md
+Examples:  D:\LLCWork\npc-engine\data\worlds\port_blackwater\story\examples.yaml (17 entries)
+State dir: D:\LLCWork\npc-engine\data\worlds\port_blackwater\story
+
+=== TICK 1 ===
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 9363.50it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+Loading weights:   0%|          | 0/106 [00:00<?, ?it/s]Loading weights: 100%|##########| 106/106 [00:00<00:00, 7065.27it/s]
+[1mDebertaV2ForSequenceClassification LOAD REPORT[0m from: cross-encoder/nli-deberta-v3-small
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+deberta.embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  elapsed: 14.55s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Reva checks the lighthouse and finds no sign of the keeper.", "target": "captain_reva", "event": "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hin
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva'}
+    [2/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Stimulate Finn's curiosity and provide a new task.", "npc_id": "finn", "quest": {"id": "glass_jar_mystery", "name": "The Melted Shard", "description": "Finn found a melted piece of the lighthouse lens on the beach. He believes it came from the black
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'finn', 'quest_id': 'glass_jar_mystery'}
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learns from Finn's secret discovery.", "npc_id": "old_bones", "fact": "I've heard Finn's secret. The shard he found at the end of dock three matches the markings on the glass jars the Red Tide brought in. The singing I heard was the sea-ton
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.654, 'matches_text': 'Finn found a melted piece of the lighthouse lens on the beach. He believes it came from the black glass jars that wrecked ships three nights ago. Reva is not interested in this, but Finn thinks someone might be. He needs to find a crew to s', 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.965, 'is_contradiction': False, 'scores': {'contradiction': 0.034, 'entailment': 0.0, 'neutral': 0.965}}}}
+      ⚠ ledger sim=0.65  nli=neutral(0.96)  matches T1 quest/finn
+  world: +events(captain_reva): 2; +quest(finn): glass_jar_mystery; +events(finn): 1; +events(old_bones): 1; +facts(old_bones): 1
+
+=== TICK 2 ===
+  elapsed: 5.34s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva inspected the abandoned tavern cellar for signs of contraband smuggling.", "target": "captain_reva", "event": "Captain Reva rummaged through the dark, dusty tavern cellar, flicking the torchlight around to spot any hidden compartments o
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.634, 'matches_text': "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 1, 'nli': {'label': 'contradiction', 'confidence': 0.995, 'is_contradiction': True, 'scores': {'contradiction': 0.995, 'entailment': 0.0, 'neutral': 0.005}}, 'contradiction': True}, 'retried_after_self_repetition': True}
+      ⚠⚠ CONTRADICTION sim=0.63  nli=contradiction(0.99)  matches T1 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learned the black glass crates are from the governor's pardoning offer.", "npc_id": "finn", "fact": "I saw the melted glass shard near the lighthouse and heard singing coming from the Shoals. The crates were from the governor's offer. I'll tell 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal'}
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones hears a rumor of a new smuggling operation.", "target": "old_bones", "event": "Old Bones overheard a sailor whispering in the Drowned Rat that a new smuggling operation is using the north cliff caves. He chuckled to himself, planning to us
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones'}
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 3 ===
+  elapsed: 8.36s   sub_actions: 3
+    [1/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Captain Reva wants to gather more evidence against Old Bones for smuggling.", "npc_id": "captain_reva", "quest": {"id": "sentry_spies", "name": "Sentry Spies", "description": "Captain Reva needs to find two dock workers who can spy on Old Bones's ce
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'captain_reva', 'quest_id': 'sentry_spies'}
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finns' dream of joining a crew was interrupted when he saw a hooded figure at the lighthouse.", "npc_id": "finn", "fact": "I saw a hooded figure climbing the lighthouse path three nights ago. They were carrying a sealed black jar. I hid the shard und
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal'}
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones hears a rumor about the lighthouse keeper's fate.", "target": "old_bones", "event": "Old Bones leaned his head in his hands, whispering to himself. 'The lighthouse keeper could be alive... or dead.' He chuckled to himself, but his eyes wer
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.619, 'matches_text': "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.961, 'is_contradiction': False, 'scores': {'contradiction': 0.031, 'entailment': 0.008, 'neutral': 0.961}}}}
+      ⚠ ledger sim=0.62  nli=neutral(0.96)  matches T1 event/captain_reva
+  world: +quest(captain_reva): sentry_spies; +events(captain_reva): 1; +events(finn): 1; +facts(finn): 1; +events(old_bones): 2
+
+=== TICK 4 ===
+  elapsed: 4.17s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva has noticed a new pattern in the cargo brought in by the Red Tide fleet.", "npc_id": "captain_reva", "fact": "Captain Reva observed that the Red Tide's crates are often lighter than expected — as if something is being smuggled inside. Sh
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world'}
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn finds a hidden stash of old lanterns and tools under the loose plank at the end of dock three.", "target": "finn", "event": "Finn rummaged under the loose plank, found an old lantern and a set of leather gloves, and hid them in a secret compart
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn'}
+    [3/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Encourage Old Bones to share his hidden maps and smuggling secrets.", "npc_id": "old_bones", "quest": {"id": "hidden_maps", "name": "Tavern Secrets", "description": "Old Bones has secret tunnels and maps in the cellar. He wants to reveal them to Rev
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'old_bones', 'quest_id': 'hidden_maps', 'similarity_warning': {'similarity': 0.633, 'matches_text': "Captain Reva needs to find two dock workers who can spy on Old Bones's cellar activities and report back to her.", 'matches_npc': 'captain_reva', 'matches_kind': 'quest', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.0, 'neutral': 0.999}}}}
+      ⚠ ledger sim=0.63  nli=neutral(1.00)  matches T3 quest/captain_reva
+  world: +events(captain_reva): 1; +facts(captain_reva): 1; +events(finn): 2; +quest(old_bones): hidden_maps; +events(old_bones): 1
+
+=== TICK 5 ===
+  [ARC] PROPOSED arc_t5_1776219353
+        theme: Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the ligh
+        cast:  ['captain_reva', 'old_bones']
+        beat:  1/4 (seed)
+  [ARC] arc_t5_1776219353 beat 1/4 (seed)
+  elapsed: 8.17s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva observed the lighthouse's light flicker and go out two months ago, suspecting a sabotage.", "npc_id": "captain_reva", "fact": "Captain Reva noticed the lighthouse's light flicker and go out two months ago. She suspects sabotage, but has 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.687, 'matches_text': "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}}
+      ⚠ ledger sim=0.69  nli=neutral(1.00)  matches T1 event/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn notices a new, dark shadow lurking near the docks.", "target": "finn", "event": "Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away."}
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'retried_after_self_repetition': True}
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learned about strange singing from the Shoals.", "npc_id": "old_bones", "fact": "I heard strange singing from the Shoals last week. It sounded like an old song, but not human. It was coming from the direction of the lighthouse. It made me s
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'world'}
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 6 ===
+  [ARC] arc_t5_1776219353 BEAT 1 -> 2 (escalate)
+  [ARC] arc_t5_1776219353 beat 2/4 (escalate)
+  elapsed: 7.86s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva inspected the lighthouse's shadow, noting the recent signs of human activity.", "target": "captain_reva", "event": "Captain Reva scrutinized the lighthouse's shadow, finding faint footprints and the remains of a campfire. She clenched h
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.771, 'matches_text': "Captain Reva noticed the lighthouse's light flicker and go out two months ago. She suspects sabotage, but has no solid evidence. She will need to dig deeper now.", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 5, 'nli': {'label': 'neutral', 'confidence': 0.963, 'is_contradiction': False, 'scores': {'contradiction': 0.037, 'entailment': 0.0, 'neutral': 0.963}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.77  nli=neutral(0.96)  matches T5 fact/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learned a shipmate was killed last week when a crate fell and crushed them. He suspects the crates are dangerous.", "npc_id": "finn", "fact": "Finn found a shipmate under a crate, crushed, last week. He believes the crates are dangerous and the 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'retried_after_contradiction': True}
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones hears a rumor in the tavern, adding to the tension.", "target": "old_bones", "event": "Old Bones overheard a sailor whisper to his companion that the Iron Wake has a new captain, a woman, and that she's bringing a cargo of black glass jars
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.676, 'matches_text': 'Old Bones overheard a sailor whispering in the Drowned Rat that a new smuggling operation is using the north cliff caves. He chuckled to himself, planning to use the information to his advantage.', 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 2, 'nli': {'label': 'neutral', 'confidence': 0.993, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.004, 'neutral': 0.993}}}}
+      ⚠ ledger sim=0.68  nli=neutral(0.99)  matches T2 event/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 7 ===
+  [ARC] arc_t5_1776219353 beat 2/4 (escalate)
+  elapsed: 4.70s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva observed the moonlight glint off the shard Finn found and noted the faint glow of sea-tongue script. She'll look into it further.", "npc_id": "captain_reva", "fact": "Captain Reva noticed the faint glow of the shard Finn found. It glowed
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.638, 'matches_text': 'Finn found a melted piece of the lighthouse lens on the beach. He believes it came from the black glass jars that wrecked ships three nights ago. Reva is not interested in this, but Finn thinks someone might be. He needs to find a crew to s', 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}}
+      ⚠ ledger sim=0.64  nli=neutral(1.00)  matches T1 quest/finn
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn notices a shadowy figure lurking near the dock's end, where he hid the shard.", "target": "finn", "event": "Finn saw a dark figure moving closer to the plank where he had hidden the shard, his heart racing as he wondered if someone was watching
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.711, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'neutral', 'confidence': 0.978, 'is_contradiction': False, 'scores': {'contradiction': 0.02, 'entailment': 0.002, 'neutral': 0.978}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.71  nli=neutral(0.98)  matches T5 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learns that the strange singing from the Shoals was not just in the past tense.", "npc_id": "old_bones", "fact": "The strange singing from the Shoals is still happening, and it sounds like someone is crying. I'll have to send someone to inv
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.704, 'matches_text': 'I heard strange singing from the Shoals last week. It sounded like an old song, but not human. It was coming from the direction of the lighthouse. It made me shiver.', 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 5, 'nli': {'label': 'contradiction', 'confidence': 0.51, 'is_contradiction': False, 'scores': {'contradiction': 0.51, 'entailment': 0.0, 'neutral': 0.49}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.704, 'matches_tick': 5}}
+      ⚠ ledger sim=0.70  nli=contradiction(0.51)  matches T5 fact/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 8 ===
+  [ARC] arc_t5_1776219353 BEAT 2 -> 3 (confront)
+  [ARC] arc_t5_1776219353 beat 3/4 (confront)
+  elapsed: 4.42s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Consider the possibility of Old Bones being more than just a smuggler.", "target": "captain_reva", "event": "Captain Reva inspected the crates of Red Tide merchandise, noting a faint, oily residue on the edges."}
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.714, 'matches_text': "Captain Reva observed that the Red Tide's crates are often lighter than expected — as if something is being smuggled inside. She suspects the sealed black glass jars, but wants to confirm before acting.", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.993, 'is_contradiction': False, 'scores': {'contradiction': 0.006, 'entailment': 0.0, 'neutral': 0.993}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.71  nli=neutral(0.99)  matches T4 fact/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn has learned the shard's markings glow faintly in moonlight.", "npc_id": "finn", "fact": "The shard's markings glow faintly in moonlight, casting a dim shadow on the plank beneath it.", "fact_type": "personal"}
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.607, 'matches_text': "Captain Reva noticed the faint glow of the shard Finn found. It glowed faintly in moonlight, with markings that looked like old sea-tongue script. She'll investigate.", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 7, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.0, 'neutral': 0.999}}}}
+      ⚠ ledger sim=0.61  nli=neutral(1.00)  matches T7 fact/captain_reva
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Introduce a new complication that connects the lighthouse mystery to the smuggling operation.", "target": "old_bones", "event": "Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found, and hinted that the
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.71, 'matches_text': "I've heard Finn's secret. The shard he found at the end of dock three matches the markings on the glass jars the Red Tide brought in. The singing I heard was the sea-tongue song, not human. The lighthouse keeper's disappearance and the seal", 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.0, 'neutral': 0.997}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.71, 'matches_tick': 1}}
+      ⚠ ledger sim=0.71  nli=neutral(1.00)  matches T1 fact/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 9 ===
+  [ARC] arc_t5_1776219353 beat 3/4 (confront)
+  elapsed: 5.14s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva noticed a faint, oily trail on the ground leading from the docks to the lighthouse.", "npc_id": "captain_reva", "fact": "Captain Reva found a faint oily trail leading from the docks to the lighthouse. It appears to be from a ship's wheel
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.714, 'matches_text': 'Finn found a melted piece of the lighthouse lens on the beach. He believes it came from the black glass jars that wrecked ships three nights ago. Reva is not interested in this, but Finn thinks someone might be. He needs to find a crew to s', 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.994, 'is_contradiction': False, 'scores': {'contradiction': 0.004, 'entailment': 0.001, 'neutral': 0.994}}}}
+      ⚠ ledger sim=0.71  nli=neutral(0.99)  matches T1 quest/finn
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn's mind is on the shard he hid, but he can't shake the feeling someone's watching him.", "target": "finn", "event": "Finn walked the north beach alone at low tide, his eyes scanning the sand for any sign of the shard. As he approached the end of
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.728, 'matches_text': 'Finn saw a dark figure moving closer to the plank where he had hidden the shard, his heart racing as he wondered if someone was watching him.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 7, 'nli': {'label': 'contradiction', 'confidence': 0.97, 'is_contradiction': True, 'scores': {'contradiction': 0.97, 'entailment': 0.0, 'neutral': 0.03}}, 'contradiction': True}, 'retried_after_contradiction': True}
+      ⚠⚠ CONTRADICTION sim=0.73  nli=contradiction(0.97)  matches T7 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learns the lighthouse keeper's bones are in his hidden room.", "npc_id": "old_bones", "fact": "Old Bones found the lighthouse keeper's bones in his hidden room behind the bar. He was the first to hear the singing from the Shoals and knew th
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.642, 'matches_text': "Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found, and hinted that the keeper had something to do with the sealed glass jars on the last ship.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.0, 'neutral': 0.997}}}}
+      ⚠ ledger sim=0.64  nli=neutral(1.00)  matches T8 event/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 10 ===
+  [ARC] PROPOSED arc_t10_1776219383
+        theme: Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shi
+        cast:  ['finn']
+        beat:  1/4 (seed)
+  [ARC] arc_t5_1776219353 BEAT 3 -> 4 (resolve)
+  [ARC] arc_t5_1776219353 beat 4/4 (resolve) | arc_t10_1776219383 beat 1/4 (seed)
+  elapsed: 5.86s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Climb the lighthouse path to check for signs of the lighthouse keeper.", "target": "captain_reva", "event": "Captain Reva climbed the dark lighthouse path, peering into the night. She found a faint, oily trail leading from the docks to the lighthous
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.806, 'matches_text': "Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only a few scattered bones and a hint of smoke. 'That old fool probably died of starvation,' she muttered, shaking her head.", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.991, 'is_contradiction': False, 'scores': {'contradiction': 0.006, 'entailment': 0.003, 'neutral': 0.991}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.81  nli=neutral(0.99)  matches T1 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn observes the shadowy figure near the docks and notes faint footprints leading to the lighthouse.", "npc_id": "finn", "fact": "Finn noticed the faint footprints leading from the docks to the lighthouse. He watched a shadowy figure move quickly, t
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.786, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.001, 'neutral': 0.997}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.786, 'matches_tick': 5}}
+      ⚠ ledger sim=0.79  nli=neutral(1.00)  matches T5 event/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Force the tavern owner to reveal his smuggling operations.", "target": "old_bones", "event": "Old Bones stumbled over a spilled drink and spilled a secret. He revealed hidden maps of the tunnels under the Drowned Rat, showing a route to the caves ne
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.751, 'matches_text': "Old Bones found the lighthouse keeper's bones in his hidden room behind the bar. He was the first to hear the singing from the Shoals and knew the lighthouse was dark for two months. He has a map of the smuggling tunnels in that room.", 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.988, 'is_contradiction': False, 'scores': {'contradiction': 0.012, 'entailment': 0.0, 'neutral': 0.988}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.751, 'matches_tick': 9}}
+      ⚠ ledger sim=0.75  nli=neutral(0.99)  matches T9 fact/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 11 ===
+  [ARC] arc_t5_1776219353 beat 4/4 (resolve) | arc_t10_1776219383 beat 1/4 (seed)
+  elapsed: 5.22s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva noticed a new oily trail leading from the docks to the lighthouse, and observed the lighthouse's shadow more closely.", "npc_id": "captain_reva", "fact": "Captain Reva noticed a new oily trail leading from the docks to the lighthouse ton
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.808, 'matches_text': "Captain Reva found a faint oily trail leading from the docks to the lighthouse. It appears to be from a ship's wheel or rudder, but the oily substance is unfamiliar. Someone was moving heavy objects here, and it could be connected to the se", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.81  nli=neutral(1.00)  matches T9 fact/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn saw someone near the docks, then heard footsteps moving away.", "target": "finn", "event": "Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving aw
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 1.0, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'entailment', 'confidence': 0.939, 'is_contradiction': False, 'scores': {'contradiction': 0.017, 'entailment': 0.939, 'neutral': 0.044}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 1.0, 'matches_tick': 5}}
+      ⚠ ledger sim=1.00  nli=entailment(0.94)  matches T5 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learned a new secret about the Drowned Rat.", "npc_id": "old_bones", "fact": "Old Bones overheard a conversation about the black glass jars. A crewman from the Red Tide fleet spoke of a cargo of sealed black glass jars brought in the week b
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.757, 'matches_text': "Old Bones overheard a sailor whisper to his companion that the Iron Wake has a new captain, a woman, and that she's bringing a cargo of black glass jars from the Shoals. Old Bones chuckled, knowing the rumors were true.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 6, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.757, 'matches_tick': 6}}
+      ⚠ ledger sim=0.76  nli=neutral(1.00)  matches T6 event/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 12 ===
+  [ARC] RESOLVED arc_t5_1776219353 (status=resolved)
+  [ARC] arc_t10_1776219383 beat 1/4 (seed)
+  elapsed: 4.81s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva examined the oily trail and noticed a faint glimmer under the moonlight. It matched the glow of the shard Finn found.", "target": "captain_reva", "event": "Captain Reva examined the oily trail and noticed a faint glimmer under the moonl
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.837, 'matches_text': "Captain Reva noticed the faint glow of the shard Finn found. It glowed faintly in moonlight, with markings that looked like old sea-tongue script. She'll investigate.", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 7, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.001, 'neutral': 0.999}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.84  nli=neutral(1.00)  matches T7 fact/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn observed the shadowy figure near the docks and under the crates.", "npc_id": "finn", "fact": "Finn saw a shadow move near the docks and quickly hid under a crate. He heard a shift in the darkness, then footsteps quickly moving away."}
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.921, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'entailment', 'confidence': 0.994, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.994, 'neutral': 0.005}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.921, 'matches_tick': 5}}
+      ⚠ ledger sim=0.92  nli=entailment(0.99)  matches T5 event/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones is known for his sneaky ways. Let him be seen as the one who found the bones.", "target": "old_bones", "event": "Old Bones stumbled into the tavern, his face streaked with dirt and his eyes darting around nervously. He announced, 'Found so
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.744, 'matches_text': "Old Bones found the lighthouse keeper's bones in his hidden room behind the bar. He was the first to hear the singing from the Shoals and knew the lighthouse was dark for two months. He has a map of the smuggling tunnels in that room.", 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.744, 'matches_tick': 9}}
+      ⚠ ledger sim=0.74  nli=neutral(1.00)  matches T9 fact/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 13 ===
+  [ARC] arc_t10_1776219383 BEAT 1 -> 2 (escalate)
+  [ARC] arc_t10_1776219383 beat 2/4 (escalate)
+  elapsed: 6.55s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva notices a new oily substance on the docks, likely from a ship's wheel or rudder.", "npc_id": "captain_reva", "fact": "Captain Reva noticed a new oily substance on the docks near the end of dock three. It appears to be from a ship's wheel
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.831, 'matches_text': "Captain Reva found a faint oily trail leading from the docks to the lighthouse. It appears to be from a ship's wheel or rudder, but the oily substance is unfamiliar. Someone was moving heavy objects here, and it could be connected to the se", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.0, 'neutral': 0.999}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.83  nli=neutral(1.00)  matches T9 fact/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn saw a shadowy figure moving near the docks, then quickly hid under a crate.", "target": "finn", "event": "Finn watched the shadowy figure near the docks and quickly hid under a crate, listening intently to the sounds of the port."}
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.842, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.001, 'neutral': 0.996}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.842, 'matches_tick': 5}}
+      ⚠ ledger sim=0.84  nli=neutral(1.00)  matches T5 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones hears whispers of a smuggler's meeting in the caves.", "npc_id": "old_bones", "fact": "Old Bones heard whispers of a smuggler's meeting in the caves below the cliff, near the smuggling tunnels. He saw a hooded figure speaking to two other m
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.757, 'matches_text': 'Old Bones overheard a sailor whispering in the Drowned Rat that a new smuggling operation is using the north cliff caves. He chuckled to himself, planning to use the information to his advantage.', 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 2, 'nli': {'label': 'neutral', 'confidence': 0.991, 'is_contradiction': False, 'scores': {'contradiction': 0.009, 'entailment': 0.0, 'neutral': 0.991}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.757, 'matches_tick': 2}}
+      ⚠ ledger sim=0.76  nli=neutral(0.99)  matches T2 event/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 14 ===
+  [ARC] arc_t10_1776219383 beat 2/4 (escalate)
+  elapsed: 6.55s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva discovers a new oily substance on the docks near the end of dock three.", "target": "captain_reva", "event": "Captain Reva paused near the end of dock three, her eyes narrowing. She spotted a new oily substance, dark and viscous, spread
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.782, 'matches_text': "Captain Reva found a faint oily trail leading from the docks to the lighthouse. It appears to be from a ship's wheel or rudder, but the oily substance is unfamiliar. Someone was moving heavy objects here, and it could be connected to the se", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'contradiction', 'confidence': 0.993, 'is_contradiction': True, 'scores': {'contradiction': 0.993, 'entailment': 0.0, 'neutral': 0.006}}, 'contradiction': True}, 'retried_after_self_repetition': True}
+      ⚠⚠ CONTRADICTION sim=0.78  nli=contradiction(0.99)  matches T9 fact/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn saw something suspicious near the docks and under the cover of darkness.", "npc_id": "finn", "fact": "Finn saw a hooded figure moving quickly near the end of dock three, carrying a sealed black glass jar. He heard a faint thud as the jar hit the
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.71, 'matches_text': 'Finn noticed the faint footprints leading from the docks to the lighthouse. He watched a shadowy figure move quickly, then heard faint footsteps moving away. He is sure someone is hiding something, but no one will believe him.', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 10, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.003, 'neutral': 0.996}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.71, 'matches_tick': 10}}
+      ⚠ ledger sim=0.71  nli=neutral(1.00)  matches T10 fact/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones overhears a conversation about the lighthouse and the glass shard.", "target": "old_bones", "event": "Old Bones overheard Reva discussing the dark lighthouse and Finn's discovery of the shard. He plans to use this information to his advant
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.746, 'matches_text': "Captain Reva noticed the faint glow of the shard Finn found. It glowed faintly in moonlight, with markings that looked like old sea-tongue script. She'll investigate.", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 7, 'nli': {'label': 'neutral', 'confidence': 0.985, 'is_contradiction': False, 'scores': {'contradiction': 0.015, 'entailment': 0.0, 'neutral': 0.985}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.75  nli=neutral(0.98)  matches T7 fact/captain_reva
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 15 ===
+  [ARC] PROPOSED arc_t15_1776219412
+        theme: Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found,
+        cast:  ['old_bones', 'captain_reva']
+        beat:  1/4 (seed)
+  [ARC] arc_t10_1776219383 beat 2/4 (escalate) | arc_t15_1776219412 beat 1/4 (seed)
+  elapsed: 6.78s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva observed an oily trail leading from the docks to the lighthouse, suggesting recent activity.", "npc_id": "captain_reva", "fact": "Captain Reva noticed an oily trail on the docks near the end of dock three, resembling the oily residue fro
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.813, 'matches_text': "Captain Reva noticed a new oily substance on the docks near the end of dock three. It appears to be from a ship's wheel or rudder, but the substance is thicker and darker than the previous oily trails she found. She suspects it might be fro", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 13, 'nli': {'label': 'neutral', 'confidence': 0.986, 'is_contradiction': False, 'scores': {'contradiction': 0.011, 'entailment': 0.004, 'neutral': 0.986}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.81  nli=neutral(0.99)  matches T13 fact/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.", "target": "finn", "event": "Finn hid under a crate near the docks, listening to the sound o
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.804, 'matches_text': 'Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 5, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.999}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.804, 'matches_tick': 5}}
+      ⚠ ledger sim=0.80  nli=neutral(1.00)  matches T5 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learns Finn's discovery and starts to speculate.", "npc_id": "old_bones", "fact": "Old Bones overheard Finn talking in his sleep about the melted piece of the lighthouse lens he found. He believes it came from the black glass jars that wrec
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.881, 'matches_text': 'Finn found a melted piece of the lighthouse lens on the beach. He believes it came from the black glass jars that wrecked ships three nights ago. Reva is not interested in this, but Finn thinks someone might be. He needs to find a crew to s', 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.88  nli=neutral(1.00)  matches T1 quest/finn
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 16 ===
+  [ARC] arc_t15_1776219412 BEAT 1 -> 2 (escalate)
+  [ARC] arc_t10_1776219383 beat 2/4 (escalate) | arc_t15_1776219412 beat 2/4 (escalate)
+  elapsed: 9.77s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva notices a new oily substance on the docks, possibly related to the black glass jars.", "target": "captain_reva", "event": "Captain Reva paused near the end of dock three, her eyes narrowing. She noticed a new oily substance, dark and vi
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.901, 'matches_text': 'Captain Reva paused near the end of dock three, her eyes narrowing. She spotted a new oily substance, dark and viscous, spread across the wooden planks. It was the same as the oily trail she had followed from the docks to the lighthouse. Sh', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 14, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.90  nli=neutral(1.00)  matches T14 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn observed a strange shadow moving near the lighthouse.", "npc_id": "finn", "fact": "Finn noticed a shadowy figure near the lighthouse, moving quickly and quietly. The figure carried a sealed black glass jar, and Finn heard a faint thud as it hit 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.797, 'matches_text': 'Finn noticed the faint footprints leading from the docks to the lighthouse. He watched a shadowy figure move quickly, then heard faint footsteps moving away. He is sure someone is hiding something, but no one will believe him.', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 10, 'nli': {'label': 'neutral', 'confidence': 0.991, 'is_contradiction': False, 'scores': {'contradiction': 0.008, 'entailment': 0.0, 'neutral': 0.991}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.80  nli=neutral(0.99)  matches T10 fact/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones, overheard Finn's secret, decides to use it for leverage.", "target": "old_bones", "event": "Old Bones overheard Finn mention the hidden glass shard and the hooded figure climbing the lighthouse path three nights ago. He chuckled, sipping 
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.781, 'matches_text': "Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found, and hinted that the keeper had something to do with the sealed glass jars on the last ship.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.994, 'is_contradiction': False, 'scores': {'contradiction': 0.006, 'entailment': 0.0, 'neutral': 0.994}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.781, 'matches_tick': 8}}
+      ⚠ ledger sim=0.78  nli=neutral(0.99)  matches T8 event/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 17 ===
+  [ARC] arc_t10_1776219383 BEAT 2 -> 3 (confront)
+  [ARC] arc_t10_1776219383 beat 3/4 (confront) | arc_t15_1776219412 beat 2/4 (escalate)
+  elapsed: 6.14s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva noticed a new oily substance on the docks near the end of dock three, thicker and darker than usual, suggesting it might be from a ship's engine or cargo. She furrowed her brow, thinking about the recent wreckages and the sealed black gl
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.936, 'matches_text': "Captain Reva noticed a new oily substance on the docks near the end of dock three. It appears to be from a ship's wheel or rudder, but the substance is thicker and darker than the previous oily trails she found. She suspects it might be fro", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 13, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.999}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.94  nli=neutral(1.00)  matches T13 fact/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn heard a faint whisper as he hid under the crates. The shadowy figure moved away, leaving behind a faint glimmer.", "target": "finn", "event": "Finn's heart raced as he heard a faint whisper in the night. He quickly hid under a crate, then notic
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.76, 'matches_text': "Finn hid under a crate near the docks, listening to the sound of footsteps moving away. He thought he saw a hooded figure near the end of dock three, but now he's not so sure. He feels a sudden chill and hears a faint whisper, 'To the Shoal", 'matches_npc': 'finn', 'matches_kind': 'event', 'matches_tick': 15, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.002, 'neutral': 0.996}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.76, 'matches_tick': 15}}
+      ⚠ ledger sim=0.76  nli=neutral(1.00)  matches T15 event/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones gathers new information on the lighthouse keeper and the smugglers.", "npc_id": "old_bones", "fact": "Old Bones overheard the smugglers discussing the lighthouse keeper's bones and the shard Finn found. They plan to use it to gain access to
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.775, 'matches_text': "Old Bones found the lighthouse keeper's bones in his hidden room behind the bar. He was the first to hear the singing from the Shoals and knew the lighthouse was dark for two months. He has a map of the smuggling tunnels in that room.", 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.0, 'neutral': 0.999}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.775, 'matches_tick': 9}}
+      ⚠ ledger sim=0.78  nli=neutral(1.00)  matches T9 fact/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 18 ===
+  [ARC] arc_t15_1776219412 BEAT 2 -> 3 (confront)
+  [ARC] arc_t10_1776219383 beat 3/4 (confront) | arc_t15_1776219412 beat 3/4 (confront)
+  elapsed: 7.78s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva notices a peculiar aroma emanating from the docks.", "target": "captain_reva", "event": "Captain Reva sniffed the air near the end of dock three, wrinkling her nose. She detected a faint, acrid odor mixed with something unfamiliar, like
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.813, 'matches_text': 'Captain Reva paused near the end of dock three, her eyes narrowing. She noticed a new oily substance, dark and viscous, spread across the wooden planks. It was darker than usual and seemed to have a slight glimmer under moonlight, a hint of', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 16, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.0, 'neutral': 0.999}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.81  nli=neutral(1.00)  matches T16 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn eavesdrops on Old Bones' conversation about the Red Tide and the lighthouse.", "npc_id": "finn", "fact": "Finn heard Old Bones mention the Red Tide's cargo and the mysterious black glass jars. He realized the shadowy figure might be a smuggler, 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.741, 'matches_text': "Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found, and hinted that the keeper had something to do with the sealed glass jars on the last ship.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.984, 'is_contradiction': False, 'scores': {'contradiction': 0.014, 'entailment': 0.001, 'neutral': 0.984}}}}
+      ⚠ ledger sim=0.74  nli=neutral(0.98)  matches T8 event/old_bones
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones, the tavern owner, learns a new spy has entered the tavern and is listening in on their conversations.", "target": "old_bones", "event": "Old Bones, sipping his ale with a wry grin, noticed a shadowy figure sitting at the bar's back corner
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.727, 'matches_text': "Old Bones overheard Finn mention the hidden glass shard and the hooded figure climbing the lighthouse path three nights ago. He chuckled, sipping his ale, and decided to use Finn's secret against him.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 16, 'nli': {'label': 'contradiction', 'confidence': 0.698, 'is_contradiction': False, 'scores': {'contradiction': 0.698, 'entailment': 0.001, 'neutral': 0.301}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.727, 'matches_tick': 16}}
+      ⚠ ledger sim=0.73  nli=contradiction(0.70)  matches T16 event/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+=== TICK 19 ===
+  [ARC] arc_t10_1776219383 beat 3/4 (confront) | arc_t15_1776219412 beat 3/4 (confront)
+  elapsed: 5.41s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva observed the end of dock three more closely after Finn's strange behavior.", "npc_id": "captain_reva", "fact": "Captain Reva noticed the oily substance on the end of dock three was thicker and darker than usual, more like the slick from 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.829, 'matches_text': "Captain Reva noticed a new oily substance on the docks near the end of dock three, thicker and darker than usual, suggesting it might be from a ship's engine or cargo. She furrowed her brow, thinking about the recent wreckages and the seale", 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 17, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.0, 'neutral': 0.999}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.83  nli=neutral(1.00)  matches T17 fact/captain_reva
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Force a scene where Finn confronts the shadowy figure near the docks.", "target": "finn", "event": "Finn peeked out from behind a crate on the docks, his heart pounding. He saw a dark figure moving away, then quickly darted out to catch up, but the 
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.862, 'matches_text': 'Finn saw a shadow move near the docks and quickly hid under a crate. He heard a shift in the darkness, then footsteps quickly moving away.', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 12, 'nli': {'label': 'neutral', 'confidence': 0.99, 'is_contradiction': False, 'scores': {'contradiction': 0.008, 'entailment': 0.002, 'neutral': 0.99}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.862, 'matches_tick': 12}}
+      ⚠ ledger sim=0.86  nli=neutral(0.99)  matches T12 fact/finn
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones learned about Finn's discovery of the shard and the melting lens.", "npc_id": "old_bones", "fact": "Old Bones learned about Finn's discovery of the shard and the melting lens. He heard Finn talking in his dreams about a hooded figure carryi
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.831, 'matches_text': "Old Bones overheard Finn mention the hidden glass shard and the hooded figure climbing the lighthouse path three nights ago. He chuckled, sipping his ale, and decided to use Finn's secret against him.", 'matches_npc': 'old_bones', 'matches_kind': 'event', 'matches_tick': 16, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.004, 'entailment': 0.001, 'neutral': 0.996}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.831, 'matches_tick': 16}}
+      ⚠ ledger sim=0.83  nli=neutral(1.00)  matches T16 event/old_bones
+  world: +facts(captain_reva): 1; +events(finn): 1; +facts(old_bones): 1
+
+=== TICK 20 ===
+  [ARC] arc_t15_1776219412 BEAT 3 -> 4 (resolve)
+  [ARC] arc_t10_1776219383 beat 3/4 (confront) | arc_t15_1776219412 beat 4/4 (resolve)
+  elapsed: 8.22s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva noticed the oily substance again, this time on the dock near the end of dock three, and decided to investigate.", "target": "captain_reva", "event": "Captain Reva stepped onto the oily substance near the end of dock three, her boots sin
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.888, 'matches_text': 'Captain Reva paused near the end of dock three, her eyes narrowing. She spotted a new oily substance, dark and viscous, spread across the wooden planks. It was the same as the oily trail she had followed from the docks to the lighthouse. Sh', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 14, 'nli': {'label': 'contradiction', 'confidence': 0.91, 'is_contradiction': True, 'scores': {'contradiction': 0.91, 'entailment': 0.001, 'neutral': 0.089}}, 'contradiction': True}, 'retried_after_contradiction': True}
+      ⚠⚠ CONTRADICTION sim=0.89  nli=contradiction(0.91)  matches T14 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn notices a shadowy figure near the docks, carrying a sealed jar.", "npc_id": "finn", "fact": "Finn saw a hooded figure near the end of dock three, carrying a sealed black glass jar. The figure moved quickly and disappeared into the shadows."}
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.918, 'matches_text': 'Finn saw a hooded figure moving quickly near the end of dock three, carrying a sealed black glass jar. He heard a faint thud as the jar hit the ground. The figure then quickly fled, disappearing into the shadows. Finn was certain he saw som', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 14, 'nli': {'label': 'neutral', 'confidence': 0.867, 'is_contradiction': False, 'scores': {'contradiction': 0.052, 'entailment': 0.081, 'neutral': 0.867}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.92  nli=neutral(0.87)  matches T14 fact/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Old Bones, overhearing Reva's footsteps, casually moves a pile of crates to hide the oily substance. He then pretends to be busy with a map, muttering about a hidden smuggling tunnel.", "target": "old_bones", "event": "Old Bones, overheard Captain R
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'old_bones', 'similarity_warning': {'similarity': 0.757, 'matches_text': 'Old Bones has secret tunnels and maps in the cellar. He wants to reveal them to Reva in exchange for a permanent berth and a share of the profits.', 'matches_npc': 'old_bones', 'matches_kind': 'quest', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.981, 'is_contradiction': False, 'scores': {'contradiction': 0.019, 'entailment': 0.0, 'neutral': 0.981}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.76  nli=neutral(0.98)  matches T4 quest/old_bones
+  world: +events(captain_reva): 1; +facts(finn): 1; +events(old_bones): 1
+
+========================================================================
+SUMMARY
+========================================================================
+Total ticks: 20
+Total time: 135.80s   mean: 6.79s/tick
+Coercions:   0/20
+Outcomes:
+  OK[event]                             29 #############################
+  OK[fact]                              28 ############################
+  OK[quest]                              3 ###
+Action kinds:
+  event        29
+  fact         28
+  quest        3
+Targets touched:
+  captain_reva         20
+  finn                 20
+  old_bones            20
+Consecutive target repeats (sub-action level): 0/59
+FactLedger warnings: 49/20  (contradictions: 4)
+  T1 sim    sim=0.65 nli=neutral(0.96) -> T1 quest/finn: Finn found a melted piece of the lighthouse lens on the beach. He beli
+  T2 CONTRA sim=0.63 nli=contradiction(0.99) -> T1 event/captain_reva: Captain Reva climbed the dark lighthouse path, peering into the night.
+  T3 sim    sim=0.62 nli=neutral(0.96) -> T1 event/captain_reva: Captain Reva climbed the dark lighthouse path, peering into the night.
+  T4 sim    sim=0.63 nli=neutral(1.00) -> T3 quest/captain_reva: Captain Reva needs to find two dock workers who can spy on Old Bones's
+  T5 sim    sim=0.69 nli=neutral(1.00) -> T1 event/captain_reva: Captain Reva climbed the dark lighthouse path, peering into the night.
+  T6 sim    sim=0.77 nli=neutral(0.96) -> T5 fact/captain_reva: Captain Reva noticed the lighthouse's light flicker and go out two mon
+  T6 sim    sim=0.68 nli=neutral(0.99) -> T2 event/old_bones: Old Bones overheard a sailor whispering in the Drowned Rat that a new 
+  T7 sim    sim=0.64 nli=neutral(1.00) -> T1 quest/finn: Finn found a melted piece of the lighthouse lens on the beach. He beli
+  T7 sim    sim=0.71 nli=neutral(0.98) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T7 sim    sim=0.70 nli=contradiction(0.51) -> T5 fact/old_bones: I heard strange singing from the Shoals last week. It sounded like an 
+  T8 sim    sim=0.71 nli=neutral(0.99) -> T4 fact/captain_reva: Captain Reva observed that the Red Tide's crates are often lighter tha
+  T8 sim    sim=0.61 nli=neutral(1.00) -> T7 fact/captain_reva: Captain Reva noticed the faint glow of the shard Finn found. It glowed
+  T8 sim    sim=0.71 nli=neutral(1.00) -> T1 fact/old_bones: I've heard Finn's secret. The shard he found at the end of dock three 
+  T9 sim    sim=0.71 nli=neutral(0.99) -> T1 quest/finn: Finn found a melted piece of the lighthouse lens on the beach. He beli
+  T9 CONTRA sim=0.73 nli=contradiction(0.97) -> T7 event/finn: Finn saw a dark figure moving closer to the plank where he had hidden 
+  T9 sim    sim=0.64 nli=neutral(1.00) -> T8 event/old_bones: Old Bones, laughing, whispered to Finn about the lighthouse keeper's b
+  T10 sim    sim=0.81 nli=neutral(0.99) -> T1 event/captain_reva: Captain Reva climbed the dark lighthouse path, peering into the night.
+  T10 sim    sim=0.79 nli=neutral(1.00) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T10 sim    sim=0.75 nli=neutral(0.99) -> T9 fact/old_bones: Old Bones found the lighthouse keeper's bones in his hidden room behin
+  T11 sim    sim=0.81 nli=neutral(1.00) -> T9 fact/captain_reva: Captain Reva found a faint oily trail leading from the docks to the li
+  T11 sim    sim=1.00 nli=entailment(0.94) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T11 sim    sim=0.76 nli=neutral(1.00) -> T6 event/old_bones: Old Bones overheard a sailor whisper to his companion that the Iron Wa
+  T12 sim    sim=0.84 nli=neutral(1.00) -> T7 fact/captain_reva: Captain Reva noticed the faint glow of the shard Finn found. It glowed
+  T12 sim    sim=0.92 nli=entailment(0.99) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T12 sim    sim=0.74 nli=neutral(1.00) -> T9 fact/old_bones: Old Bones found the lighthouse keeper's bones in his hidden room behin
+  T13 sim    sim=0.83 nli=neutral(1.00) -> T9 fact/captain_reva: Captain Reva found a faint oily trail leading from the docks to the li
+  T13 sim    sim=0.84 nli=neutral(1.00) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T13 sim    sim=0.76 nli=neutral(0.99) -> T2 event/old_bones: Old Bones overheard a sailor whispering in the Drowned Rat that a new 
+  T14 CONTRA sim=0.78 nli=contradiction(0.99) -> T9 fact/captain_reva: Captain Reva found a faint oily trail leading from the docks to the li
+  T14 sim    sim=0.71 nli=neutral(1.00) -> T10 fact/finn: Finn noticed the faint footprints leading from the docks to the lighth
+  T14 sim    sim=0.75 nli=neutral(0.98) -> T7 fact/captain_reva: Captain Reva noticed the faint glow of the shard Finn found. It glowed
+  T15 sim    sim=0.81 nli=neutral(0.99) -> T13 fact/captain_reva: Captain Reva noticed a new oily substance on the docks near the end of
+  T15 sim    sim=0.80 nli=neutral(1.00) -> T5 event/finn: Finn watched the shadowy figure near the docks, then quickly hid under
+  T15 sim    sim=0.88 nli=neutral(1.00) -> T1 quest/finn: Finn found a melted piece of the lighthouse lens on the beach. He beli
+  T16 sim    sim=0.90 nli=neutral(1.00) -> T14 event/captain_reva: Captain Reva paused near the end of dock three, her eyes narrowing. Sh
+  T16 sim    sim=0.80 nli=neutral(0.99) -> T10 fact/finn: Finn noticed the faint footprints leading from the docks to the lighth
+  T16 sim    sim=0.78 nli=neutral(0.99) -> T8 event/old_bones: Old Bones, laughing, whispered to Finn about the lighthouse keeper's b
+  T17 sim    sim=0.94 nli=neutral(1.00) -> T13 fact/captain_reva: Captain Reva noticed a new oily substance on the docks near the end of
+  T17 sim    sim=0.76 nli=neutral(1.00) -> T15 event/finn: Finn hid under a crate near the docks, listening to the sound of foots
+  T17 sim    sim=0.78 nli=neutral(1.00) -> T9 fact/old_bones: Old Bones found the lighthouse keeper's bones in his hidden room behin
+  T18 sim    sim=0.81 nli=neutral(1.00) -> T16 event/captain_reva: Captain Reva paused near the end of dock three, her eyes narrowing. Sh
+  T18 sim    sim=0.74 nli=neutral(0.98) -> T8 event/old_bones: Old Bones, laughing, whispered to Finn about the lighthouse keeper's b
+  T18 sim    sim=0.73 nli=contradiction(0.70) -> T16 event/old_bones: Old Bones overheard Finn mention the hidden glass shard and the hooded
+  T19 sim    sim=0.83 nli=neutral(1.00) -> T17 fact/captain_reva: Captain Reva noticed a new oily substance on the docks near the end of
+  T19 sim    sim=0.86 nli=neutral(0.99) -> T12 fact/finn: Finn saw a shadow move near the docks and quickly hid under a crate. H
+  T19 sim    sim=0.83 nli=neutral(1.00) -> T16 event/old_bones: Old Bones overheard Finn mention the hidden glass shard and the hooded
+  T20 CONTRA sim=0.89 nli=contradiction(0.91) -> T14 event/captain_reva: Captain Reva paused near the end of dock three, her eyes narrowing. Sh
+  T20 sim    sim=0.92 nli=neutral(0.87) -> T14 fact/finn: Finn saw a hooded figure moving quickly near the end of dock three, ca
+  T20 sim    sim=0.76 nli=neutral(0.98) -> T4 quest/old_bones: Old Bones has secret tunnels and maps in the cellar. He wants to revea
+Ledger entries: 60  threshold: 0.6
+Arcs proposed: 3  active at end: 2
+  arc_t5_1776219353  status=resolved  beat=4/4 (done)
+    theme: Captain Reva climbed the dark lighthouse path, peering into the night. She found no sign of the lighthouse keeper, only 
+    cast:  ['captain_reva', 'old_bones']
+  arc_t10_1776219383  status=active  beat=3/4 (confront)
+    theme: Finn watched the shadowy figure near the docks, then quickly hid under a crate. He heard someone shift in the darkness, 
+    cast:  ['finn']
+  arc_t15_1776219412  status=active  beat=4/4 (resolve)
+    theme: Old Bones, laughing, whispered to Finn about the lighthouse keeper's bones and the shard Finn found, and hinted that the
+    cast:  ['old_bones', 'captain_reva']
+Arc events (12):
+  T5 PROPOSED arc_t5_1776219353 cast=['captain_reva', 'old_bones'] theme=Captain Reva climbed the dark lighthouse path, peering into 
+  T6 BEAT 1 -> 2  arc=arc_t5_1776219353
+  T8 BEAT 2 -> 3  arc=arc_t5_1776219353
+  T10 PROPOSED arc_t10_1776219383 cast=['finn'] theme=Finn watched the shadowy figure near the docks, then quickly
+  T10 BEAT 3 -> 4  arc=arc_t5_1776219353
+  T12 RESOLVED arc_t5_1776219353 status=resolved
+  T13 BEAT 1 -> 2  arc=arc_t10_1776219383
+  T15 PROPOSED arc_t15_1776219412 cast=['old_bones', 'captain_reva'] theme=Old Bones, laughing, whispered to Finn about the lighthouse 
+  T16 BEAT 1 -> 2  arc=arc_t15_1776219412
+  T17 BEAT 2 -> 3  arc=arc_t10_1776219383
+  T18 BEAT 2 -> 3  arc=arc_t15_1776219412
+  T20 BEAT 3 -> 4  arc=arc_t15_1776219412
+
+Full trace written to: D:\LLCWork\npc-engine\logs\pb_terse_20.json

@@ -58,29 +58,70 @@ MODELS = {
 # the Director sees it in its world snapshot for that tick. Deliberately
 # provocative — different NPCs, mix of positive/negative, distinct themes —
 # to test whether the Director reacts to player behavior or keeps running
-# its own arc.
-DEFAULT_PLAYER_SCRIPT = [
-    (3, "Player solved Kael's missing-hammers investigation and returned the stolen tools",
-     "kael", +20),
-    (5, "Player gifted Elara a rare bundle of moonwort they found in the Silverwood",
-     "elara", +15),
-    (7, "Player publicly accused Mara of selling counterfeit steel in the tavern",
-     "mara", -30),
-    (9, "Player began asking Noah about the sealed letter from the old king",
-     "noah", +5),
-]
+# its own arc. One script per supported world.
+PLAYER_SCRIPTS = {
+    "ashenvale": [
+        (3, "Player solved Kael's missing-hammers investigation and returned the stolen tools",
+         "kael", +20),
+        (5, "Player gifted Elara a rare bundle of moonwort they found in the Silverwood",
+         "elara", +15),
+        (7, "Player publicly accused Mara of selling counterfeit steel in the tavern",
+         "mara", -30),
+        (9, "Player began asking Noah about the sealed letter from the old king",
+         "noah", +5),
+    ],
+    "port_blackwater": [
+        (3, "Player climbed the dark lighthouse at low tide and brought back a melted lens fragment",
+         "captain_reva", +20),
+        (5, "Player bought Finn supper at the Drowned Rat and listened to his stories",
+         "finn", +15),
+        (7, "Player publicly accused Old Bones of running contraband through the cellar tunnels",
+         "old_bones", -30),
+        (9, "Player began asking Captain Reva about the sealed letter from the governor of Meridia",
+         "captain_reva", +5),
+    ],
+}
 
 # Real dialogue turns the player utters mid-session. Each entry is
 # (before_tick, player_text, npc_id) — the bench calls engine.process()
 # which generates an NPC dialogue response AND auto-feeds the Director
 # via the wiring in NPCEngine.process. This exercises the FULL Cardinal
 # loop: player → NPC dialogue → director observation → director reaction.
-DEFAULT_DIALOGUE_SCRIPT = [
-    (3, "What does that sealed letter from the old king say, Noah? I can be trusted.", "noah"),
-    (5, "I know you're hiding something under your floorboards, Mara. Don't lie to me.", "mara"),
-    (7, "Tell me about the elven ruins in the Silverwood, Elara. Did your grandmother find them?", "elara"),
-    (9, "Have you seen anything strange on the north road, Captain Roderick?", "guard_roderick"),
-]
+DIALOGUE_SCRIPTS = {
+    "ashenvale": [
+        (3, "What does that sealed letter from the old king say, Noah? I can be trusted.", "noah"),
+        (5, "I know you're hiding something under your floorboards, Mara. Don't lie to me.", "mara"),
+        (7, "Tell me about the elven ruins in the Silverwood, Elara. Did your grandmother find them?", "elara"),
+        (9, "Have you seen anything strange on the north road, Captain Roderick?", "guard_roderick"),
+    ],
+    "port_blackwater": [
+        (3, "Captain Reva, what does the sealed letter from the governor of Meridia say? I can be trusted.", "captain_reva"),
+        (5, "I know you're hiding something under that loose plank on dock three, Finn. Show me.", "finn"),
+        (7, "Tell me about the singing you've heard from the Shoals at midnight, Old Bones.", "old_bones"),
+        (9, "Have you seen any strange cargo come off the Red Tide ships, Finn?", "finn"),
+    ],
+}
+
+# Per-world runtime defaults. ``profile_dir``/``state_dir``/``world_yaml``
+# all live under ``data/worlds/<world>/``; ``story_runtime_dir`` is where
+# the Director persists state + ledger + arcs. For Ashenvale, the Director
+# still writes to the legacy ``data/story_director/`` directory (so existing
+# runs and tests stay stable). For Port Blackwater, the per-world
+# ``story/`` pack takes over and state is isolated there.
+WORLDS = {
+    "ashenvale": {
+        "world_dir_rel":    "data/worlds/ashenvale",
+        "world_name":       "Ashenvale",
+        "active_npc":       "noah",
+        "story_runtime_rel": "data/story_director",
+    },
+    "port_blackwater": {
+        "world_dir_rel":    "data/worlds/port_blackwater",
+        "world_name":       "Port Blackwater",
+        "active_npc":       "captain_reva",
+        "story_runtime_rel": "data/worlds/port_blackwater/story",
+    },
+}
 
 
 def find_model(choice: str) -> Path:
@@ -97,12 +138,15 @@ def find_model(choice: str) -> Path:
     raise FileNotFoundError(f"No GGUF models found in {models_dir}")
 
 
-def boot_engine(model_path: Path, reset: bool):
+def boot_engine(model_path: Path, reset: bool, world_spec: dict):
     import yaml
+
+    world_dir = NPC_ROOT / world_spec["world_dir_rel"]
+    story_runtime_dir = NPC_ROOT / world_spec["story_runtime_rel"]
 
     # Reset state if asked
     if reset:
-        state_dir = NPC_ROOT / "data" / "worlds" / "ashenvale" / "npc_state"
+        state_dir = world_dir / "npc_state"
         if state_dir.exists():
             for p in state_dir.glob("*"):
                 if p.is_file():
@@ -111,10 +155,10 @@ def boot_engine(model_path: Path, reset: bool):
                     except Exception:
                         pass
         for runtime_file in (
-            NPC_ROOT / "data" / "story_director" / "state.json",
-            NPC_ROOT / "data" / "story_director" / "fact_ledger.json",
-            NPC_ROOT / "data" / "story_director" / "fact_ledger.embeddings.npy",
-            NPC_ROOT / "data" / "story_director" / "arcs.json",
+            story_runtime_dir / "state.json",
+            story_runtime_dir / "fact_ledger.json",
+            story_runtime_dir / "fact_ledger.embeddings.npy",
+            story_runtime_dir / "arcs.json",
         ):
             if runtime_file.exists():
                 try:
@@ -129,8 +173,9 @@ def boot_engine(model_path: Path, reset: bool):
                 pie_cache.unlink()
             except Exception:
                 pass
-        # Reset ashenvale player quests (may hold stale quests from prior runs)
-        player_quests = NPC_ROOT / "data" / "worlds" / "ashenvale" / "player_quests.yaml"
+        # Back up the world's player quest file in case prior runs
+        # mutated it — player_quests.yaml is re-loaded at init.
+        player_quests = world_dir / "player_quests.yaml"
         if player_quests.exists():
             try:
                 shutil.copy(player_quests, player_quests.with_suffix(".yaml.bak"))
@@ -145,16 +190,16 @@ def boot_engine(model_path: Path, reset: bool):
     raw["fusion"]["chat_format"] = "chatml"
     raw["npc"] = raw.get("npc") or {}
     raw["npc"]["enabled"] = True
-    raw["npc"]["profiles_dir"] = str(NPC_ROOT / "data" / "worlds" / "ashenvale" / "npc_profiles")
-    raw["npc"]["state_dir"] = str(NPC_ROOT / "data" / "worlds" / "ashenvale" / "npc_state")
+    raw["npc"]["profiles_dir"] = str(world_dir / "npc_profiles")
+    raw["npc"]["state_dir"] = str(world_dir / "npc_state")
 
     temp_pie = PIE_ROOT / "config_bench_story.yaml"
     temp_pie.write_text(yaml.dump(raw, default_flow_style=False), encoding="utf-8")
 
     npc_cfg = {
-        "world_dir": str(NPC_ROOT / "data" / "worlds" / "ashenvale"),
-        "world_name": "Ashenvale",
-        "active_npc": "noah",
+        "world_dir": str(world_dir),
+        "world_name": world_spec["world_name"],
+        "active_npc": world_spec["active_npc"],
         "pie_config": str(temp_pie),
     }
     temp_npc = NPC_ROOT / "config_bench_story.yaml"
@@ -230,6 +275,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ticks", type=int, default=10)
     parser.add_argument("--model", choices=list(MODELS.keys()), default="qwen_05b")
+    parser.add_argument("--world", choices=list(WORLDS.keys()), default="ashenvale",
+                        help="World to run the Director on. Each world has its own "
+                             "NPC profiles, lore pack, and example library. Defaults "
+                             "to Ashenvale (the original pack).")
     parser.add_argument("--reset", action="store_true",
                         help="Wipe NPC state + story director state before starting")
     parser.add_argument("--temperature", type=float, default=0.6)
@@ -253,14 +302,22 @@ def main():
     args = parser.parse_args()
 
     model_path = find_model(args.model)
+    world_spec = WORLDS[args.world]
+    player_script = PLAYER_SCRIPTS[args.world]
+    dialogue_script = DIALOGUE_SCRIPTS[args.world]
     print(f"Model: {model_path.name}")
+    print(f"World: {args.world} ({world_spec['world_name']})")
     print(f"Ticks: {args.ticks}")
     print(f"Reset: {args.reset}")
     print("-" * 72)
 
-    engine, tmp_pie, tmp_npc = boot_engine(model_path, args.reset)
+    engine, tmp_pie, tmp_npc = boot_engine(model_path, args.reset, world_spec)
     engine.story_director.set_narration_mode(args.narration_mode)
     print(f"Narration mode: {args.narration_mode}")
+    print(f"Lore file: {engine.story_director._lore_file}")
+    print(f"Examples:  {engine.story_director._examples_file} "
+          f"({len(engine.story_director._examples)} entries)")
+    print(f"State dir: {engine.story_director._runtime_dir}")
     try:
         outcomes = Counter()
         timings = []
@@ -279,7 +336,7 @@ def main():
 
             # Apply any scripted player actions that fire before this tick
             if args.player_script:
-                for entry in DEFAULT_PLAYER_SCRIPT:
+                for entry in player_script:
                     if entry[0] != tick_num:
                         continue
                     before_tick, text, target, trust_delta = entry
@@ -297,7 +354,7 @@ def main():
             # NPC reply AND auto-feeds the Director through the wiring in
             # NPCEngine.process. This is the FULL player→NPC→director loop.
             if args.dialogue_script:
-                for entry in DEFAULT_DIALOGUE_SCRIPT:
+                for entry in dialogue_script:
                     if entry[0] != tick_num:
                         continue
                     before_tick, player_text, npc_id = entry

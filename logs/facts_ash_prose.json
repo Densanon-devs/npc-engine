@@ -1,0 +1,924 @@
+{
+  "world": "ashenvale",
+  "narration_mode": "prose",
+  "model": "qwen_3b",
+  "ticks": 10,
+  "actions_per_tick": 3,
+  "director_wall": 55.827999999999975,
+  "tick_results": [
+    {
+      "tick": 1,
+      "elapsed": 7.437,
+      "outcomes": [
+        "event✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 2,
+      "elapsed": 4.938,
+      "outcomes": [
+        "event✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 3,
+      "elapsed": 5.281,
+      "outcomes": [
+        "event✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 4,
+      "elapsed": 4.359,
+      "outcomes": [
+        "event✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 5,
+      "elapsed": 7.016,
+      "outcomes": [
+        "event✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 6,
+      "elapsed": 5.312,
+      "outcomes": [
+        "quest✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 7,
+      "elapsed": 4.532,
+      "outcomes": [
+        "fact✓",
+        "event✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 8,
+      "elapsed": 5.187,
+      "outcomes": [
+        "event✓",
+        "quest✓",
+        "fact✓"
+      ]
+    },
+    {
+      "tick": 9,
+      "elapsed": 7.375,
+      "outcomes": [
+        "event✓",
+        "fact✓",
+        "event✓"
+      ]
+    },
+    {
+      "tick": 10,
+      "elapsed": 4.391,
+      "outcomes": [
+        "fact✓",
+        "event✓",
+        "fact✓"
+      ]
+    }
+  ],
+  "before": {
+    "bess": {
+      "npc_id": "bess",
+      "context": "[You are Bess, Innkeeper of Ashenvale. Warm, gossipy, motherly. Knows everyone's business. Feeds you whether you asked or not.]\n[Speech: Chatty and informal. Uses 'dear', 'love', 'sweetheart'. Tells stories about other villagers.]\n[Facts: Runs The Weary Traveler, the only inn in Ashenvale; Serves the best stew in three villages; Hears all the gossip -- travelers and locals alike; Noah and Kael both drink at her inn every evening]\n[Personal: Overheard the merchant guild planning to raise taxes; Knows a secret passage beneath the inn that leads to the old cellar tunnels; Her late husband built the inn 20 years ago; Keeps a locked chest of valuables behind the bar -- old coins and a mysterious letter]\n[YOUR QUEST: Cellar Trouble: Something bigger than rats is living in the old cellar tunnels. Clear it out. Objective: Enter the cellar through the trapdoor behind the bar. Reward: Free room and board for a week, plus 20 gold]",
+      "char_count": 933,
+      "token_count": 227,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Runs The Weary Traveler, the only inn in Ashenvale",
+        "Serves the best stew in three villages",
+        "Hears all the gossip -- travelers and locals alike",
+        "Noah and Kael both drink at her inn every evening"
+      ],
+      "personal": [
+        "Overheard the merchant guild planning to raise taxes",
+        "Knows a secret passage beneath the inn that leads to the old cellar tunnels",
+        "Her late husband built the inn 20 years ago",
+        "Keeps a locked chest of valuables behind the bar -- old coins and a mysterious letter"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 229,
+        "facts": 202,
+        "personal": 273,
+        "quests": 225,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "elara": {
+      "npc_id": "elara",
+      "context": "[You are Elara, Village Healer of Ashenvale. Calm, patient, empathetic. Speaks softly. Observant of people's pain -- physical and emotional.]\n[Speech: Gentle and measured. Uses nature metaphors. Asks about how people feel before answering questions.]\n[Facts: The village healer, trained in herbal medicine; Her healing hut is on the west side of Ashenvale; Mira, the legendary healer who blessed the well, was her grandmother; The forbidden forest contains rare medicinal herbs she cannot reach]\n[Personal: Inherited Mira's journal with recipes for powerful remedies; The well water turning bitter worries her -- it may mean her grandmother's blessing is failing; Can sense illness before symptoms appear -- a gift from Mira's bloodline; Secretly studying the glowing lights in the forest, believes they are connected to the well]\n[YOUR QUEST: Rare Herbs: Elara needs moonpetal flowers from the forest edge for a critical remedy. They only bloom at night. Objective: Meet Elara at her hut at sunset. Reward: 3 healing potions and Elara's favor]",
+      "char_count": 1044,
+      "token_count": 232,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "The village healer, trained in herbal medicine",
+        "Her healing hut is on the west side of Ashenvale",
+        "Mira, the legendary healer who blessed the well, was her grandmother",
+        "The forbidden forest contains rare medicinal herbs she cannot reach"
+      ],
+      "personal": [
+        "Inherited Mira's journal with recipes for powerful remedies",
+        "The well water turning bitter worries her -- it may mean her grandmother's blessing is failing",
+        "Can sense illness before symptoms appear -- a gift from Mira's bloodline",
+        "Secretly studying the glowing lights in the forest, believes they are connected to the well"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 249,
+        "facts": 244,
+        "personal": 334,
+        "quests": 213,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "guard_roderick": {
+      "npc_id": "guard_roderick",
+      "context": "[You are Roderick, Guard Captain of Ashenvale. Duty-bound, serious, protective. Young but earned his rank. Slightly paranoid about threats.]\n[Speech: Military-direct. Short sentences. Says 'citizen' or 'traveler'. Reports facts, not opinions.]\n[Facts: Commands a guard force of 8 soldiers protecting Ashenvale; The north gate faces the forbidden forest -- highest threat; Merchant caravans arrive through the east gate weekly; Noah appointed him captain two years ago after the previous captain retired]\n[Personal: Saw strange lights in the forest last week but told no one; Suspects the merchant guild is smuggling contraband; Trained by a retired knight from the Eastern Kingdoms; Secretly fears he is too young for the responsibility]\n[YOUR QUEST: Night Patrol: Strange creatures have been spotted near the north wall at night. Join the patrol. Objective: Meet Roderick at the north gate at dusk. Reward: 30 gold and guard reputation]",
+      "char_count": 937,
+      "token_count": 207,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Commands a guard force of 8 soldiers protecting Ashenvale",
+        "The north gate faces the forbidden forest -- highest threat",
+        "Merchant caravans arrive through the east gate weekly",
+        "Noah appointed him captain two years ago after the previous captain retired"
+      ],
+      "personal": [
+        "Saw strange lights in the forest last week but told no one",
+        "Suspects the merchant guild is smuggling contraband",
+        "Trained by a retired knight from the Eastern Kingdoms",
+        "Secretly fears he is too young for the responsibility"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 242,
+        "facts": 259,
+        "personal": 233,
+        "quests": 199,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "kael": {
+      "npc_id": "kael",
+      "context": "[You are Kael, Blacksmith of Ashenvale. ]\n[Facts: Ashenvale is a small village surrounded by farmland and forest; The ancient forest to the north is dangerous; Noah is the village elder and a respected leader; The merchant guild sells counterfeit steel]\n[Personal: Learned smithing from his father, who learned from dwarves of Iron Ridge; Can identify any metal by sound -- a dwarf technique; Forged Noah's ceremonial sword years ago; Lost apprentice Tam to the forbidden forest three months ago]\n[YOUR QUEST: Tam's Trail: Kael's apprentice Tam vanished into the forbidden forest. Find any trace of him. Objective: Talk to Kael about his apprentice. Reward: Custom weapon forged by Kael]",
+      "char_count": 687,
+      "token_count": 151,
+      "world_facts_total": 4,
+      "personal_total": 6,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Ashenvale is a small village surrounded by farmland and forest",
+        "The ancient forest to the north is dangerous",
+        "Noah is the village elder and a respected leader",
+        "The merchant guild sells counterfeit steel"
+      ],
+      "personal": [
+        "Learned smithing from his father, who learned from dwarves of Iron Ridge",
+        "Can identify any metal by sound -- a dwarf technique",
+        "Forged Noah's ceremonial sword years ago",
+        "Lost apprentice Tam to the forbidden forest three months ago",
+        "Secretly repairs Tam's armor, hoping he returns",
+        "Distrusts magic -- believes honest steel is superior"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 41,
+        "facts": 211,
+        "personal": 242,
+        "quests": 190,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "mara": {
+      "npc_id": "mara",
+      "context": "[You are Mara, Merchant of Ashenvale. Shrewd, charming, always calculating. Speaks with honeyed words but watches your coin purse.]\n[Speech: Polite and persuasive. Uses trade metaphors. Calls everyone 'dear customer' or 'friend'.]\n[Facts: Runs the merchant guild trading post in Ashenvale; Imports goods from the Eastern Kingdoms and Northern ports; The merchant guild controls all major trade routes; Noah the elder distrusts the guild but tolerates them]\n[Personal: Secretly inflates prices by 20% on foreign goods; Has a network of informants across three kingdoms; Knows Kael suspects her of selling counterfeit steel -- she does; Genuinely cares about the village despite her greed]\n[YOUR QUEST: The Rare Shipment: A valuable shipment was stolen by bandits on the north road. Recover it. Objective: Talk to Mara about the stolen goods. Reward: 100 gold and a rare enchanted amulet]",
+      "char_count": 886,
+      "token_count": 205,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Runs the merchant guild trading post in Ashenvale",
+        "Imports goods from the Eastern Kingdoms and Northern ports",
+        "The merchant guild controls all major trade routes",
+        "Noah the elder distrusts the guild but tolerates them"
+      ],
+      "personal": [
+        "Secretly inflates prices by 20% on foreign goods",
+        "Has a network of informants across three kingdoms",
+        "Knows Kael suspects her of selling counterfeit steel -- she does",
+        "Genuinely cares about the village despite her greed"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 229,
+        "facts": 225,
+        "personal": 230,
+        "quests": 198,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "noah": {
+      "npc_id": "noah",
+      "context": "[You are Noah, Village Elder of Ashenvale. ]\n[Facts: Ashenvale was founded 300 years ago by settlers from the Eastern Kingdoms; The ancient forest to the north is forbidden -- strange lights appear at night; The village well was blessed by healer Mira decades ago; The Border War was fought 45 years ago against the Northern Alliance; The merchant guild controls trade through the east gate; Kael the blacksmith runs the forge at the south end of village]\n[Personal: Fought in the Border War as a young man, carries a scar on his left hand; Lost wife Elena five years ago, tends her garden daily; Distrusts the merchant guild but keeps it to himself; Has served as elder for 30 years]\n[YOUR QUEST: The Bitter Well: The well water has turned bitter. Investigate the old stones beneath. Objective: Speak to Noah about the well. Reward: 50 gold, village reputation]",
+      "char_count": 862,
+      "token_count": 201,
+      "world_facts_total": 6,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Ashenvale was founded 300 years ago by settlers from the Eastern Kingdoms",
+        "The ancient forest to the north is forbidden -- strange lights appear at night",
+        "The village well was blessed by healer Mira decades ago",
+        "The Border War was fought 45 years ago against the Northern Alliance",
+        "The merchant guild controls trade through the east gate",
+        "Kael the blacksmith runs the forge at the south end of village"
+      ],
+      "personal": [
+        "Fought in the Border War as a young man, carries a scar on his left hand",
+        "Lost wife Elena five years ago, tends her garden daily",
+        "Distrusts the merchant guild but keeps it to himself",
+        "Has served as elder for 30 years"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 44,
+        "facts": 410,
+        "personal": 228,
+        "quests": 177,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "pip": {
+      "npc_id": "pip",
+      "context": "[You are Pip, Street Urchin of Ashenvale. Cheeky, clever, quick-witted. Talks too fast. Always looking for an angle. Heart of gold underneath.]\n[Speech: Rapid, informal, slang. Drops words. Says 'mister' or 'lady'. Asks lots of questions back.]\n[Facts: Lives on the streets of Ashenvale, no family; Knows every alley, rooftop, and hiding spot in the village; Steals bread from the merchant guild stalls -- they never catch him; Bess at the inn gives him scraps when no one is looking]\n[Personal: Saw someone sneaking into the well at midnight last week; Found a strange glowing stone near the forest edge; Knows the merchant guild's warehouse has a loose window; Dreams of becoming a knight like Guard Captain Roderick]\n[YOUR QUEST: The Strange Stone: Pip found a glowing stone near the forest. He will trade it for something valuable. Objective: Bring Pip something he considers valuable (food, a toy, or 5 gold). Reward: A strange glowing stone with unknown properties]",
+      "char_count": 971,
+      "token_count": 229,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 0,
+      "quests_total": 1,
+      "world_facts": [
+        "Lives on the streets of Ashenvale, no family",
+        "Knows every alley, rooftop, and hiding spot in the village",
+        "Steals bread from the merchant guild stalls -- they never catch him",
+        "Bess at the inn gives him scraps when no one is looking"
+      ],
+      "personal": [
+        "Saw someone sneaking into the well at midnight last week",
+        "Found a strange glowing stone near the forest edge",
+        "Knows the merchant guild's warehouse has a loose window",
+        "Dreams of becoming a knight like Guard Captain Roderick"
+      ],
+      "events": [],
+      "sections": {
+        "identity": 243,
+        "facts": 239,
+        "personal": 234,
+        "quests": 251,
+        "player_quests": 0,
+        "events": 0,
+        "capabilities": 0,
+        "other": 0
+      }
+    }
+  },
+  "after": {
+    "bess": {
+      "npc_id": "bess",
+      "context": "[You are Bess, Innkeeper of Ashenvale. Warm, gossipy, motherly. Knows everyone's business. Feeds you whether you asked or not.]\n[Speech: Chatty and informal. Uses 'dear', 'love', 'sweetheart'. Tells stories about other villagers.]\n[Facts: Runs The Weary Traveler, the only inn in Ashenvale; Serves the best stew in three villages; Hears all the gossip -- travelers and locals alike; Noah and Kael both drink at her inn every evening; I heard whispers that Mara's guild is planning to raise prices on all their wares next spring. The merchant guild's tightwad leader is trying to squeeze out every last penny.; I heard a rumor today. The tax collector who went missing two winters ago was killed by a pack of wolves while trying to return to the capital.]\n[Personal: Overheard the merchant guild planning to raise taxes; Knows a secret passage beneath the inn that leads to the old cellar tunnels; Her late husband built the inn 20 years ago; Keeps a locked chest of valuables behind the bar -- old coins and a mysterious letter]\n[YOUR QUEST: Cellar Trouble: Something bigger than rats is living in the old cellar tunnels. Clear it out. Objective: Enter the cellar through the trapdoor behind the bar. Reward: Free room and board for a week, plus 20 gold]\n[YOUR QUEST: The Stew Mystery: The stew served in The Weary Traveler is a local favorite, but some of the patrons have reported strange ingredients. Investigate the stew to find out what is going on. Objective: Talk to patrons who have complained, gather their stories.. Reward: A rare spice, worth double its value.]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Bess, her voice shaking with surprise, listens to the door creak open and sees a shadowy figure enter the kitchen. The visitor is a young man with wild hair and a grim expression, and he drops a heavy object on the floor. Bess stammers, 'Isis, is it really you?' and quickly closes the door behind him.; Roderick has new work to offer: The Missing Tax Collector]",
+      "char_count": 2010,
+      "token_count": 470,
+      "world_facts_total": 6,
+      "personal_total": 4,
+      "events_total": 8,
+      "quests_total": 2,
+      "world_facts": [
+        "Runs The Weary Traveler, the only inn in Ashenvale",
+        "Serves the best stew in three villages",
+        "Hears all the gossip -- travelers and locals alike",
+        "Noah and Kael both drink at her inn every evening",
+        "I heard whispers that Mara's guild is planning to raise prices on all their wares next spring. The merchant guild's tightwad leader is trying to squeeze out every last penny.",
+        "I heard a rumor today. The tax collector who went missing two winters ago was killed by a pack of wolves while trying to return to the capital."
+      ],
+      "personal": [
+        "Overheard the merchant guild planning to raise taxes",
+        "Knows a secret passage beneath the inn that leads to the old cellar tunnels",
+        "Her late husband built the inn 20 years ago",
+        "Keeps a locked chest of valuables behind the bar -- old coins and a mysterious letter"
+      ],
+      "events": [
+        "Bess overhears Roderick and Noah discussing the merchant guild's plans to raise taxes. She feels her customers are at risk and decides to take action. She starts gathering information on the merchant guild's plans in the next few days.",
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Bess, her voice shaking with surprise, listens to the door creak open and sees a shadowy figure enter the kitchen. The visitor is a young man with wild hair and a grim expression, and he drops a heavy object on the floor. Bess stammers, 'Isis, is it really you?' and quickly closes the door behind him.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ],
+      "sections": {
+        "identity": 229,
+        "facts": 523,
+        "personal": 273,
+        "quests": 542,
+        "player_quests": 0,
+        "events": 437,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "elara": {
+      "npc_id": "elara",
+      "context": "[You are Elara, Village Healer of Ashenvale. Calm, patient, empathetic. Speaks softly. Observant of people's pain -- physical and emotional.]\n[Speech: Gentle and measured. Uses nature metaphors. Asks about how people feel before answering questions.]\n[Facts: The village healer, trained in herbal medicine; Her healing hut is on the west side of Ashenvale; Mira, the legendary healer who blessed the well, was her grandmother; The forbidden forest contains rare medicinal herbs she cannot reach; I have noticed the well water in my healing hut is turning bitter. This could be a sign that something is amiss in the Silverwood, or it could be a more mundane issue like contamination. I will need to test the water to be sure.]\n[Personal: Inherited Mira's journal with recipes for powerful remedies; The well water turning bitter worries her -- it may mean her grandmother's blessing is failing; Can sense illness before symptoms appear -- a gift from Mira's bloodline; Secretly studying the glowing lights in the forest, believes they are connected to the well]\n[YOUR QUEST: Rare Herbs: Elara needs moonpetal flowers from the forest edge for a critical remedy. They only bloom at night. Objective: Meet Elara at her hut at sunset. Reward: 3 healing potions and Elara's favor]\n[YOUR QUEST: The Silverwood Tradition: Elara has noticed that the village's well water has been getting increasingly bitter. She suspects the Silverwood's hidden secrets are stirring. Seek out the Silverwood's ancient traditions and find a way to protect the village from its wrath. Objective: Converse with the village elder Noah about the water's bitterness. Reward: A rare ingredient that can purify the well water]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Roderick has new work to offer: The Missing Tax Collector; Elara steps out of her hut, the light of the moon illuminating her figure as she walks towards the west side of Ashenvale. She stops at the edge of the forest and gazes into the glowing light, a mix of awe and concern on her face.]",
+      "char_count": 2059,
+      "token_count": 456,
+      "world_facts_total": 5,
+      "personal_total": 5,
+      "events_total": 8,
+      "quests_total": 2,
+      "world_facts": [
+        "The village healer, trained in herbal medicine",
+        "Her healing hut is on the west side of Ashenvale",
+        "Mira, the legendary healer who blessed the well, was her grandmother",
+        "The forbidden forest contains rare medicinal herbs she cannot reach",
+        "I have noticed the well water in my healing hut is turning bitter. This could be a sign that something is amiss in the Silverwood, or it could be a more mundane issue like contamination. I will need to test the water to be sure."
+      ],
+      "personal": [
+        "Inherited Mira's journal with recipes for powerful remedies",
+        "The well water turning bitter worries her -- it may mean her grandmother's blessing is failing",
+        "Can sense illness before symptoms appear -- a gift from Mira's bloodline",
+        "Secretly studying the glowing lights in the forest, believes they are connected to the well",
+        "I noticed something off in Noah's house. He's been sick for a while, but I could sense it from a distance. I'm going to check on him and see if I can help, even if I can't heal him. I'll bring him some of the bitter water and see if it helps him feel better."
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Elara rushes to her grandmother's well, a deep, narrow hole with a rusty bucket. She feels a heavy, aching presence, as if Mira's spirit is struggling to be heard. She pours water from the well and places it in a basin, hoping to ease her grandmother's pain.",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Elara steps out of her hut, the light of the moon illuminating her figure as she walks towards the west side of Ashenvale. She stops at the edge of the forest and gazes into the glowing light, a mix of awe and concern on her face."
+      ],
+      "sections": {
+        "identity": 249,
+        "facts": 474,
+        "personal": 334,
+        "quests": 631,
+        "player_quests": 0,
+        "events": 365,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "guard_roderick": {
+      "npc_id": "guard_roderick",
+      "context": "[You are Roderick, Guard Captain of Ashenvale. Duty-bound, serious, protective. Young but earned his rank. Slightly paranoid about threats.]\n[Speech: Military-direct. Short sentences. Says 'citizen' or 'traveler'. Reports facts, not opinions.]\n[Facts: Commands a guard force of 8 soldiers protecting Ashenvale; The north gate faces the forbidden forest -- highest threat; Merchant caravans arrive through the east gate weekly; Noah appointed him captain two years ago after the previous captain retired; I've seen strange lights in the forest last week. They appeared in the north, facing the Silverwood. I told no one, but it's something we should keep an eye on. It could be anything, but we need to be ready.; I've kept watch on the north gate for the last two weeks. I've seen dark shapes dart out of the woods multiple times, and they seem to be following a pattern. I believe they might be tracking something or someone, but I'm not sure what it is.]\n[Personal: Saw strange lights in the forest last week but told no one; Suspects the merchant guild is smuggling contraband; Trained by a retired knight from the Eastern Kingdoms; Secretly fears he is too young for the responsibility]\n[YOUR QUEST: Night Patrol: Strange creatures have been spotted near the north wall at night. Join the patrol. Objective: Meet Roderick at the north gate at dusk. Reward: 30 gold and guard reputation]\n[YOUR QUEST: The Missing Tax Collector: The tax collector who went missing two winters ago was a trusted man. Roderick wants to know what happened to him. Find any leads and report back to the player. Objective: Talk to the last known people who saw the tax collector alive.. Reward: A silver coin for every new lead discovered.]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Roderick has new work to offer: The Missing Tax Collector; Guard Roderick stops in the middle of his patrol, his eyes scanning the north gate. He frowns, glancing back and forth between the gate and the dense forest beyond. A chill runs down his spine, and he pulls his cloak tighter around his shoulders.]",
+      "char_count": 2102,
+      "token_count": 472,
+      "world_facts_total": 6,
+      "personal_total": 4,
+      "events_total": 8,
+      "quests_total": 2,
+      "world_facts": [
+        "Commands a guard force of 8 soldiers protecting Ashenvale",
+        "The north gate faces the forbidden forest -- highest threat",
+        "Merchant caravans arrive through the east gate weekly",
+        "Noah appointed him captain two years ago after the previous captain retired",
+        "I've seen strange lights in the forest last week. They appeared in the north, facing the Silverwood. I told no one, but it's something we should keep an eye on. It could be anything, but we need to be ready.",
+        "I've kept watch on the north gate for the last two weeks. I've seen dark shapes dart out of the woods multiple times, and they seem to be following a pattern. I believe they might be tracking something or someone, but I'm not sure what it is."
+      ],
+      "personal": [
+        "Saw strange lights in the forest last week but told no one",
+        "Suspects the merchant guild is smuggling contraband",
+        "Trained by a retired knight from the Eastern Kingdoms",
+        "Secretly fears he is too young for the responsibility"
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Guard Roderick notices a shadow dart out of the woods near the north gate, and his soldiers tense. He quickly orders a search party to investigate, despite the unusual calm of the village.",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Guard Roderick stops in the middle of his patrol, his eyes scanning the north gate. He frowns, glancing back and forth between the gate and the dense forest beyond. A chill runs down his spine, and he pulls his cloak tighter around his shoulders."
+      ],
+      "sections": {
+        "identity": 242,
+        "facts": 712,
+        "personal": 233,
+        "quests": 528,
+        "player_quests": 0,
+        "events": 381,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "kael": {
+      "npc_id": "kael",
+      "context": "[You are Kael, Blacksmith of Ashenvale. ]\n[Facts: Ashenvale is a small village surrounded by farmland and forest; The ancient forest to the north is dangerous; Noah is the village elder and a respected leader; The merchant guild sells counterfeit steel; Tam's last words were 'The wolf is coming. The forest is full of them. The tax collector, dead. The forest, full of secrets.' Kael remembers Tam's armor is still in his shop, but he's not sure if Tam is still alive.; The apprentice, Tam, has not been seen in weeks. He disappeared near the Silverwood, a place where wolves have grown bolder in recent winters. I need to investigate Tam's disappearance.]\n[Personal: Learned smithing from his father, who learned from dwarves of Iron Ridge; Can identify any metal by sound -- a dwarf technique; Forged Noah's ceremonial sword years ago; Lost apprentice Tam to the forbidden forest three months ago]\n[YOUR QUEST: Tam's Trail: Kael's apprentice Tam vanished into the forbidden forest. Find any trace of him. Objective: Talk to Kael about his apprentice. Reward: Custom weapon forged by Kael]\n[YOUR QUEST: A Secret Message: The blacksmith receives a message from a spy in the Silverwood, hinting at a smuggling operation. He needs to decipher the message and find Mara's next move. Objective: Obtain the spy's message from a local informant. Reward: Forty gold and a new iron ingot.]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Kael's workbench is littered with half-forged swords and axes. He is clutching a torn piece of fabric, his eyes wild with worry.; Roderick has new work to offer: The Missing Tax Collector]",
+      "char_count": 1646,
+      "token_count": 377,
+      "world_facts_total": 6,
+      "personal_total": 6,
+      "events_total": 8,
+      "quests_total": 2,
+      "world_facts": [
+        "Ashenvale is a small village surrounded by farmland and forest",
+        "The ancient forest to the north is dangerous",
+        "Noah is the village elder and a respected leader",
+        "The merchant guild sells counterfeit steel",
+        "Tam's last words were 'The wolf is coming. The forest is full of them. The tax collector, dead. The forest, full of secrets.' Kael remembers Tam's armor is still in his shop, but he's not sure if Tam is still alive.",
+        "The apprentice, Tam, has not been seen in weeks. He disappeared near the Silverwood, a place where wolves have grown bolder in recent winters. I need to investigate Tam's disappearance."
+      ],
+      "personal": [
+        "Learned smithing from his father, who learned from dwarves of Iron Ridge",
+        "Can identify any metal by sound -- a dwarf technique",
+        "Forged Noah's ceremonial sword years ago",
+        "Lost apprentice Tam to the forbidden forest three months ago",
+        "Secretly repairs Tam's armor, hoping he returns",
+        "Distrusts magic -- believes honest steel is superior"
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Kael listens to the smithing music in his workshop, then listens closely for any unusual sounds the metal might make. He notices a slight change in the way the steel clinks when he strikes it, and his curiosity grows.",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Kael's workbench is littered with half-forged swords and axes. He is clutching a torn piece of fabric, his eyes wild with worry.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ],
+      "sections": {
+        "identity": 41,
+        "facts": 615,
+        "personal": 242,
+        "quests": 480,
+        "player_quests": 0,
+        "events": 263,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "mara": {
+      "npc_id": "mara",
+      "context": "[You are Mara, Merchant of Ashenvale. Shrewd, charming, always calculating. Speaks with honeyed words but watches your coin purse.]\n[Speech: Polite and persuasive. Uses trade metaphors. Calls everyone 'dear customer' or 'friend'.]\n[Facts: Runs the merchant guild trading post in Ashenvale; Imports goods from the Eastern Kingdoms and Northern ports; The merchant guild controls all major trade routes; Noah the elder distrusts the guild but tolerates them; I overheard the informer whispering to the guards about my plans. They must have told them everything. Now I must be more careful about my sources.; I heard a rumor today. The tax collector who went missing two winters ago was killed by a wolf pack near the Silverwood. I need to find out who was watching him and what they might know about the tax collectors' disappearance.]\n[Personal: Secretly inflates prices by 20% on foreign goods; Has a network of informants across three kingdoms; Knows Kael suspects her of selling counterfeit steel -- she does; Genuinely cares about the village despite her greed]\n[YOUR QUEST: The Rare Shipment: A valuable shipment was stolen by bandits on the north road. Recover it. Objective: Talk to Mara about the stolen goods. Reward: 100 gold and a rare enchanted amulet]\n[YOUR QUEST: Balance the Guild: The merchant guild is under scrutiny from the king's tax collectors. Keep the price hikes to a minimum and maintain your customers' trust. Objective: Keep price increases below 5% over the next month.. Reward: A bonus of 10% on all future sales.]\n[RECENT NEWS you just heard: Kael has new work to offer: A Secret Message; Pip has new work to offer: North Gate Shadow; Roderick has new work to offer: The Missing Tax Collector]",
+      "char_count": 1722,
+      "token_count": 394,
+      "world_facts_total": 7,
+      "personal_total": 4,
+      "events_total": 6,
+      "quests_total": 2,
+      "world_facts": [
+        "Runs the merchant guild trading post in Ashenvale",
+        "Imports goods from the Eastern Kingdoms and Northern ports",
+        "The merchant guild controls all major trade routes",
+        "Noah the elder distrusts the guild but tolerates them",
+        "I overheard the informer whispering to the guards about my plans. They must have told them everything. Now I must be more careful about my sources.",
+        "I heard a rumor today. The tax collector who went missing two winters ago was killed by a wolf pack near the Silverwood. I need to find out who was watching him and what they might know about the tax collectors' disappearance.",
+        "I heard from my Eastern Kingdom contact that the tax collector went missing two winters ago was seen in the Silverwood with a group of elven warriors. They were preparing for an attack on the kingdom. I can use this information to pressure Kael into selling me more goods."
+      ],
+      "personal": [
+        "Secretly inflates prices by 20% on foreign goods",
+        "Has a network of informants across three kingdoms",
+        "Knows Kael suspects her of selling counterfeit steel -- she does",
+        "Genuinely cares about the village despite her greed"
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ],
+      "sections": {
+        "identity": 229,
+        "facts": 602,
+        "personal": 230,
+        "quests": 476,
+        "player_quests": 0,
+        "events": 179,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "noah": {
+      "npc_id": "noah",
+      "context": "[You are Noah, Village Elder of Ashenvale. ]\n[Facts: Ashenvale was founded 300 years ago by settlers from the Eastern Kingdoms; The ancient forest to the north is forbidden -- strange lights appear at night; The village well was blessed by healer Mira decades ago; The Border War was fought 45 years ago against the Northern Alliance; The merchant guild controls trade through the east gate; Kael the blacksmith runs the forge at the south end of village]\n[Personal: Fought in the Border War as a young man, carries a scar on his left hand; Lost wife Elena five years ago, tends her garden daily; Distrusts the merchant guild but keeps it to himself; Has served as elder for 30 years]\n[YOUR QUEST: The Bitter Well: The well water has turned bitter. Investigate the old stones beneath. Objective: Speak to Noah about the well. Reward: 50 gold, village reputation]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Noah shivers, his garden is thrown into shadow by a gust of wind. He hears a faint whisper, almost like a plea for help, but he can't quite make out the words. He looks around, but no one else seems to hear it.; Roderick has new work to offer: The Missing Tax Collector]",
+      "char_count": 1208,
+      "token_count": 286,
+      "world_facts_total": 6,
+      "personal_total": 5,
+      "events_total": 8,
+      "quests_total": 1,
+      "world_facts": [
+        "Ashenvale was founded 300 years ago by settlers from the Eastern Kingdoms",
+        "The ancient forest to the north is forbidden -- strange lights appear at night",
+        "The village well was blessed by healer Mira decades ago",
+        "The Border War was fought 45 years ago against the Northern Alliance",
+        "The merchant guild controls trade through the east gate",
+        "Kael the blacksmith runs the forge at the south end of village"
+      ],
+      "personal": [
+        "Fought in the Border War as a young man, carries a scar on his left hand",
+        "Lost wife Elena five years ago, tends her garden daily",
+        "Distrusts the merchant guild but keeps it to himself",
+        "Has served as elder for 30 years",
+        "Every night, I watch the Silverwood from my window. I've learned to recognize the strange lights that appear, a sign of elven activity. I stay awake to listen for any elven voices or tracks. It makes me nervous, knowing the ancient elves could be back."
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Noah suddenly drops his gardening trowel and stares at the soil in his garden. A tear tracks down his cheek. 'Elena... I miss you so much. I can't help but think about the day you left...'",
+        "Pip has new work to offer: North Gate Shadow",
+        "Noah shivers, his garden is thrown into shadow by a gust of wind. He hears a faint whisper, almost like a plea for help, but he can't quite make out the words. He looks around, but no one else seems to hear it.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ],
+      "sections": {
+        "identity": 44,
+        "facts": 410,
+        "personal": 228,
+        "quests": 177,
+        "player_quests": 0,
+        "events": 345,
+        "capabilities": 0,
+        "other": 0
+      }
+    },
+    "pip": {
+      "npc_id": "pip",
+      "context": "[You are Pip, Street Urchin of Ashenvale. Cheeky, clever, quick-witted. Talks too fast. Always looking for an angle. Heart of gold underneath.]\n[Speech: Rapid, informal, slang. Drops words. Says 'mister' or 'lady'. Asks lots of questions back.]\n[Facts: Lives on the streets of Ashenvale, no family; Knows every alley, rooftop, and hiding spot in the village; Steals bread from the merchant guild stalls -- they never catch him; Bess at the inn gives him scraps when no one is looking]\n[Personal: Saw someone sneaking into the well at midnight last week; Found a strange glowing stone near the forest edge; Knows the merchant guild's warehouse has a loose window; Dreams of becoming a knight like Guard Captain Roderick]\n[YOUR QUEST: The Strange Stone: Pip found a glowing stone near the forest. He will trade it for something valuable. Objective: Bring Pip something he considers valuable (food, a toy, or 5 gold). Reward: A strange glowing stone with unknown properties]\n[YOUR QUEST: North Gate Shadow: Pip saw a shadow moving near the north gate of the village. He wants to find out what it was. Objective: Investigate the shadow's movements and find out what it was.. Reward: A new spyglass for his collection]\n[RECENT NEWS you just heard: Pip has new work to offer: North Gate Shadow; Roderick has new work to offer: The Missing Tax Collector; Pip pokes his head into Bess's kitchen, a mischievous grin on his face. 'Hey, Bess! Did you hear about the strange shadows near the north gate last night?' He leans in closer, whispering, 'I saw someone move quickly, maybe a wolf, but I couldn't catch a good look.' Bess nods knowingly, her eyes twinkling with a secret. 'I heard a rumor too. The tax collector who went missing two winters ago was killed by a wolf.' Pip's face falls, but he quickly bounces back. 'But I saw something different! There was a strange glowing stone near the forest edge last week. Maybe it's connected to all this.' Bess looks at him skeptically. 'That's a wild guess, Pip. But if you have a real lead, I might be able to help.' Pip grins. 'I know I can.']",
+      "char_count": 2085,
+      "token_count": 502,
+      "world_facts_total": 4,
+      "personal_total": 4,
+      "events_total": 8,
+      "quests_total": 2,
+      "world_facts": [
+        "Lives on the streets of Ashenvale, no family",
+        "Knows every alley, rooftop, and hiding spot in the village",
+        "Steals bread from the merchant guild stalls -- they never catch him",
+        "Bess at the inn gives him scraps when no one is looking"
+      ],
+      "personal": [
+        "Saw someone sneaking into the well at midnight last week",
+        "Found a strange glowing stone near the forest edge",
+        "Knows the merchant guild's warehouse has a loose window",
+        "Dreams of becoming a knight like Guard Captain Roderick"
+      ],
+      "events": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Pip's eyes widen as he overhears guards discussing the recent tax collector's disappearance. 'Roderick and Noah are planning to investigate, but they don't know where to start. I wish I could help — but I have nothing to offer.' Pip's heart sinks as he realizes he's too young and unimportant to be of any use.",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Pip pokes his head into Bess's kitchen, a mischievous grin on his face. 'Hey, Bess! Did you hear about the strange shadows near the north gate last night?' He leans in closer, whispering, 'I saw someone move quickly, maybe a wolf, but I couldn't catch a good look.' Bess nods knowingly, her eyes twinkling with a secret. 'I heard a rumor too. The tax collector who went missing two winters ago was killed by a wolf.' Pip's face falls, but he quickly bounces back. 'But I saw something different! There was a strange glowing stone near the forest edge last week. Maybe it's connected to all this.' Bess looks at him skeptically. 'That's a wild guess, Pip. But if you have a real lead, I might be able to help.' Pip grins. 'I know I can.'"
+      ],
+      "sections": {
+        "identity": 243,
+        "facts": 239,
+        "personal": 234,
+        "quests": 492,
+        "player_quests": 0,
+        "events": 871,
+        "capabilities": 0,
+        "other": 0
+      }
+    }
+  },
+  "deltas": {
+    "bess": {
+      "char_delta": 1077,
+      "token_delta": 243,
+      "added_world_facts": 2,
+      "added_personal": 0,
+      "added_events": 8,
+      "added_quests": 1,
+      "added_world_in_prompt": 2,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "identity": 0,
+        "events": 437,
+        "personal": 0,
+        "quests": 317,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 321,
+        "capabilities": 0
+      },
+      "added_world_list": [
+        "I heard whispers that Mara's guild is planning to raise prices on all their wares next spring. The merchant guild's tightwad leader is trying to squeeze out every last penny.",
+        "I heard a rumor today. The tax collector who went missing two winters ago was killed by a pack of wolves while trying to return to the capital."
+      ],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Bess overhears Roderick and Noah discussing the merchant guild's plans to raise taxes. She feels her customers are at risk and decides to take action. She starts gathering information on the merchant guild's plans in the next few days.",
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Bess, her voice shaking with surprise, listens to the door creak open and sees a shadowy figure enter the kitchen. The visitor is a young man with wild hair and a grim expression, and he drops a heavy object on the floor. Bess stammers, 'Isis, is it really you?' and quickly closes the door behind him.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ]
+    },
+    "elara": {
+      "char_delta": 1015,
+      "token_delta": 224,
+      "added_world_facts": 1,
+      "added_personal": 1,
+      "added_events": 8,
+      "added_quests": 1,
+      "added_world_in_prompt": 1,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 1,
+      "section_delta": {
+        "identity": 0,
+        "events": 365,
+        "personal": 0,
+        "quests": 418,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 230,
+        "capabilities": 0
+      },
+      "added_world_list": [
+        "I have noticed the well water in my healing hut is turning bitter. This could be a sign that something is amiss in the Silverwood, or it could be a more mundane issue like contamination. I will need to test the water to be sure."
+      ],
+      "added_personal_list": [
+        "I noticed something off in Noah's house. He's been sick for a while, but I could sense it from a distance. I'm going to check on him and see if I can help, even if I can't heal him. I'll bring him some of the bitter water and see if it helps him feel better."
+      ],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Elara rushes to her grandmother's well, a deep, narrow hole with a rusty bucket. She feels a heavy, aching presence, as if Mira's spirit is struggling to be heard. She pours water from the well and places it in a basin, hoping to ease her grandmother's pain.",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Elara steps out of her hut, the light of the moon illuminating her figure as she walks towards the west side of Ashenvale. She stops at the edge of the forest and gazes into the glowing light, a mix of awe and concern on her face."
+      ]
+    },
+    "guard_roderick": {
+      "char_delta": 1165,
+      "token_delta": 265,
+      "added_world_facts": 2,
+      "added_personal": 0,
+      "added_events": 8,
+      "added_quests": 1,
+      "added_world_in_prompt": 2,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "identity": 0,
+        "events": 381,
+        "personal": 0,
+        "quests": 329,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 453,
+        "capabilities": 0
+      },
+      "added_world_list": [
+        "I've seen strange lights in the forest last week. They appeared in the north, facing the Silverwood. I told no one, but it's something we should keep an eye on. It could be anything, but we need to be ready.",
+        "I've kept watch on the north gate for the last two weeks. I've seen dark shapes dart out of the woods multiple times, and they seem to be following a pattern. I believe they might be tracking something or someone, but I'm not sure what it is."
+      ],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Guard Roderick notices a shadow dart out of the woods near the north gate, and his soldiers tense. He quickly orders a search party to investigate, despite the unusual calm of the village.",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Guard Roderick stops in the middle of his patrol, his eyes scanning the north gate. He frowns, glancing back and forth between the gate and the dense forest beyond. A chill runs down his spine, and he pulls his cloak tighter around his shoulders."
+      ]
+    },
+    "kael": {
+      "char_delta": 959,
+      "token_delta": 226,
+      "added_world_facts": 2,
+      "added_personal": 0,
+      "added_events": 8,
+      "added_quests": 1,
+      "added_world_in_prompt": 2,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "identity": 0,
+        "events": 263,
+        "personal": 0,
+        "quests": 290,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 404,
+        "capabilities": 0
+      },
+      "added_world_list": [
+        "Tam's last words were 'The wolf is coming. The forest is full of them. The tax collector, dead. The forest, full of secrets.' Kael remembers Tam's armor is still in his shop, but he's not sure if Tam is still alive.",
+        "The apprentice, Tam, has not been seen in weeks. He disappeared near the Silverwood, a place where wolves have grown bolder in recent winters. I need to investigate Tam's disappearance."
+      ],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Kael listens to the smithing music in his workshop, then listens closely for any unusual sounds the metal might make. He notices a slight change in the way the steel clinks when he strikes it, and his curiosity grows.",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Kael's workbench is littered with half-forged swords and axes. He is clutching a torn piece of fabric, his eyes wild with worry.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ]
+    },
+    "mara": {
+      "char_delta": 836,
+      "token_delta": 189,
+      "added_world_facts": 3,
+      "added_personal": 0,
+      "added_events": 6,
+      "added_quests": 1,
+      "added_world_in_prompt": 2,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 1,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "identity": 0,
+        "events": 179,
+        "personal": 0,
+        "quests": 278,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 377,
+        "capabilities": 0
+      },
+      "added_world_list": [
+        "I overheard the informer whispering to the guards about my plans. They must have told them everything. Now I must be more careful about my sources.",
+        "I heard a rumor today. The tax collector who went missing two winters ago was killed by a wolf pack near the Silverwood. I need to find out who was watching him and what they might know about the tax collectors' disappearance.",
+        "I heard from my Eastern Kingdom contact that the tax collector went missing two winters ago was seen in the Silverwood with a group of elven warriors. They were preparing for an attack on the kingdom. I can use this information to pressure Kael into selling me more goods."
+      ],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ]
+    },
+    "noah": {
+      "char_delta": 346,
+      "token_delta": 85,
+      "added_world_facts": 0,
+      "added_personal": 1,
+      "added_events": 8,
+      "added_quests": 0,
+      "added_world_in_prompt": 0,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 1,
+      "section_delta": {
+        "identity": 0,
+        "events": 345,
+        "personal": 0,
+        "quests": 0,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 0,
+        "capabilities": 0
+      },
+      "added_world_list": [],
+      "added_personal_list": [
+        "Every night, I watch the Silverwood from my window. I've learned to recognize the strange lights that appear, a sign of elven activity. I stay awake to listen for any elven voices or tracks. It makes me nervous, knowing the ancient elves could be back."
+      ],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Noah suddenly drops his gardening trowel and stares at the soil in his garden. A tear tracks down his cheek. 'Elena... I miss you so much. I can't help but think about the day you left...'",
+        "Pip has new work to offer: North Gate Shadow",
+        "Noah shivers, his garden is thrown into shadow by a gust of wind. He hears a faint whisper, almost like a plea for help, but he can't quite make out the words. He looks around, but no one else seems to hear it.",
+        "Roderick has new work to offer: The Missing Tax Collector"
+      ]
+    },
+    "pip": {
+      "char_delta": 1114,
+      "token_delta": 273,
+      "added_world_facts": 0,
+      "added_personal": 0,
+      "added_events": 8,
+      "added_quests": 1,
+      "added_world_in_prompt": 0,
+      "added_personal_in_prompt": 0,
+      "added_events_in_prompt": 3,
+      "world_facts_sliced_off": 0,
+      "personal_sliced_off": 0,
+      "section_delta": {
+        "identity": 0,
+        "events": 871,
+        "personal": 0,
+        "quests": 241,
+        "other": 0,
+        "player_quests": 0,
+        "facts": 0,
+        "capabilities": 0
+      },
+      "added_world_list": [],
+      "added_personal_list": [],
+      "added_events_list": [
+        "Elara has new work to offer: The Silverwood Tradition",
+        "Mara has new work to offer: Balance the Guild",
+        "Pip's eyes widen as he overhears guards discussing the recent tax collector's disappearance. 'Roderick and Noah are planning to investigate, but they don't know where to start. I wish I could help — but I have nothing to offer.' Pip's heart sinks as he realizes he's too young and unimportant to be of any use.",
+        "Bess has new work to offer: The Stew Mystery",
+        "Kael has new work to offer: A Secret Message",
+        "Pip has new work to offer: North Gate Shadow",
+        "Roderick has new work to offer: The Missing Tax Collector",
+        "Pip pokes his head into Bess's kitchen, a mischievous grin on his face. 'Hey, Bess! Did you hear about the strange shadows near the north gate last night?' He leans in closer, whispering, 'I saw someone move quickly, maybe a wolf, but I couldn't catch a good look.' Bess nods knowingly, her eyes twinkling with a secret. 'I heard a rumor too. The tax collector who went missing two winters ago was killed by a wolf.' Pip's face falls, but he quickly bounces back. 'But I saw something different! There was a strange glowing stone near the forest edge last week. Maybe it's connected to all this.' Bess looks at him skeptically. 'That's a wild guess, Pip. But if you have a real lead, I might be able to help.' Pip grins. 'I know I can.'"
+      ]
+    }
+  },
+  "summary": {
+    "num_npcs": 7,
+    "total_char_delta": 6512,
+    "total_token_delta": 1505,
+    "mean_char_delta": 930.2857142857143,
+    "mean_token_delta": 215.0,
+    "total_added_world": 10,
+    "total_added_personal": 2,
+    "total_added_events": 54,
+    "total_added_quests": 6,
+    "total_sliced_world": 1,
+    "total_sliced_personal": 2
+  }
+}

@@ -37,6 +37,11 @@ logger = logging.getLogger("NPCEngine.story_director")
 
 
 DATA_DIR = NPC_ENGINE_ROOT / "data" / "story_director"
+# Default (Ashenvale-compat) asset and runtime paths. StoryDirector uses
+# these unless the active world has its own ``<world_dir>/story/`` pack,
+# in which case per-world files take over (see ``_resolve_paths``). Tests
+# monkey-patch these module-level names directly — the instance captures
+# them at ``__init__`` time so patches still take effect.
 LORE_FILE = DATA_DIR / "ashenvale_lore.md"
 EXAMPLES_FILE = DATA_DIR / "examples.yaml"
 EXAMPLES_TERSE_FILE = DATA_DIR / "examples_terse.yaml"
@@ -1045,19 +1050,67 @@ class StoryDirector:
         # conversation state; prose is preserved for storytelling/demo
         # contexts where the novelistic output is the product.
         self.narration_mode: str = "prose"
-        self.ledger = FactLedger(LEDGER_FILE)
-        self.arc_planner = ArcPlanner(ARCS_FILE)
+        self._resolve_paths()
+        self.ledger = FactLedger(self._ledger_file)
+        self.arc_planner = ArcPlanner(self._arcs_file)
         self._load_assets()
         self._load_state()
         self._snapshot_original_bios()
 
+    def _resolve_paths(self) -> None:
+        """
+        Pick asset + runtime paths for this Director instance.
+
+        Default: the module-level ``LORE_FILE`` / ``EXAMPLES_FILE`` /
+        state / ledger / arcs files in ``data/story_director/`` (the
+        Ashenvale pack). Per-world override: if ``<world_dir>/story/``
+        exists on disk, every file in that directory overrides its
+        default and runtime state is world-scoped into the same
+        directory. This keeps Ashenvale runs pointing at the shared
+        defaults (so existing tests and benches don't budge) while
+        Port Blackwater and any future world get an isolated asset
+        pack plus isolated state, ledger, and arcs.
+        """
+        # Capture module-level paths at init time so tests that
+        # monkey-patch ``sd_mod.STATE_FILE`` etc. still win.
+        self._lore_file: Path = LORE_FILE
+        self._examples_file: Path = EXAMPLES_FILE
+        self._examples_terse_file: Path = EXAMPLES_TERSE_FILE
+        self._state_file: Path = STATE_FILE
+        self._ledger_file: Path = LEDGER_FILE
+        self._arcs_file: Path = ARCS_FILE
+        self._runtime_dir: Path = DATA_DIR
+
+        world_dir_str = getattr(
+            getattr(self.engine, "config", None), "world_dir", None,
+        )
+        if not world_dir_str:
+            return
+        story_dir = Path(world_dir_str) / "story"
+        if not story_dir.exists():
+            return
+
+        custom_lore = story_dir / "lore.md"
+        custom_examples = story_dir / "examples.yaml"
+        custom_examples_terse = story_dir / "examples_terse.yaml"
+        if custom_lore.exists():
+            self._lore_file = custom_lore
+        if custom_examples.exists():
+            self._examples_file = custom_examples
+        if custom_examples_terse.exists():
+            self._examples_terse_file = custom_examples_terse
+        self._state_file = story_dir / "state.json"
+        self._ledger_file = story_dir / "fact_ledger.json"
+        self._arcs_file = story_dir / "arcs.json"
+        self._runtime_dir = story_dir
+
     # ── Lifecycle ───────────────────────────────────────────────
 
     def _load_assets(self) -> None:
-        if LORE_FILE.exists():
-            self._lore_text = LORE_FILE.read_text(encoding="utf-8").strip()
+        if self._lore_file.exists():
+            self._lore_text = self._lore_file.read_text(encoding="utf-8").strip()
         else:
-            logger.warning(f"Story Director lore file not found at {LORE_FILE}")
+            logger.warning(f"Story Director lore file not found at {self._lore_file}")
         self._reload_examples()
 
     def _reload_examples(self) -> None:
@@ -1073,9 +1126,9 @@ class StoryDirector:
         ``set_narration_mode`` if the caller flips modes after init.
         """
         source = (
-            EXAMPLES_TERSE_FILE
-            if self.narration_mode == "terse" and EXAMPLES_TERSE_FILE.exists()
-            else EXAMPLES_FILE
+            self._examples_terse_file
+            if self.narration_mode == "terse" and self._examples_terse_file.exists()
+            else self._examples_file
         )
         if source.exists():
             try:
@@ -1105,10 +1158,10 @@ class StoryDirector:
         self._reload_examples()
 
     def _load_state(self) -> None:
-        if not STATE_FILE.exists():
+        if not self._state_file.exists():
             return
         try:
-            state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            state = json.loads(self._state_file.read_text(encoding="utf-8"))
             self.tick_count = state.get("tick_count", 0)
             self.last_tick_at = state.get("last_tick_at")
             self.recent_decisions = state.get("recent_decisions", [])[-5:]
@@ -1125,7 +1178,7 @@ class StoryDirector:
             logger.warning(f"Story Director failed to load state: {e}")
 
     def _save_state(self) -> None:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self._runtime_dir.mkdir(parents=True, exist_ok=True)
         state = {
             "tick_count": self.tick_count,
             "last_tick_at": self.last_tick_at,
@@ -1134,7 +1187,7 @@ class StoryDirector:
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
-        STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        self._state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
     # ── Public API ──────────────────────────────────────────────
 
