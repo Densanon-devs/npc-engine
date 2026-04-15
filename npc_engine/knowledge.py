@@ -111,6 +111,17 @@ class NPCKnowledge:
         self.quests: list[Quest] = []
         self.events: list[Event] = []
         self.capability_configs: dict = {}  # Raw YAML for capability system
+        # Zone fields for Story Director locality scoping. "global" is
+        # the wildcard — always considered in every active zone, so
+        # worlds without zone config (no `zone:` in profile YAML) run
+        # in world-wide mode and existing behaviour is preserved.
+        # `home_zone` is immutable profile data; `current_zone` is
+        # runtime-mutable for mobile NPCs (traveling merchants,
+        # wandering assassins, etc.); `mobile` gates whether
+        # /story/npc_zone calls are allowed to change current_zone.
+        self.home_zone: str = "global"
+        self.current_zone: str = "global"
+        self.mobile: bool = False
 
         if self.profile_path.exists():
             self._load()
@@ -122,6 +133,13 @@ class NPCKnowledge:
         self.identity = data.get("identity", {})
         self.world_facts = data.get("world_facts", [])
         self.personal_knowledge = data.get("personal_knowledge", [])
+        # Zone + mobility from profile YAML. Default "global" means
+        # the NPC is always in every active zone; most non-mobile
+        # stationary NPCs living in a specific town should set
+        # `zone: "<town_name>"` explicitly in their YAML.
+        self.home_zone = str(data.get("zone", "global"))
+        self.current_zone = self.home_zone
+        self.mobile = bool(data.get("mobile", False))
 
         for q in data.get("active_quests", []):
             self.quests.append(Quest(

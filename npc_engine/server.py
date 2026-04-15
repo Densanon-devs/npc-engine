@@ -214,6 +214,13 @@ def create_app():
         quest_completed: Optional[str] = None
         quest_accepted: Optional[dict] = None
 
+    class PlayerZoneRequest(BaseModel):
+        zones: list[str]   # empty list = clear active zones (world-wide mode)
+
+    class NPCZoneRequest(BaseModel):
+        npc_id: str
+        zone: str
+
     @app.post("/quests/accept")
     async def quest_accept(req: QuestAcceptRequest):
         """Player accepts a quest. Updates tracker and NPC state."""
@@ -312,6 +319,42 @@ def create_app():
         if not result.get("ok"):
             raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
         return result
+
+    @app.post("/story/player_zone")
+    async def story_player_zone(req: PlayerZoneRequest):
+        """Set the player's active zones. Director focus selection will
+        prefer NPCs in these zones and hard-filter quests to them.
+        Empty list = world-wide mode (every NPC considered equally)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.set_active_zones(req.zones)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.post("/story/npc_zone")
+    async def story_npc_zone(req: NPCZoneRequest):
+        """Move a mobile NPC to a new zone. Rejects if the NPC is not
+        marked mobile in its profile YAML (stationary NPCs must be
+        made mobile via profile edit + reload before they can be
+        moved at runtime)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.set_npc_current_zone(req.npc_id, req.zone)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/story/zones")
+    async def story_zones():
+        """Return the current zone state (active zones + every NPC's
+        current_zone) for debug / client-side sync verification."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_zone_state()
 
     @app.get("/health")
     async def health():

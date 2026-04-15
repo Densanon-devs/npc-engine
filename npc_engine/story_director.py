@@ -159,6 +159,19 @@ _SELF_REPETITION_SIMILARITY = 0.70
 # budget-gated — they're rare and more serious.
 _MAX_SELF_REP_RETRIES_PER_TICK = 1
 
+# Zone locality rate. When ``_active_zones`` is non-empty,
+# ``_pick_focus_npc`` splits available NPCs into in-zone and
+# out-of-zone pools and picks from the in-zone pool for (N-1) out
+# of N calls. One call in N goes to an out-of-zone NPC so distant
+# rumors still seed the FactLedger and propagate via gossip.
+# At ``_OUT_OF_ZONE_RATE = 7`` (6 in 7 in-zone, 1 in 7 out) the
+# player stays with the locals while the world still breathes.
+# Tune down to 4 for "more distant rumors", up to 20 for "tight
+# locality" or set to 0 to disable the out-of-zone escape hatch
+# entirely. Empty ``_active_zones`` = world-wide mode, this
+# constant never fires, existing bench numbers unchanged.
+_OUT_OF_ZONE_RATE = 7
+
 # Small-cast action budget cap. On worlds with at most
 # ``_SMALL_CAST_THRESHOLD`` NPCs, the Director forces
 # ``actions_per_tick = 1`` regardless of what the caller requested.
@@ -1057,6 +1070,16 @@ class StoryDirector:
         # can't pollute rotation — rotation reads the architect's
         # INTENDED focus, written here before workers run.
         self._npc_last_planned_tick: dict[str, int] = {}
+        # Zone locality state. When non-empty, focus selection prefers
+        # NPCs whose ``current_zone`` is in the set. Empty = world-wide
+        # mode, every existing bench and test sees the same behaviour
+        # as before the zone layer existed. The game client owns this
+        # state authority via POST /story/player_zone; the Director
+        # reads but never writes.
+        self._active_zones: set[str] = set()
+        # Tick counter used to pace out-of-zone focus picks (one in
+        # _OUT_OF_ZONE_RATE picks go to the out-of-zone pool).
+        self._zone_escape_counter: int = 0
         # Burst rotation state: the NPC currently held as the first-slot
         # focus across consecutive ticks, plus the remaining number of
         # ticks (AFTER the one that locked it in) the burst will keep
@@ -1223,6 +1246,14 @@ class StoryDirector:
             raw_burst_rem = state.get("burst_remaining", 0)
             if isinstance(raw_burst_rem, (int, float)):
                 self._burst_remaining = max(0, int(raw_burst_rem))
+            raw_zones = state.get("active_zones", [])
+            if isinstance(raw_zones, list):
+                self._active_zones = {
+                    str(z) for z in raw_zones if isinstance(z, str)
+                }
+            raw_escape = state.get("zone_escape_counter", 0)
+            if isinstance(raw_escape, (int, float)):
+                self._zone_escape_counter = max(0, int(raw_escape))
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
@@ -1244,6 +1275,8 @@ class StoryDirector:
             "npc_last_planned_tick": self._npc_last_planned_tick,
             "burst_focus_npc": self._burst_focus_npc,
             "burst_remaining": self._burst_remaining,
+            "active_zones": sorted(self._active_zones),
+            "zone_escape_counter": self._zone_escape_counter,
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
@@ -1711,7 +1744,11 @@ class StoryDirector:
             self._burst_remaining -= 1
             return self._burst_focus_npc
 
-        fresh = self._pick_focus_npc()
+        # Pass zone_lock_in=True so the fresh burst focus is guaranteed
+        # in-zone (when active_zones is set). The burst's K-tick hold
+        # would otherwise amplify a single out-of-zone escape pick into
+        # K ticks of distant focus.
+        fresh = self._pick_focus_npc(zone_lock_in=True)
         if fresh is None:
             self._burst_focus_npc = None
             self._burst_remaining = 0
@@ -1811,6 +1848,103 @@ class StoryDirector:
         self._save_state()
         return {"ok": True, "recorded": record}
 
+    # ── Zone management ────────────────────────────────────────
+
+    def set_active_zones(self, zones: Optional[list[str]]) -> dict:
+        """
+        Replace the Director's active zone set. Called by the game
+        client whenever the player transitions between zones (usually
+        POST /story/player_zone). Empty list or None = world-wide mode
+        (every NPC considered, backward-compatible with pre-zone
+        behaviour).
+
+        Returns a dict the REST layer can pass straight back to the
+        caller — ``{"ok": True, "active_zones": [...]}`` on success,
+        ``{"ok": False, "reason": "..."}`` on validation failure.
+        """
+        if zones is None:
+            new_zones: set[str] = set()
+        elif isinstance(zones, (list, tuple, set)):
+            new_zones = {str(z).strip() for z in zones if str(z).strip()}
+        else:
+            return {"ok": False, "reason": "zones must be a list of strings"}
+        if new_zones != self._active_zones:
+            logger.info(
+                f"Story Director active_zones: {sorted(self._active_zones)} "
+                f"-> {sorted(new_zones)}"
+            )
+            # Break burst rotation when the active zone set changes —
+            # the sticky NPC from the prior zone shouldn't hold slot 0
+            # after a zone transition.
+            if self._burst_focus_npc and self._burst_focus_npc in (
+                self.engine.pie.npc_knowledge.profiles
+            ):
+                npc = self.engine.pie.npc_knowledge.profiles[self._burst_focus_npc]
+                current_zone = getattr(npc, "current_zone", "global")
+                if (current_zone != "global"
+                        and new_zones
+                        and current_zone not in new_zones):
+                    self._burst_focus_npc = None
+                    self._burst_remaining = 0
+        self._active_zones = new_zones
+        self._save_state()
+        return {"ok": True, "active_zones": sorted(self._active_zones)}
+
+    def set_npc_current_zone(self, npc_id: str, zone: str) -> dict:
+        """
+        Update a mobile NPC's current zone. Rejects if the NPC is
+        stationary (``mobile: false`` in profile YAML) or unknown.
+        Game clients call this when moving a traveling merchant,
+        wandering assassin, or any NPC whose profile declares
+        mobility.
+        """
+        if not npc_id or not isinstance(npc_id, str):
+            return {"ok": False, "reason": "missing npc_id"}
+        if not zone or not isinstance(zone, str):
+            return {"ok": False, "reason": "missing zone"}
+        npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+        if npc is None:
+            return {"ok": False, "reason": f"unknown npc '{npc_id}'"}
+        if not getattr(npc, "mobile", False):
+            return {
+                "ok": False,
+                "reason": f"npc '{npc_id}' is not mobile (profile has mobile=false)",
+            }
+        old_zone = getattr(npc, "current_zone", "global")
+        npc.current_zone = zone.strip()
+        logger.info(
+            f"NPC '{npc_id}' moved: {old_zone} -> {npc.current_zone}"
+        )
+        # Break burst on the moved NPC if the destination leaves the
+        # active zone set.
+        if (self._burst_focus_npc == npc_id
+                and self._active_zones
+                and npc.current_zone not in self._active_zones
+                and npc.current_zone != "global"):
+            self._burst_focus_npc = None
+            self._burst_remaining = 0
+        self._save_state()
+        return {
+            "ok": True,
+            "npc_id": npc_id,
+            "previous_zone": old_zone,
+            "current_zone": npc.current_zone,
+        }
+
+    def get_zone_state(self) -> dict:
+        """
+        Return the current zone state for debug / audit. Maps every
+        NPC to its current zone so the game client can verify
+        synchronization.
+        """
+        npc_zones: dict[str, str] = {}
+        for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items():
+            npc_zones[npc_id] = getattr(npc, "current_zone", "global")
+        return {
+            "active_zones": sorted(self._active_zones),
+            "npc_zones": npc_zones,
+        }
+
     # ── World snapshot ──────────────────────────────────────────
 
     # Big-world tunables. The snapshot grows linearly with cast size on
@@ -1835,11 +1969,14 @@ class StoryDirector:
           1. Planned focus NPCs for this tick (architect's choice — must
              always reach the snapshot or the LLM can't reason about
              them).
-          2. NPCs in any active narrative arc's cast (continuity for
-             multi-tick threads).
-          3. Last 8 distinct NPCs from ``recent_decisions`` (recent
+          2. **Active-zone NPCs** (when ``_active_zones`` is non-empty) —
+             ensures the player's locale dominates the snapshot. Global
+             NPCs are included too since they're always in every zone.
+          3. NPCs in any active narrative arc's cast (continuity for
+             multi-tick threads, even if the cast drifted out of zone).
+          4. Last 8 distinct NPCs from ``recent_decisions`` (recent
              activity continuity).
-          4. Last 4 distinct NPCs targeted by ``recent_player_actions``
+          5. Last 4 distinct NPCs targeted by ``recent_player_actions``
              (player reactivity is the highest-stakes signal we have).
 
         The result is deduplicated, capped at ``_SNAPSHOT_NPC_CAP``, and
@@ -1859,7 +1996,17 @@ class StoryDirector:
         for npc_id in planned_focus_ids or []:
             _add(npc_id)
 
-        # 2. Active arc casts
+        # 2. Active-zone NPCs (zone priority tier). World-wide mode
+        # (empty active_zones) skips this — identical to the pre-zone
+        # snapshot behaviour.
+        if self._active_zones:
+            for npc_id in all_npc_ids:
+                if self._npc_in_active_zone(npc_id):
+                    _add(npc_id)
+                    if len(ordered) >= self._SNAPSHOT_NPC_CAP:
+                        break
+
+        # 3. Active arc casts
         try:
             for arc in self.arc_planner.active_arcs():
                 for npc_id in (arc.focus_npcs or []):
@@ -2090,6 +2237,22 @@ class StoryDirector:
                 if open_quests >= _MAX_QUESTS_PER_NPC:
                     allowed.discard("quest")
 
+        # Zone hard filter for quests: out-of-zone NPCs can seed
+        # events and facts (distant rumors propagate via gossip) but
+        # cannot offer quests — a quest from an unreachable NPC wastes
+        # player time and breaks the locality contract. Dead-end quests
+        # from deceased givers (Phase 2a) are allowed because they're
+        # narratively realistic; unreachable ones are not.
+        if (focus_npc
+                and self._active_zones
+                and not self._npc_in_active_zone(focus_npc)):
+            if "quest" in allowed:
+                logger.debug(
+                    f"Zone hard filter: dropping 'quest' for out-of-zone "
+                    f"focus NPC '{focus_npc}' (active_zones={sorted(self._active_zones)})"
+                )
+                allowed.discard("quest")
+
         start = self._kind_rotation_index % len(_ACTION_KIND_ROTATION)
         for offset in range(len(_ACTION_KIND_ROTATION)):
             idx = (start + offset) % len(_ACTION_KIND_ROTATION)
@@ -2102,21 +2265,61 @@ class StoryDirector:
         self._kind_rotation_index = (start + 1) % len(_ACTION_KIND_ROTATION)
         return "event"
 
-    def _pick_focus_npc(self, extra_exclude: Optional[set[str]] = None) -> Optional[str]:
+    def _npc_in_active_zone(self, npc_id: str) -> bool:
+        """
+        True if the given NPC is currently in at least one of the
+        Director's active zones. "global" zone NPCs (unset or
+        explicitly marked global in profile YAML) are always in
+        scope — they represent world-facing characters the player
+        can interact with regardless of location.
+
+        Returns False for unknown NPCs so a stale id can't sneak
+        through a zone filter.
+        """
+        if not self._active_zones:
+            return True  # world-wide mode, every NPC counts
+        npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+        if npc is None:
+            return False
+        zone = getattr(npc, "current_zone", "global")
+        if zone == "global":
+            return True
+        return zone in self._active_zones
+
+    def _pick_focus_npc(self, extra_exclude: Optional[set[str]] = None,
+                         zone_lock_in: bool = False) -> Optional[str]:
         """
         Python decides WHICH NPC this tick focuses on. The LLM decides WHAT
-        happens to them. Two layers:
+        happens to them. Three layers:
 
         1. **Player reactivity**: if the player did something targeting a
            specific NPC *since* the last tick, prioritize that NPC — the
            Director should respond to the player's moves immediately.
-        2. **Round-robin rotation**: otherwise, pick the least-recently-
-           touched NPC. This keeps the story from fixating when the
-           player is passive.
+           This bypasses zone filtering because player-targeted actions
+           are always relevant regardless of zone membership.
+        2. **Zone locality (optional)**: when ``_active_zones`` is
+           non-empty, partition the available NPCs into in-zone and
+           out-of-zone. Pick from in-zone for (N-1) of N calls and from
+           out-of-zone for 1 in N (controlled by ``_OUT_OF_ZONE_RATE``).
+           The out-of-zone escape hatch seeds distant-rumor content that
+           propagates via gossip. Empty ``_active_zones`` skips this
+           layer entirely and falls through to layer 3 — backward-compat
+           with all existing benches.
+        3. **Round-robin rotation**: pick the least-recently-touched NPC
+           from whichever pool layer 2 selected (or the full available
+           list when ``_active_zones`` is empty). Keeps the story from
+           fixating when the player is passive.
 
         ``extra_exclude`` is used by the architect's in-flight planner to
         prevent two workers in the same multi-action tick from competing
-        for the same NPC. NPCs in this set are skipped at both layers.
+        for the same NPC. NPCs in this set are skipped at every layer.
+
+        ``zone_lock_in`` (passed by ``_consume_burst_focus``) forces the
+        pick to the in-zone pool even when the escape counter would
+        otherwise fire. The burst rotation's K-tick hold would otherwise
+        amplify a single escape-hatch pick into K ticks of out-of-zone
+        focus — way more distant texture than the 1-in-N ratio specifies.
+        Slots 1+ in multi-action mode still see the normal escape.
 
         The split exists because Qwen/Llama 3B — even with strongly-worded
         rules in the prompt — still fixate on a single target or abuse
@@ -2131,21 +2334,64 @@ class StoryDirector:
         if not available:
             return None
 
-        # Layer 1: react to pending player action (but only if the
-        # player's target isn't already taken by another worker)
+        # Layer 1: react to pending player action (bypasses zone filter —
+        # if the player is actively engaging someone, they're relevant)
         pending_target = self._pending_player_target(available)
         if pending_target:
             return pending_target
 
-        # Layer 2: least-recently-touched rotation. Read from the
-        # architect's PLANNED focus dict, not recent_decisions.
-        # recent_decisions is capped at 5 ticks for unrelated reasons,
-        # so on big-cast worlds it can't serve as a round-robin trail —
-        # NPCs touched 6+ ticks ago would fall off and be picked again.
-        # _npc_last_planned_tick records every architect pick across
-        # the entire session, unbounded in entry count, so rotation
-        # can walk a 500-NPC world in true round-robin order.
-        last_touched: dict[str, int] = {npc_id: -1 for npc_id in available}
+        # Layer 2: zone locality partition. Only applies when
+        # active_zones is set; otherwise the pool is "everything
+        # available" and layer 3 sees the same list as before.
+        if self._active_zones:
+            in_zone = [
+                nid for nid in available if self._npc_in_active_zone(nid)
+            ]
+            out_of_zone = [
+                nid for nid in available if not self._npc_in_active_zone(nid)
+            ]
+            # One in _OUT_OF_ZONE_RATE picks goes to the out-of-zone
+            # pool for distant-rumor content. Bump a counter and route
+            # based on its modulo so the escape hatch fires predictably.
+            # Burst rotation lock-in (zone_lock_in=True) bypasses the
+            # escape: burst rotation's K-tick hold would otherwise
+            # amplify a single out-of-zone pick into K ticks of distant
+            # focus — already tested empirically on PB zoned (20 ticks,
+            # 1 escape-hatch burst = 4 ticks of lighthouse focus, 33%
+            # of the session on a 3-NPC in-zone pool).
+            self._zone_escape_counter += 1
+            prefer_out_of_zone = (
+                not zone_lock_in
+                and _OUT_OF_ZONE_RATE > 0
+                and out_of_zone
+                and self._zone_escape_counter % _OUT_OF_ZONE_RATE == 0
+            )
+            if prefer_out_of_zone:
+                pool = out_of_zone
+            elif in_zone:
+                pool = in_zone
+            elif out_of_zone:
+                # No in-zone candidates left (all excluded or all out
+                # of zone); fall back to out-of-zone rather than
+                # returning None. The architect's plan still gets
+                # filled; the narrative just drifts slightly away
+                # from the player's zone this tick.
+                pool = out_of_zone
+            else:
+                return None
+        else:
+            pool = available
+
+        # Layer 3: least-recently-touched rotation within the chosen
+        # pool. Read from the architect's PLANNED focus dict, not
+        # recent_decisions. recent_decisions is capped at 5 ticks for
+        # unrelated reasons, so on big-cast worlds it can't serve as a
+        # round-robin trail — NPCs touched 6+ ticks ago would fall off
+        # and be picked again. _npc_last_planned_tick records every
+        # architect pick across the entire session, unbounded in entry
+        # count, so rotation can walk a 500-NPC world in true
+        # round-robin order.
+        last_touched: dict[str, int] = {npc_id: -1 for npc_id in pool}
         for npc_id, tick_num in self._npc_last_planned_tick.items():
             if npc_id in last_touched:
                 last_touched[npc_id] = max(last_touched[npc_id], tick_num)
@@ -2168,8 +2414,8 @@ class StoryDirector:
                         last_touched[val] = max(last_touched[val], tick_num)
 
         ordered = sorted(
-            available,
-            key=lambda nid: (last_touched[nid], available.index(nid)),
+            pool,
+            key=lambda nid: (last_touched[nid], pool.index(nid)),
         )
         return ordered[0]
 

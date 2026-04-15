@@ -1,0 +1,91 @@
+Model:           qwen2.5-3b-instruct-q4_k_m.gguf
+World:           port_blackwater (Port Blackwater)
+Narration mode:  terse
+Director ticks:  10  (actions per tick: 3)
+------------------------------------------------------------------------
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-04-15 14:18:29,758 WARNING huggingface_hub.utils._http: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 10294.61it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 12287 MiB):
+  Device 0: NVIDIA GeForce RTX 3060, compute capability 8.6, VMM: yes, VRAM: 12287 MiB
+llama_context: n_ctx_seq (4096) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+Lore file:       D:\LLCWork\npc-engine\data\worlds\port_blackwater\story\lore.md
+Examples file:   D:\LLCWork\npc-engine\data\worlds\port_blackwater\story\examples.yaml (17 entries)
+
+=== BEFORE (Director inactive) ===
+  captain_reva         chars= 1040  tokens= 250  facts= 4  personal= 4  events= 0  quests= 1
+  finn                 chars= 1070  tokens= 248  facts= 4  personal= 4  events= 0  quests= 1
+  old_bones            chars= 1051  tokens= 230  facts= 4  personal= 4  events= 0  quests= 1
+
+=== Running 10 Director ticks ===
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 10301.97it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  T 1   2.88s   event✓
+  T 2   2.41s   noop✓
+  T 3   1.05s   fact✓
+Loading weights:   0%|          | 0/106 [00:00<?, ?it/s]Loading weights: 100%|##########| 106/106 [00:00<00:00, 9210.99it/s]
+[1mDebertaV2ForSequenceClassification LOAD REPORT[0m from: cross-encoder/nli-deberta-v3-small
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+deberta.embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  T 4   2.75s   event✓
+  T 5   2.42s   noop✓
+  T 6   1.33s   fact✓
+  T 7   0.89s   event✓
+  T 8   2.45s   noop✓
+  T 9   1.24s   fact✓
+  T10   0.91s   event✓
+  total: 18.31s  mean: 1.83s/tick
+
+=== AFTER ===
+  captain_reva         chars= 1720  tokens= 403  facts= 4  personal= 4  events= 2  quests= 1
+  finn                 chars= 1430  tokens= 320  facts= 4  personal= 4  events= 1  quests= 1
+  old_bones            chars= 1295  tokens= 288  facts= 4  personal= 4  events= 1  quests= 1
+
+=== DELTAS PER NPC ===
+  captain_reva
+    chars:   +680   tokens: +153
+    added:  world=1  personal=0  events=2  quests=0
+    reached prompt: world=1/1  personal=0/0  events=2/2
+    sections: facts+187  events+492
+  finn
+    chars:   +360   tokens:  +72
+    added:  world=0  personal=1  events=1  quests=0
+    reached prompt: world=0/0  personal=1/1  events=1/1
+    sections: events+199  personal+160
+  old_bones
+    chars:   +244   tokens:  +58
+    added:  world=0  personal=1  events=1  quests=0
+    reached prompt: world=0/0  personal=1/1  events=1/1
+    sections: events+184  personal+59
+
+========================================================================
+SUMMARY
+========================================================================
+World:             port_blackwater  (3 NPCs)
+Narration mode:    terse
+Director ticks:    10 x 3 actions
+Director wall:     18.31s  (1.83s/tick)
+Added (total):     world_facts=1  personal=2  events=4  quests=0
+Sliced off cap:    world_facts=0  personal=0  (these never reach NPC dialogue prompts)
+Per-NPC mean:      chars +428  tokens +94
+Per-NPC max:       chars +680  tokens +153
+Terse goal <150:   FAIL  (max delta 153)
+
+Full trace written to: D:\LLCWork\npc-engine\logs\facts_pb_terse_burstcap.json

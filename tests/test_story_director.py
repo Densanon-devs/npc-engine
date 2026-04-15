@@ -50,7 +50,8 @@ class _StubNPC:
     """Tiny stand-in for NPCKnowledge that supports add_quest + fields the
     snapshot builder pokes at."""
 
-    def __init__(self, npc_id: str, role: str):
+    def __init__(self, npc_id: str, role: str,
+                 zone: str = "global", mobile: bool = False):
         self.identity = {"name": npc_id.title(), "role": role}
         self.world_facts: list[str] = []
         self.personal_knowledge: list[str] = []
@@ -60,6 +61,11 @@ class _StubNPC:
         self.dynamic_personal_knowledge: list[str] = []
         self.quests: list[Quest] = []
         self.events: list[SimpleNamespace] = []
+        # Zone fields mirror production NPCKnowledge (Phase 1 zone layer).
+        # Default "global" keeps pre-zone stubs behaving as they did.
+        self.home_zone = zone
+        self.current_zone = zone
+        self.mobile = mobile
 
     def add_quest(self, quest: Quest):
         self.quests.append(quest)
@@ -191,10 +197,24 @@ _LARGE_STUB_PROFILES = (
 def _make_stub_engine(responses=None, profile_specs=None):
     """Build a stub engine. ``profile_specs`` lets callers override the
     default 3-NPC Ashenvale-ish cast; pass a sequence of ``(id, role)``
-    tuples to exercise small-cast caps or multi-action plans that need
-    a cast above the _SMALL_CAST_THRESHOLD cutoff."""
+    or ``(id, role, zone)`` or ``(id, role, zone, mobile)`` tuples to
+    exercise small-cast caps, multi-action plans above the
+    _SMALL_CAST_THRESHOLD cutoff, or zoned worlds for the Phase 1
+    zone layer tests."""
     specs = profile_specs or _DEFAULT_STUB_PROFILES
-    profiles = {npc_id: _StubNPC(npc_id, role) for npc_id, role in specs}
+    profiles: dict = {}
+    for spec in specs:
+        if len(spec) == 2:
+            npc_id, role = spec
+            profiles[npc_id] = _StubNPC(npc_id, role)
+        elif len(spec) == 3:
+            npc_id, role, zone = spec
+            profiles[npc_id] = _StubNPC(npc_id, role, zone=zone)
+        elif len(spec) == 4:
+            npc_id, role, zone, mobile = spec
+            profiles[npc_id] = _StubNPC(npc_id, role, zone=zone, mobile=mobile)
+        else:
+            raise ValueError(f"bad profile spec: {spec}")
     engine = _StubEngine(profiles)
     engine.pie.base_model = _StubBaseModel(responses or [])
     return engine
@@ -738,6 +758,328 @@ def test_small_cast_single_action_passthrough():
     finally:
         restore()
     print("  [PASS] small_cast_single_action_passthrough")
+
+
+# ── Zone layer tests (Phase 1) ───────────────────────────────────
+
+_ZONED_PROFILES = (
+    # 4 dock_district NPCs + 2 lighthouse_bluffs NPCs + 1 mobile fence
+    # (starts in dock_district). Matches the shape of
+    # data/worlds/port_blackwater_zoned.
+    ("reva",      "harbor_master", "dock_district",    False),
+    ("finn",      "dock_worker",   "dock_district",    False),
+    ("old_bones", "tavern_owner",  "dock_district",    False),
+    ("varro",     "fence",         "dock_district",    True),
+    ("thessa",    "hermit",        "lighthouse_bluffs", False),
+    ("brom",      "pilgrim",       "lighthouse_bluffs", False),
+)
+
+
+def test_empty_active_zones_preserves_world_wide_mode():
+    """Backward-compat critical path: when _active_zones is empty,
+    _pick_focus_npc returns exactly what the pre-zone code would have
+    picked. Every pre-zone bench and test still passes because of
+    this invariant."""
+    restore = _isolate_state_file("empty_zones")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        assert director._active_zones == set()
+        # With no zone restriction, the rotation pool is all 6 NPCs.
+        # First pick with empty _npc_last_planned_tick and no
+        # exclude should return the first NPC in insertion order
+        # (reva), identical to non-zone rotation.
+        focus = director._pick_focus_npc()
+        assert focus == "reva", focus
+    finally:
+        restore()
+    print("  [PASS] empty_active_zones_preserves_world_wide_mode")
+
+
+def test_zone_soft_weighting_prefers_in_zone():
+    """With active_zones = {dock_district}, rotation should strongly
+    prefer dock NPCs (in-zone) over lighthouse NPCs (out-of-zone).
+    Over many picks, in-zone should dominate."""
+    restore = _isolate_state_file("zone_soft")
+    try:
+        import npc_engine.story_director as sd_mod
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        out_of_zone_ids = {"thessa", "brom"}
+        in_count = 0
+        out_count = 0
+        # Sample many picks to exercise the 85/15 statistical split.
+        # After each pick, bump _npc_last_planned_tick so rotation
+        # advances rather than oscillating on the same NPC.
+        for tick_num in range(1, 101):
+            focus = director._pick_focus_npc()
+            assert focus is not None
+            if focus in in_zone_ids:
+                in_count += 1
+            elif focus in out_of_zone_ids:
+                out_count += 1
+            else:
+                raise AssertionError(f"unexpected focus: {focus}")
+            director._npc_last_planned_tick[focus] = tick_num
+        # At _OUT_OF_ZONE_RATE = 7, we expect ~100*6/7 in-zone and
+        # ~100/7 out-of-zone. Allow wide tolerance for rotation
+        # order variance.
+        assert in_count >= 80, f"in={in_count} out={out_count}"
+        assert out_count >= 8, f"in={in_count} out={out_count}"
+        assert out_count <= 20, f"in={in_count} out={out_count}"
+    finally:
+        restore()
+    print("  [PASS] zone_soft_weighting_prefers_in_zone")
+
+
+def test_zone_out_of_zone_rate_honored_precisely():
+    """The out-of-zone escape hatch fires on counter % _OUT_OF_ZONE_RATE
+    == 0. Every Nth _pick_focus_npc call should hit an out-of-zone NPC
+    when one is available (unless the in-zone pool is exhausted)."""
+    restore = _isolate_state_file("zone_rate")
+    try:
+        import npc_engine.story_director as sd_mod
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        # First N-1 picks should be in-zone; Nth pick (counter=N)
+        # should be out of zone. Cross-check against the constant
+        # so this test stays in sync if the rate changes.
+        rate = sd_mod._OUT_OF_ZONE_RATE
+        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        out_of_zone_ids = {"thessa", "brom"}
+        for i in range(1, rate + 1):
+            focus = director._pick_focus_npc()
+            director._npc_last_planned_tick[focus] = i
+            if i < rate:
+                assert focus in in_zone_ids, (
+                    f"pick {i} should be in-zone, got {focus}"
+                )
+            else:
+                # The rate-th pick should jump out of zone.
+                assert focus in out_of_zone_ids, (
+                    f"pick {i} should be out-of-zone, got {focus}"
+                )
+    finally:
+        restore()
+    print("  [PASS] zone_out_of_zone_rate_honored_precisely")
+
+
+def test_global_zone_npc_always_in_scope():
+    """NPCs with zone='global' (or no zone field) should always pass
+    the _npc_in_active_zone check, regardless of what the active
+    zones are."""
+    restore = _isolate_state_file("zone_global")
+    try:
+        mixed = (
+            ("local_reva",  "harbor_master", "dock_district"),
+            ("global_god",  "deity",         "global"),
+            ("far_thessa",  "hermit",        "lighthouse_bluffs"),
+        )
+        engine = _make_stub_engine(profile_specs=mixed)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        assert director._npc_in_active_zone("local_reva") is True
+        assert director._npc_in_active_zone("global_god") is True
+        assert director._npc_in_active_zone("far_thessa") is False
+    finally:
+        restore()
+    print("  [PASS] global_zone_npc_always_in_scope")
+
+
+def test_quest_hard_filter_on_out_of_zone_focus():
+    """If the focus NPC is out of the active zone set, 'quest' gets
+    dropped from the allowed action kinds — rotation falls through to
+    event or fact. Out-of-zone NPCs never offer quests to the player."""
+    restore = _isolate_state_file("zone_quest_filter")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        # Force rotation index to 'quest' slot so the natural pick
+        # would be quest. Out-of-zone focus should block it.
+        import npc_engine.story_director as sd_mod
+        director._kind_rotation_index = sd_mod._ACTION_KIND_ROTATION.index("quest")
+        # thessa is in lighthouse_bluffs — out of zone
+        kind = director._pick_action_kind("thessa")
+        assert kind != "quest", (
+            f"out-of-zone focus should not receive quest, got {kind}"
+        )
+        # reva is in dock_district — in zone, should still receive quest
+        director._kind_rotation_index = sd_mod._ACTION_KIND_ROTATION.index("quest")
+        kind = director._pick_action_kind("reva")
+        assert kind == "quest", kind
+    finally:
+        restore()
+    print("  [PASS] quest_hard_filter_on_out_of_zone_focus")
+
+
+def test_bounded_snapshot_surfaces_active_zone_npcs():
+    """When the cast exceeds _SNAPSHOT_BOUND_THRESHOLD, the bounded
+    snapshot selector must include active-zone NPCs in its priority
+    tiers so the LLM sees them even when the full cast doesn't fit."""
+    restore = _isolate_state_file("zone_snapshot")
+    try:
+        import npc_engine.story_director as sd_mod
+        # Build a 40-NPC cast where half are in dock_district and the
+        # rest are in "far_away". We want the bounded selector to pick
+        # dock NPCs over far ones when active_zones is set.
+        specs = []
+        for i in range(20):
+            specs.append((f"dock_{i}", "worker", "dock_district"))
+        for i in range(20):
+            specs.append((f"far_{i}", "wanderer", "far_away"))
+        engine = _make_stub_engine(profile_specs=tuple(specs))
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        selected = director._select_snapshot_npcs(
+            list(engine.pie.npc_knowledge.profiles.keys()),
+            planned_focus_ids=[],
+        )
+        dock_in_selection = sum(1 for n in selected if n.startswith("dock_"))
+        far_in_selection = sum(1 for n in selected if n.startswith("far_"))
+        cap = StoryDirector._SNAPSHOT_NPC_CAP
+        # The cap is 16 — we expect all 16 to be dock NPCs, since the
+        # dock zone has 20 candidates and fills the cap.
+        assert dock_in_selection == cap, (
+            f"expected all {cap} slots to be dock NPCs, "
+            f"got dock={dock_in_selection} far={far_in_selection}"
+        )
+        assert far_in_selection == 0, far_in_selection
+    finally:
+        restore()
+    print("  [PASS] bounded_snapshot_surfaces_active_zone_npcs")
+
+
+def test_npc_current_zone_mutation_persists():
+    """set_npc_current_zone on a mobile NPC should update current_zone,
+    persist to state.json, and survive a reload into a fresh director."""
+    restore = _isolate_state_file("zone_persist")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        # Varro is mobile, starts in dock_district per the stub spec.
+        result = director.set_npc_current_zone("varro", "lighthouse_bluffs")
+        assert result["ok"] is True, result
+        assert engine.pie.npc_knowledge.profiles["varro"].current_zone == "lighthouse_bluffs"
+        # set_active_zones is also persistable — test round-trip.
+        director.set_active_zones(["dock_district", "lighthouse_bluffs"])
+        director._save_state()
+
+        # Fresh director reads the saved state. The NPC's current_zone
+        # lives on the NPC object, not state.json, so a fresh engine
+        # would re-load varro at "dock_district" (YAML default).
+        # Active zones DO persist via state.json.
+        engine2 = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director2 = StoryDirector(engine2)
+        assert director2._active_zones == {"dock_district", "lighthouse_bluffs"}, (
+            director2._active_zones
+        )
+    finally:
+        restore()
+    print("  [PASS] npc_current_zone_mutation_persists")
+
+
+def test_immobile_npc_zone_change_rejected():
+    """Stationary NPCs (mobile=False) must refuse runtime zone
+    changes. Game client gets a clear error so it knows to mark the
+    profile mobile in YAML first."""
+    restore = _isolate_state_file("zone_immobile")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        # reva is stationary
+        result = director.set_npc_current_zone("reva", "lighthouse_bluffs")
+        assert result["ok"] is False
+        assert "not mobile" in result.get("reason", "")
+        # Zone didn't change
+        assert engine.pie.npc_knowledge.profiles["reva"].current_zone == "dock_district"
+    finally:
+        restore()
+    print("  [PASS] immobile_npc_zone_change_rejected")
+
+
+def test_zone_change_breaks_burst_rotation():
+    """When the active zone set changes and the current burst focus
+    is an NPC no longer in any active zone, the burst breaks so the
+    next tick picks a fresh in-zone NPC."""
+    restore = _isolate_state_file("zone_burst_break")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        # Seed a burst on finn (in dock_district)
+        director._burst_focus_npc = "finn"
+        director._burst_remaining = 3
+        # Player moves to lighthouse
+        director.set_active_zones(["lighthouse_bluffs"])
+        # Burst should have broken since finn is no longer in an
+        # active zone.
+        assert director._burst_focus_npc is None, director._burst_focus_npc
+        assert director._burst_remaining == 0
+    finally:
+        restore()
+    print("  [PASS] zone_change_breaks_burst_rotation")
+
+
+def test_burst_rotation_locks_to_in_zone():
+    """When active_zones is set, burst rotation must never pick an
+    out-of-zone NPC as its sticky focus. The out-of-zone escape hatch
+    should only fire on non-burst slots (slots 1+ of the architect
+    plan) — otherwise a single escape pick gets amplified into
+    K_BURST_ROTATION_DEPTH ticks of distant focus."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("burst_zone_lock")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        # Crank the escape counter so the NEXT pick without zone_lock_in
+        # WOULD fire the out-of-zone escape. Burst rotation must still
+        # land in-zone.
+        director._zone_escape_counter = sd_mod._OUT_OF_ZONE_RATE - 1
+        # Drive several ticks through _architect_plan and verify slot 0
+        # stays in-zone across burst transitions.
+        for tick_num in range(1, 30):
+            plan = director._architect_plan(1)
+            if not plan:
+                break
+            focus = plan[0][0]
+            assert focus in in_zone_ids, (
+                f"burst slot 0 picked out-of-zone NPC {focus} on tick {tick_num}"
+            )
+            director._npc_last_planned_tick[focus] = tick_num
+    finally:
+        restore()
+    print("  [PASS] burst_rotation_locks_to_in_zone")
+
+
+def test_pending_player_target_bypasses_zone_filter():
+    """When the player has an outstanding action targeting an
+    out-of-zone NPC (e.g. sent a letter ahead), that NPC must still
+    win focus selection — player reactivity is layer 1, zone filter
+    is layer 2."""
+    restore = _isolate_state_file("zone_player_bypass")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+        # Player's action targets thessa (out of active zone).
+        director.recent_player_actions = [{
+            "at": "2026-04-15T10:05:00+00:00",
+            "tick_at_time": 1,
+            "text": "Player sent a messenger to the hermit",
+            "target": "thessa",
+        }]
+        focus = director._pick_focus_npc()
+        # Player reactivity wins over zone filter.
+        assert focus == "thessa", focus
+    finally:
+        restore()
+    print("  [PASS] pending_player_target_bypasses_zone_filter")
 
 
 def test_single_action_tick_is_backward_compatible():
@@ -3321,6 +3663,20 @@ def main():
     test_large_cast_honors_requested_actions_per_tick()
     test_small_cast_cap_threshold_boundary()
     test_small_cast_single_action_passthrough()
+
+    print("\nStory Director — zone layer tests (Phase 1)")
+    test_empty_active_zones_preserves_world_wide_mode()
+    test_zone_soft_weighting_prefers_in_zone()
+    test_zone_out_of_zone_rate_honored_precisely()
+    test_global_zone_npc_always_in_scope()
+    test_quest_hard_filter_on_out_of_zone_focus()
+    test_bounded_snapshot_surfaces_active_zone_npcs()
+    test_npc_current_zone_mutation_persists()
+    test_immobile_npc_zone_change_rejected()
+    test_zone_change_breaks_burst_rotation()
+    test_burst_rotation_locks_to_in_zone()
+    test_pending_player_target_bypasses_zone_filter()
+
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()
     test_record_player_action_and_snapshot()

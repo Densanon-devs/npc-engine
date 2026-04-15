@@ -3721,6 +3721,223 @@ python bench_fact_consumption.py --ticks 10 --model qwen_3b \
 
 ---
 
+## Phase 1 — zone layer (2026-04-15, solo locality scoping)
+
+Feature branch `story-director-zones`. Full plan lives at
+`data/story_director/PHASE_ZONES_LIFECYCLE_PLAN.md`. Phase 1 adds
+spatial locality to focus selection: in a Skyrim-like solo game,
+the player sitting in a dock district shouldn't see quest hooks
+from a lighthouse across the map. Phase 2 (deaths + births) and
+Phase 3 (multiplayer scheduling) build on this foundation.
+
+### Data model
+
+NPCKnowledge gains three fields (updated in all three in-sync
+copies — `npc-engine/npc_engine/knowledge.py`,
+`densanon-core/densanon/core/npc_knowledge/knowledge.py`, and
+the runtime copy at
+`plug-in-intelligence-engine/engine/npc_knowledge.py`):
+
+```python
+home_zone: str = "global"       # immutable, from profile YAML zone: field
+current_zone: str = "global"    # mutable for mobile NPCs
+mobile: bool = False             # gates runtime zone changes
+```
+
+Profile YAML:
+```yaml
+identity:
+  name: "Varro Tallow"
+  role: "fence"
+zone: "dock_district"
+mobile: true
+```
+
+The `"global"` zone is the wildcard — NPCs without a `zone:` field
+default to `"global"` and are considered in-zone for every active
+zone. This keeps every pre-zone profile backward-compatible: the
+Ashenvale world runs unchanged because none of its profiles have
+`zone:` set, so all 7 NPCs are `"global"` and any active_zones
+setting includes them implicitly.
+
+StoryDirector gains `_active_zones: set[str]` (empty = world-wide
+mode, current behaviour), `_zone_escape_counter: int` (drives the
+1-in-N out-of-zone escape), and persists both in `state.json`.
+
+### Behavior changes
+
+1. **Focus selection soft weighting** (`_pick_focus_npc`). When
+   `_active_zones` is non-empty, rotation splits the available
+   pool into in-zone and out-of-zone. The escape counter bumps on
+   every call; when it's divisible by `_OUT_OF_ZONE_RATE = 7`, the
+   pick comes from the out-of-zone pool (distant rumors for the
+   gossip propagation system). Otherwise it's in-zone. Empty
+   `_active_zones` bypasses this layer entirely.
+2. **Quest hard filter** (`_pick_action_kind`). If the picked
+   focus NPC is out-of-zone AND the kind rotation wants `quest`,
+   downgrade to `event` or `fact`. Out-of-zone NPCs can seed
+   rumors but never offer quests the player can't reach.
+3. **Bounded snapshot priority tier** (`_select_snapshot_npcs`).
+   Active-zone NPCs slot into priority #2 (just after planned
+   focus). On big-cast worlds this guarantees the snapshot
+   surfaces in-zone NPCs within the 16-NPC cap.
+4. **Burst rotation zone lock-in** (`_consume_burst_focus`). The
+   `_pick_focus_npc` call made by burst rotation passes
+   `zone_lock_in=True`, which bypasses the out-of-zone escape
+   counter for burst's fresh-focus picks. Without this, a single
+   escape-hatch pick gets amplified into
+   `_BURST_ROTATION_DEPTH=4` ticks of distant focus — see "v1→v2
+   fix" below.
+
+### v1 → v2 fix: burst × zone interaction
+
+The first PB zoned bench (`logs/pb_zoned_dock_20.json`, v1)
+surfaced an over-expression of out-of-zone content. Slot 0 burst
+sequence was `reva ×4 → old_bones ×4 → finn ×4 → **thessa** ×4 →
+varro ×4`, i.e. one 4-tick burst landed on a lighthouse NPC. The
+mechanism: `_consume_burst_focus` called `_pick_focus_npc` which
+bumped the zone escape counter on every call (slot 0 + slots
+1-2). Across 3 prior bursts that meant 3 × 3 × 4 = 36 calls,
+enough for 5 escape-hatch triggers. When the 5th trigger landed
+on a `_consume_burst_focus` call rather than a slot-1/2 call, the
+fresh burst focus became an out-of-zone NPC — and then burst
+held it for 4 ticks, amplifying the 1-in-7 escape rate into a
+full 4-tick window on the hermit.
+
+Fix: `_pick_focus_npc` grew a `zone_lock_in: bool = False`
+parameter. `_consume_burst_focus` passes `True`. Slot 1+ picks
+use the default `False`. The escape hatch is still rate-limited
+to ~1-in-7 but only on the non-burst slots.
+
+Bench re-run (`logs/pb_zoned_dock_20_v2.json`) confirmed:
+
+| Metric                          | v1 (buggy)                           | v2 (fixed)                 |
+|---------------------------------|--------------------------------------|----------------------------|
+| Slot 0 zones                    | 4 dock / 1 lighthouse (80%)          | **20/20 dock (100%)**      |
+| Slot 0 runs                     | reva/old_bones/finn/**thessa**/varro | reva/old_bones/finn/old_bones/reva |
+| Total dock / lighthouse         | 51 / 9                               | 55 / 5                     |
+| Out-of-zone ratio               | 15%                                  | **8.3%**                   |
+| Out-of-zone quests              | 0                                    | 0                          |
+| Mean tick                       | 4.76s                                | 4.91s                      |
+| RSS peak                        | 3451 MB                              | 3449 MB                    |
+| Consecutive target repeats      | 0/59                                 | 0/59                       |
+
+The 8.3% out-of-zone ratio is under the 1/7 ≈ 14% target because
+the escape counter now only increments on the 40 non-burst slot
+picks (vs. 60 before), so the expected fire rate is 40/7 ≈ 5.7
+out-of-zone picks — matching the observed 5. The burst lock-in
+effectively reduces the out-of-zone rate below the nominal 1/7
+target, which is the desired direction for solo-player locality.
+
+### REST endpoints
+
+`npc_engine/server.py` gains three endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /story/player_zone` | `{"zones": ["dock_district"]}` — replaces active zones. Empty list = world-wide mode. |
+| `POST /story/npc_zone` | `{"npc_id": "varro", "zone": "lighthouse_bluffs"}` — move a mobile NPC. Rejects if `mobile: false`. |
+| `GET /story/zones` | Returns `{"active_zones": [...], "npc_zones": {...}}` for debug / sync verification. |
+
+### Port Blackwater zoned reference world
+
+New at `data/worlds/port_blackwater_zoned/` with:
+- 4 NPCs in `dock_district`: captain_reva, finn, old_bones, varro (mobile fence)
+- 2 NPCs in `lighthouse_bluffs`: thessa (hermit), brom (pilgrim)
+- `zones.yaml` with `target_population`, `min_population`,
+  `role_pool`, `lore_hook`, `adjacent_to` for Phase 2b prep
+- Copied story pack (lore.md + examples.yaml + examples_terse.yaml)
+  from the base PB world
+- Registered in `bench_story_director.py`'s `WORLDS` map as
+  `port_blackwater_zoned`
+
+Used as the reference test world for zone behaviour and the
+forthcoming lifecycle benches.
+
+### Bench argument
+
+`bench_story_director.py --active-zones dock_district,lighthouse_bluffs`
+(comma-separated list) sets the Director's active zones before
+the first tick. Empty/omitted = world-wide mode (current
+behaviour). Called once via `director.set_active_zones(...)` at
+bench boot.
+
+### Tests
+
+Phase 1 adds **11 new offline unit tests**:
+
+1. `test_empty_active_zones_preserves_world_wide_mode` — the critical
+   backward-compat invariant
+2. `test_zone_soft_weighting_prefers_in_zone` — statistical over 100
+   picks (expect >80% in-zone, ≤20% out-of-zone)
+3. `test_zone_out_of_zone_rate_honored_precisely` — every Nth pick is
+   out-of-zone, pinned to `_OUT_OF_ZONE_RATE` constant
+4. `test_global_zone_npc_always_in_scope` — `"global"` NPCs always pass
+   the filter
+5. `test_quest_hard_filter_on_out_of_zone_focus` — out-of-zone focus
+   cannot receive quest action kind
+6. `test_bounded_snapshot_surfaces_active_zone_npcs` — 40-NPC cast,
+   verify all 16 snapshot slots go to in-zone NPCs
+7. `test_npc_current_zone_mutation_persists` — save/load round-trip of
+   `_active_zones`
+8. `test_immobile_npc_zone_change_rejected` — stationary NPCs refuse
+   runtime zone changes with a clear error
+9. `test_zone_change_breaks_burst_rotation` — when active zones change
+   and the burst focus is no longer in-zone, burst breaks
+10. `test_burst_rotation_locks_to_in_zone` — burst fresh-focus picks
+    ignore the escape counter (the v1→v2 fix)
+11. `test_pending_player_target_bypasses_zone_filter` — player
+    reactivity (layer 1) overrides zone filter (layer 2)
+
+Test suite now at **124 offline tests green** (113 pre-Phase-1 +
+11 zone tests). Integration smoke test
+`test_integration_tick_mutates_world` also passes; one earlier
+run showed it occasionally flakes on LLM parse failure, which is
+a pre-existing pattern, not a Phase 1 regression.
+
+### What Phase 1 confirmed
+
+- **Zone layer is strictly additive.** Every pre-existing bench
+  result and test passes unchanged in world-wide mode. Phase 1
+  doesn't regress anything.
+- **Quest hard filter is load-bearing.** In the bench, 0 of 9
+  out-of-zone dispatches were quests — the filter fires every
+  time and out-of-zone NPCs feed only event/fact content.
+- **Burst × zone lock-in is necessary.** Without the
+  `zone_lock_in=True` flag on burst's fresh-focus pick, the
+  K-tick hold amplifies a single escape into a full burst
+  window. Caught by the bench run, fixed in the same session,
+  covered by a new test.
+- **Soft weighting matches target.** 8.3% out-of-zone on PB zoned
+  matches the expected rate (with burst accounted for). In-zone
+  NPCs get ~6x the dispatch rate of out-of-zone NPCs, matching
+  the 6/7 = 85.7% target.
+
+### What Phase 1 deferred to Phase 2
+
+- NPC death + birth (lifecycle)
+- Autonomous Director-driven lifecycle (Phase 2c)
+- Multiplayer zone union (Phase 3)
+- Arc-referenced NPC promotion (Phase 2b)
+- Events section reserve/cap (still open from 2026-04-15 prior bench)
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# Offline tests
+python tests/test_story_director.py
+
+# PB zoned, dock_district active, 20 ticks
+python bench_story_director.py --ticks 20 --reset --model qwen_3b \
+    --world port_blackwater_zoned --active-zones dock_district \
+    --actions-per-tick 3 --narration-mode terse \
+    --log logs/pb_zoned_dock_20_v2.json
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked

@@ -1,0 +1,55 @@
+# NPC — Varro Tallow, Fence (mobile)
+# Varro moves between dock_district and lighthouse_bluffs on his
+# own schedule. Test subject for the zone layer's mobile NPC path
+# and a standing beneficiary of Old Bones' smuggling operation.
+identity:
+  name: "Varro Tallow"
+  role: "Fence"
+  location: "Anywhere cargo changes hands in the dark"
+  personality: "Suspicious, fast-talking, knows everyone's prices. Never meets the same eye twice."
+  speech_style: "Low, hurried, constantly glancing around. Calls everyone 'friend' in a way that sounds like warning."
+
+zone: "dock_district"
+mobile: true
+
+world_facts:
+  - "Port Blackwater moves more contraband in a night than most kingdoms tax in a year"
+  - "The harbor guards keep their heads down on the northern docks after dusk"
+  - "Ships that wreck on the rocks often lose cargo that washes up near the lighthouse"
+
+personal_knowledge:
+  - "Has a buyer in Meridia for anything marked with the old sea-tongue script"
+  - "Knows that the melted lighthouse glass fetches three times its weight in gold"
+  - "Climbs the lighthouse path twice a week to check the rocks for new wreck cargo"
+  - "Owes Old Bones a favor for covering a bad deal last winter"
+
+recent_events: []
+
+capabilities:
+  scratchpad:
+    enabled: true
+    max_entries: 10
+  trust:
+    enabled: true
+    initial_level: 20
+    thresholds:
+      wary: 0
+      neutral: 25
+      friendly: 50
+      trusted: 75
+  emotional_state:
+    enabled: true
+    baseline_mood: "wary"
+    volatility: 0.4
+    decay_rate: 0.2
+  goals:
+    enabled: true
+    active_goals:
+      - id: "next_score"
+        description: "Find the next profitable piece before anyone else"
+        priority: 8
+        keywords: ["buy", "sell", "price", "cargo", "wreck"]
+  gossip:
+    enabled: true
+    max_rumors: 4
+    interests: ["trade"]

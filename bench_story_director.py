@@ -121,6 +121,16 @@ WORLDS = {
         "active_npc":       "captain_reva",
         "story_runtime_rel": "data/worlds/port_blackwater/story",
     },
+    # Two-zone PB variant for the zone layer + lifecycle benches.
+    # Same lore as the base PB but split across dock_district and
+    # lighthouse_bluffs with one mobile NPC (varro). Used for Phase 1
+    # zone tests and all Phase 2 lifecycle benches.
+    "port_blackwater_zoned": {
+        "world_dir_rel":    "data/worlds/port_blackwater_zoned",
+        "world_name":       "Port Blackwater",
+        "active_npc":       "captain_reva",
+        "story_runtime_rel": "data/worlds/port_blackwater_zoned/story",
+    },
     # Synthetic worlds for scaling tests. Generate with
     # ``python generate_synthetic_world.py --towns N --npcs-per-town M
     # --output synthetic_<total>``. The active_npc is auto-resolved at
@@ -346,6 +356,12 @@ def main():
                              "Lets the bench simulate a Director that cooperates with a "
                              "main game loop instead of monopolizing the CPU. 0 = no "
                              "budget (back-to-back ticks, the default).")
+    parser.add_argument("--active-zones", type=str, default=None,
+                        help="Comma-separated list of zone names to set as "
+                             "active for the bench run. Empty/omitted = "
+                             "world-wide mode (current behaviour). Only "
+                             "meaningful for worlds with NPCs that have "
+                             "zone: fields in their profile YAML.")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
@@ -364,6 +380,10 @@ def main():
     engine, tmp_pie, tmp_npc = boot_engine(model_path, args.reset, world_spec)
     engine.story_director.set_narration_mode(args.narration_mode)
     print(f"Narration mode: {args.narration_mode}")
+    if args.active_zones:
+        zone_list = [z.strip() for z in args.active_zones.split(",") if z.strip()]
+        engine.story_director.set_active_zones(zone_list)
+        print(f"Active zones: {zone_list}")
     print(f"Lore file: {engine.story_director._lore_file}")
     print(f"Examples:  {engine.story_director._examples_file} "
           f"({len(engine.story_director._examples)} entries)")

@@ -1,0 +1,44 @@
+# Story Director zone configuration for Port Blackwater zoned variant.
+#
+# Phase 1 reads only `target_population`, `min_population`, and
+# `lore_hook` — they become load-bearing in Phase 2b when the birth
+# generation pipeline uses them for population management and
+# LLM prompt context. `role_pool` is for Phase 2b birth templating.
+# `adjacent_to` is informational for now (game client uses it to
+# compute active_zones on zone transitions); the Director doesn't
+# auto-expand to adjacent zones in Phase 1.
+
+zones:
+  dock_district:
+    target_population: 5
+    min_population: 3
+    role_pool:
+      - merchant
+      - dock_worker
+      - fence
+      - harbor_guard
+      - drunk_sailor
+    lore_hook: >-
+      The bustling commercial waterfront of Port Blackwater. Cargo
+      crates, rope coils, hagglers and dockhands. The Drowned Rat
+      tavern crouches near the piers. Smugglers, harbor guards,
+      and merchants rub shoulders here.
+    adjacent_to:
+      - lighthouse_bluffs
+
+  lighthouse_bluffs:
+    target_population: 3
+    min_population: 1
+    role_pool:
+      - keeper
+      - hermit
+      - pilgrim
+      - outcast
+    lore_hook: >-
+      The windswept cliffs above the harbor where the old
+      lighthouse watches (or used to watch) for storms. Silent
+      since the light went dark two months ago. A narrow goat
+      path climbs from the dock district through scrub and
+      broken stone.
+    adjacent_to:
+      - dock_district
