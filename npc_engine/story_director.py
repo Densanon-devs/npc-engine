@@ -1018,6 +1018,21 @@ class StoryDirector:
         self.tick_count: int = 0
         self.last_tick_at: Optional[str] = None
         self.recent_decisions: list[dict] = []  # last 5 actions
+        # Architect's PLANNED focus per NPC, keyed by NPC id, value is
+        # the most recent tick number at which that NPC was selected as
+        # a focus by the architect. UNBOUNDED in entry count — capped
+        # only by the cast size — because the rotation needs to
+        # remember which NPCs were touched many ticks ago so it can
+        # walk a 500-NPC world in true round-robin order. The 5-tick
+        # recent_decisions cap was the bug at scale: after 5 ticks the
+        # earliest NPCs fell off and rotation cycled the same ~15
+        # NPCs forever.
+        #
+        # This is a separate trail from recent_decisions because
+        # recent_decisions records the postgen-rewritten dispatch (which
+        # the wrong-addressee repair may have rerouted to a different
+        # NPC), and for rotation we want the architect's INTENDED focus.
+        self._npc_last_planned_tick: dict[str, int] = {}
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1165,6 +1180,12 @@ class StoryDirector:
             self.tick_count = state.get("tick_count", 0)
             self.last_tick_at = state.get("last_tick_at")
             self.recent_decisions = state.get("recent_decisions", [])[-5:]
+            raw_planned = state.get("npc_last_planned_tick", {}) or {}
+            if isinstance(raw_planned, dict):
+                self._npc_last_planned_tick = {
+                    str(k): int(v) for k, v in raw_planned.items()
+                    if isinstance(v, (int, float))
+                }
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
@@ -1183,6 +1204,7 @@ class StoryDirector:
             "tick_count": self.tick_count,
             "last_tick_at": self.last_tick_at,
             "recent_decisions": self.recent_decisions[-5:],
+            "npc_last_planned_tick": self._npc_last_planned_tick,
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
@@ -1229,8 +1251,26 @@ class StoryDirector:
         # runs so multi-action workers share a single retry slot.
         self._self_rep_retries_this_tick = 0
 
-        snapshot = self._world_snapshot()
+        # Plan first, then build the snapshot — the bounded snapshot
+        # path needs to know which NPCs the architect picked so it can
+        # surface them in the per-tick "active scene". On unbounded
+        # casts (≤ _SNAPSHOT_BOUND_THRESHOLD NPCs) the snapshot ignores
+        # the planned ids and walks every profile, identical to the
+        # pre-bounded behaviour.
         plan = self._architect_plan(actions_per_tick)
+        planned_focus_ids = [npc for (npc, _kind) in plan]
+        # Record the architect's plan in the unbounded planned-focus
+        # trail BEFORE workers run. This is what _pick_focus_npc reads
+        # on the NEXT call to compute least-recently-touched rotation,
+        # and it must not be polluted by postgen rewrites of the
+        # dispatched npc_id. The dict is unbounded in entry count
+        # (capped only by cast size), so on a 500-NPC world the
+        # rotation eventually visits every NPC instead of cycling the
+        # same ~15.
+        next_tick = self.tick_count + 1
+        for npc_id in planned_focus_ids:
+            self._npc_last_planned_tick[npc_id] = next_tick
+        snapshot = self._world_snapshot(planned_focus_ids=planned_focus_ids)
 
         # Try to propose a narrative arc BEFORE workers run so their
         # prompts can reference it. No-op if there's already an active
@@ -1663,7 +1703,88 @@ class StoryDirector:
 
     # ── World snapshot ──────────────────────────────────────────
 
-    def _world_snapshot(self) -> str:
+    # Big-world tunables. The snapshot grows linearly with cast size on
+    # the unbounded path, which dominates the prompt at 100+ NPCs. Above
+    # the bound threshold, the snapshot is capped to a small "active
+    # scene" (planned focus + arcs + recently-touched + recent player
+    # targets, deduplicated, capped at SNAPSHOT_NPC_CAP). Below the
+    # threshold the unbounded snapshot is identical to the pre-bound
+    # behaviour so all existing tests and small-world benches see no
+    # shape change.
+    _SNAPSHOT_BOUND_THRESHOLD = 30
+    _SNAPSHOT_NPC_CAP = 16
+
+    def _select_snapshot_npcs(self,
+                              all_npc_ids: list[str],
+                              planned_focus_ids: Optional[list[str]] = None,
+                              ) -> list[str]:
+        """
+        Pick the subset of NPCs to surface in a bounded world snapshot.
+
+        Selection order (highest priority first):
+          1. Planned focus NPCs for this tick (architect's choice — must
+             always reach the snapshot or the LLM can't reason about
+             them).
+          2. NPCs in any active narrative arc's cast (continuity for
+             multi-tick threads).
+          3. Last 8 distinct NPCs from ``recent_decisions`` (recent
+             activity continuity).
+          4. Last 4 distinct NPCs targeted by ``recent_player_actions``
+             (player reactivity is the highest-stakes signal we have).
+
+        The result is deduplicated, capped at ``_SNAPSHOT_NPC_CAP``, and
+        intersected with the actual profile list (so a stale id from
+        recent_decisions can't crash the snapshot builder).
+        """
+        seen = set()
+        ordered: list[str] = []
+        all_set = set(all_npc_ids)
+
+        def _add(npc_id: str) -> None:
+            if npc_id and npc_id not in seen and npc_id in all_set:
+                seen.add(npc_id)
+                ordered.append(npc_id)
+
+        # 1. Planned focus first
+        for npc_id in planned_focus_ids or []:
+            _add(npc_id)
+
+        # 2. Active arc casts
+        try:
+            for arc in self.arc_planner.active_arcs():
+                for npc_id in (arc.focus_npcs or []):
+                    _add(npc_id)
+        except Exception:
+            pass
+
+        # 3. Recent decisions tail
+        recent_decision_npcs: list[str] = []
+        for d in reversed(self.recent_decisions):
+            actions_in_decision: list[dict] = []
+            if isinstance(d.get("action"), dict):
+                actions_in_decision.append(d["action"])
+            for sub in d.get("sub_actions", []) or []:
+                if isinstance(sub, dict) and isinstance(sub.get("action"), dict):
+                    actions_in_decision.append(sub["action"])
+            for act in actions_in_decision:
+                for key in ("npc_id", "target"):
+                    val = act.get(key)
+                    if isinstance(val, str):
+                        recent_decision_npcs.append(val)
+        for npc_id in recent_decision_npcs[:8]:
+            _add(npc_id)
+
+        # 4. Recent player action targets
+        recent_player_targets = [
+            pa.get("target") for pa in self.recent_player_actions
+            if isinstance(pa.get("target"), str)
+        ]
+        for npc_id in reversed(recent_player_targets[-4:]):
+            _add(npc_id)
+
+        return ordered[:self._SNAPSHOT_NPC_CAP]
+
+    def _world_snapshot(self, planned_focus_ids: Optional[list[str]] = None) -> str:
         """
         Compact world-state description the overseer will reason over.
 
@@ -1671,6 +1792,13 @@ class StoryDirector:
         should never see its own outputs as "world state" or it will echo
         them back and spiral into repetition. The Director's own past
         actions appear in a separate ALREADY DONE block below.
+
+        For worlds with cast size > ``_SNAPSHOT_BOUND_THRESHOLD``, the
+        per-NPC enumeration is capped to a small "active scene" instead
+        of listing every profile in the world. ``planned_focus_ids`` is
+        the per-tick architect plan; passing it ensures the LLM sees
+        whichever NPCs the Python rotation just picked. Below the
+        threshold the snapshot is identical to the pre-bound behaviour.
         """
         pie = self.engine.pie
         lines: list[str] = []
@@ -1678,11 +1806,27 @@ class StoryDirector:
         world_name = self.engine.config.world_name or "Ashenvale"
         lines.append(f"World: {world_name}")
 
+        all_npc_ids = list(pie.npc_knowledge.profiles.keys())
+        cast_total = len(all_npc_ids)
+        if cast_total > self._SNAPSHOT_BOUND_THRESHOLD:
+            selected = self._select_snapshot_npcs(all_npc_ids, planned_focus_ids)
+            lines.append(
+                f"World cast: {cast_total} NPCs (showing {len(selected)} active "
+                f"in scene; the rest exist but are off-camera this tick)"
+            )
+            iter_ids = selected
+        else:
+            iter_ids = all_npc_ids
+
         # NPCs with role + current mood/trust/top goal if available. The
         # top goal is the single biggest piece of motivational fuel for
         # the Director — with it, every NPC in the roster tells the
         # model WHAT THEY WANT, not just what they are.
-        for npc_id, npc in pie.npc_knowledge.profiles.items():
+        profiles = pie.npc_knowledge.profiles
+        for npc_id in iter_ids:
+            npc = profiles.get(npc_id)
+            if npc is None:
+                continue
             role = npc.identity.get("role", "")
             mood, trust = self._peek_npc_state(npc_id)
             bits = [f"{npc_id} ({role})"]
@@ -1711,10 +1855,15 @@ class StoryDirector:
 
         # Recent NON-DIRECTOR events. Filtering by source is critical:
         # feeding Director outputs back in as "world state" causes a
-        # repetition spiral on small models.
+        # repetition spiral on small models. Walk only the selected
+        # ``iter_ids`` so on bounded snapshots we don't pull events from
+        # off-camera NPCs that the LLM has no context for.
         seen = set()
         recent_events: list[str] = []
-        for npc in pie.npc_knowledge.profiles.values():
+        for npc_id in iter_ids:
+            npc = profiles.get(npc_id)
+            if npc is None:
+                continue
             for e in npc.events[-4:]:
                 if getattr(e, "source", "") == "director":
                     continue
@@ -1878,12 +2027,27 @@ class StoryDirector:
         if pending_target:
             return pending_target
 
-        # Layer 2: least-recently-touched rotation
+        # Layer 2: least-recently-touched rotation. Read from the
+        # architect's PLANNED focus dict, not recent_decisions —
+        # otherwise on big-cast worlds the postgen wrong-addressee
+        # repair rewrites the dispatched npc_id to whoever the LLM
+        # named, the rotation never sees the architect's intended NPC
+        # as touched, and rotation oscillates forever between the
+        # alphabetically-first untouched NPC and the LLM's preferred
+        # name. _npc_last_planned_tick is the source of truth for
+        # "what the architect intended", regardless of how the dispatch
+        # actually landed, and it's unbounded in entry count so the
+        # rotation can walk a 500-NPC world in true round-robin order.
         last_touched: dict[str, int] = {npc_id: -1 for npc_id in available}
+        for npc_id, tick_num in self._npc_last_planned_tick.items():
+            if npc_id in last_touched:
+                last_touched[npc_id] = max(last_touched[npc_id], tick_num)
+        # Belt-and-braces: also fold in recent_decisions touches so
+        # legacy callers and tests that populate decisions directly (no
+        # planned-focus entries) still drive rotation. Newer planned
+        # focus entries always win because they're written every tick.
         for d in self.recent_decisions:
             tick_num = d.get("tick", 0)
-            # Aggregate touches across both the canonical "action" field
-            # and any sub-actions stored on multi-action ticks.
             actions_in_decision: list[dict] = []
             if isinstance(d.get("action"), dict):
                 actions_in_decision.append(d["action"])

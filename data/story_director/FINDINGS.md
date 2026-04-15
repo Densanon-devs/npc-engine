@@ -3157,6 +3157,181 @@ python bench_story_director.py --ticks 30 --reset --model qwen_3b \
 
 ---
 
+## Big-world scaling test — 500 NPCs (2026-04-14, phase B fixes)
+
+Two fixes land on top of the phase A baseline:
+
+### Fix 1 — bounded world snapshot
+
+`_world_snapshot()` gains an optional `planned_focus_ids` argument
+and two tunables on `StoryDirector`:
+
+```python
+_SNAPSHOT_BOUND_THRESHOLD = 30
+_SNAPSHOT_NPC_CAP = 16
+```
+
+When the cast size is `<= 30` the snapshot enumerates every profile,
+identical to the pre-fix behaviour (so all existing tests and
+small-world benches see no shape change). When the cast size is
+greater than 30, a new method `_select_snapshot_npcs` picks at most
+16 NPCs in priority order:
+
+1. The architect's planned focus NPCs for this tick (always first,
+   so the LLM's first-name fixation latches onto a Python-chosen
+   NPC instead of whatever is alphabetically first in the cast).
+2. NPCs in any active narrative arc's cast (continuity for
+   multi-tick threads).
+3. Last 8 distinct NPCs from `recent_decisions` (recent activity).
+4. Last 4 distinct NPCs targeted by `recent_player_actions` (player
+   reactivity is the highest-stakes signal).
+
+Capped at `_SNAPSHOT_NPC_CAP`, deduplicated, intersected with the
+actual profile list so a stale id can't crash the snapshot builder.
+The snapshot also gains a one-line header: `World cast: 500 NPCs
+(showing 16 active in scene; the rest exist but are off-camera this
+tick)` so the LLM knows the world is bigger than what it sees. The
+"recent organic events" aggregation also walks only the bounded
+selection, not all 500 NPCs, so off-camera gossip can't leak into
+the prompt as recent events.
+
+`tick()` now plans BEFORE building the snapshot so the bounded path
+can include the architect's choices.
+
+### Fix 2 — architect-driven rotation via unbounded planned-focus dict
+
+The phase A finding was that the LLM/postgen junction collapses
+rotation at scale. The deeper bug behind that is:
+`_pick_focus_npc` was reading `recent_decisions` to compute
+"last touched", and `recent_decisions` is
+
+  - capped at 5 entries (so on a 500-NPC world, NPCs touched 6+
+    ticks ago fall off and become "untouched" again), and
+  - polluted by postgen wrong-addressee rewrites (so the npc_id
+    recorded as "touched" is whoever the LLM actually named, not
+    the architect's planned focus).
+
+Both problems are fixed by a new `_npc_last_planned_tick: dict[str,
+int]` on `StoryDirector` that records every architect pick across
+the entire session. **Unbounded in entry count** (capped only by
+cast size — at most 500 entries on a 500-NPC world) and populated
+from the architect's plan, not the postgen dispatch. Persisted
+across restarts in `state.json` under the `npc_last_planned_tick`
+key. `_pick_focus_npc` reads from it first; the legacy
+`recent_decisions` walk stays as a belt-and-braces fallback for
+tests that populate decisions directly.
+
+This is a load-bearing change for any cast bigger than ~15 NPCs.
+Without it, rotation thrashes within whatever fits in the 5-tick
+sliding window of `recent_decisions`, and large worlds never
+achieve real coverage no matter how the snapshot is bounded.
+
+### Results — 30 ticks × 3 actions, Qwen 2.5 3B, terse, synthetic_500
+
+| Run                                | NPCs touched | Max touches | Mean tick | Snapshot tok | RSS peak |
+|------------------------------------|--------------|-------------|-----------|--------------|----------|
+| Phase A baseline (unbounded)       | 18 / 500     | 5           | 20.62s    | 4751         | 3409 MB  |
+| Phase B fix 1 only (bounded snap)  | 18 / 500     | 5           | 5.48s     | 308          | 3400 MB  |
+| Phase B fix 1 + 2 (bounded + rot)  | **90 / 500** | **1**       | 13.20s    | 328          | 7304 MB  |
+
+v2 trace logs: `logs/syn500_bounded_30.json` and
+`logs/syn500_bounded_rotated_30.json`.
+
+### What the fixes did and didn't do
+
+**1. Bounded snapshot won the prompt-size and latency war for free.**
+Snapshot dropped from 4751 to ~308 tokens (15x smaller). Per-tick
+latency dropped from 20.62s to 5.48s (3.8x faster). Total wall time
+on the 30-tick stress dropped from 10.3 minutes to 2.7 minutes. RSS
+peak essentially unchanged (3409 → 3400 MB) — the snapshot is a
+prompt-side win, not a memory-side win. 0 coercions, 0
+contradictions, 88 → 90 ledger entries, 3 arcs proposed/active —
+all the structural metrics held steady through the change.
+
+But coverage stayed broken: still 18 NPCs / 500 touched, still 5
+max touches per NPC. The bounded snapshot gives the LLM less to
+fixate on, but the LLM's first-name fixation was never really the
+root cause. The root cause was the rotation feedback loop reading
+postgen-rewritten dispatches.
+
+**2. The unbounded planned-focus dict fixed coverage decisively.**
+Coverage jumped 5x — from 18 NPCs (3.6%) to **90 NPCs (18%)** in 30
+ticks. Max touches per NPC dropped from 5 to 1. The math is now
+exactly what perfect round-robin should produce: 30 ticks × 3
+actions/tick = 90 picks = 90 unique NPCs, each touched once. At
+this rate, full 500-NPC coverage takes ~167 ticks (~37 minutes
+wall on the 13.2s/tick path).
+
+**3. The rotation fix paid a latency cost.** Per-tick latency went
+from 5.48s back up to 13.20s — a 2.4x regression vs phase B fix 1
+alone. The cause is KV-cache cliffs: with the broken rotation, the
+LLM saw the same 18 NPCs in the snapshot every tick, so the prompt
+prefix matched between calls and llama-cpp reused cached attention
+state. With correct rotation, every tick puts 3 brand-new NPC names
+in the snapshot, the prompt prefix doesn't match, and llama-cpp
+has to recompute from a much earlier point in the sequence. The
+broken rotation was accidentally optimizing for KV cache reuse by
+picking the same NPCs forever.
+
+Net vs the phase A baseline: **1.6x faster AND 5x better coverage**
+(13.20s vs 20.62s per tick, 90 vs 18 unique NPCs). Net vs phase B
+fix 1 alone: 2.4x slower, 5x better coverage. The latency
+regression is the cost of doing real coverage on this model + this
+prompt structure.
+
+**4. RSS climbed to 7304 MB peak (vs 3400 MB on phase B fix 1).** 
+Bench reported +3940 MB growth across the 30-tick run, almost double
+the previous run. This is suspicious and worth verifying — Windows
+psutil RSS reports working set, which can grow as the KV cache
+fills with novel-prompt content the model hasn't paged out yet. The
+KV cache for Qwen 2.5 3B at 16K context is roughly 4 GB upfront,
+which matches the gap. Worth re-measuring on Linux and with an
+explicit `llama_kv_cache_clear` between ticks to confirm whether
+this is real or instrumentation noise. Either way it's a parallel-
+to-game red flag — 4 GB of resident memory beyond the model is more
+than the headroom most games will tolerate.
+
+**5. Schema enforcement and arcs continued working at scale.** 0
+coercions, 0 contradictions, 90 ledger entries, 3 arcs proposed
+and active across both phase B runs. The defensive layers and the
+arc planner don't degrade with the rotation fix.
+
+### What's queued after this
+
+The latency regression and the RSS spike both point at the same
+root: **KV cache cold-misses on novel-NPC prompts**. Three
+candidate mitigations to test next session:
+
+1. **Burst rotation**: instead of picking 3 distinct NPCs per tick,
+   pick 1 focus NPC and stay with that NPC for K consecutive ticks
+   before rotating. Trades coverage breadth for cache reuse depth.
+   K=4 means ~25% as many cache misses per tick.
+2. **Smaller model**: re-run with Qwen 2.5 0.5B + bounded snapshot
+   + rotation fix. Smaller model = smaller KV cache = lower per-
+   tick latency cost when cache misses. The 0.5B re-bench was
+   already queued from the earlier work.
+3. **Explicit KV cache management**: call `llama_kv_cache_clear`
+   before each tick to force cold-cache behaviour, then measure
+   what the actual recompute cost is without phantom RSS retention.
+
+Coverage at this rate is sufficient — 90 unique NPCs in 30 ticks
+of 3-action ticks. A real game running parallel-to-this would tick
+slowly enough that 167 ticks to cover all 500 is many hours of
+wall time, totally fine.
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# Phase B run with bounded snapshot + rotation fix
+python bench_story_director.py --ticks 30 --reset --model qwen_3b \
+    --world synthetic_500 --actions-per-tick 3 \
+    --narration-mode terse --log logs/syn500_bounded_rotated_30.json
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
