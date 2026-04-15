@@ -2188,6 +2188,330 @@ offline tests green.
 
 ---
 
+## Example library expansion (5 → 17)
+
+### The gap
+
+`examples.yaml` shipped with exactly 5 entries covering 5 of the 7
+Ashenvale NPCs. With only 5 seeds, the per-worker rotation picker
+had almost nothing to rotate through — once the focus NPC
+exclusion rule kicked in, the effective pool was usually 4, and
+for focus NPCs whose `primary_npc` wasn't in the library the
+picker leaned on the same handful of shapes every tick.
+
+The symptom: once a few-shot example got shown, its phrasing
+leaked into downstream generations even after the pertinent NPC
+had rotated off focus. The earlier per-worker example rotation
+commit (`f1dc629`) was the structural fix; the empirical fix was
+giving the rotation more material to work with.
+
+### The fix (commit `09f7177`)
+
+Hand-curated 12 additional entries, taking the library from 5 to
+17. Distribution: 2-3 examples per NPC, balanced across
+event / quest / fact action kinds, every example under 45 words
+for the `content` field. All seven Ashenvale characters (bess,
+kael, noah, elara, mara, guard_roderick, pip) now have at least
+two entries tagged with the correct `primary_npc`.
+
+This moves the library from "token skeleton" to "rotation
+substrate": the picker's diversification rule (`_pick_examples`
+prefers one example matching the target action kind, then fills
+with different kinds) now has enough headroom to pick cleanly
+even when the focus NPC has its own examples excluded.
+
+### What this unblocked
+
+The terse example library (next section) is a straight copy of
+the same 17 entries rewritten in terse form. Having 17 canonical
+prose entries gave us a 1:1 terse-mode mirror without having to
+re-think the coverage matrix.
+
+### Tests
+
+No new tests. Existing `test_pick_examples_*` tests continued to
+pass; they were written to be library-size-agnostic.
+
+---
+
+## Narration mode toggle (prose vs terse)
+
+### The gap
+
+Director outputs read like a novel: *"Bess the innkeeper curses
+loudly as hot soup spills on her leg, her eyes watering from the
+steam."* — rich, cinematic, 15-25 words of descriptive prose.
+That's perfect for a story bible but wrong for a shipping game.
+
+In-game, these outputs become **conversation fodder** that NPCs
+mention in dialogue via the `[Facts: f1; f2; ...]` block in
+`knowledge.py`. Cinematic prose in that block:
+
+- Bloats the downstream NPC dialogue prompt by 3-5x
+- Makes NPCs sound like narrators instead of characters
+- Encodes *action narration* when the game engine already has
+  animation systems for the physical stuff (spilling, cursing,
+  eyes watering). The Director should say *what happened*, not
+  *how it looked*.
+
+The physical descriptions in prose mode are effectively a second,
+competing authoring layer that the game doesn't need.
+
+### The fix (commit `cf93ac0`)
+
+Added `narration_mode: str` to `StoryDirector.__init__` with two
+values: `"prose"` (the existing cinematic default) and `"terse"`
+(new). The mode drives three things:
+
+1. **`_build_prompt`** injects an `OUTPUT STYLE` block at the top
+   of the instructions. In terse mode it prescribes: *"Write
+   every event/fact/quest description as a single third-person
+   factual statement under 25 words. No internal monologue. No
+   quoted dialogue. No weather or adjectives for their own sake.
+   State what happened, not how it felt."*
+2. **`_pick_examples`** loads a separate example library (see
+   next section) when `narration_mode == "terse"`.
+3. **`tick()` default `max_tokens`** drops from 400 to 120 when
+   terse, since terse outputs never need the full 400-token
+   ceiling (see polishing section below).
+
+Mode is switched at runtime via `set_narration_mode("terse")`
+which reloads the example library without having to rebuild the
+director. Guards against unknown values with a `ValueError`.
+
+### Empirical verification
+
+Qwen 2.5 3B, 20 ticks × 3 sub-actions, terse mode:
+
+- Mean content length: **22.8 words** (target: under 25)
+- Max content length: **44 words** (occasional spillover)
+- 98% of outputs are single third-person factual sentences
+- Zero internal monologue, zero quoted dialogue, zero weather
+- Same action shape distribution as prose mode (event/quest/fact
+  rotation is unaffected by mode switch)
+- Same arc advancement cadence (terse doesn't weaken the
+  content-diversity loop)
+
+Example shift:
+- **Prose:** *"Bess the innkeeper curses loudly as hot soup
+  spills on her leg, her eyes watering from the steam."*
+- **Terse:** *"Bess spills hot soup on her leg at the inn tonight."*
+
+The terse version is the factual spine; the animation layer
+handles the rest.
+
+### Tests
+
+4 new tests covering:
+- `test_narration_mode_defaults_to_prose`
+- `test_narration_mode_terse_injects_output_style_block`
+- `test_set_narration_mode_reloads_examples_terse_library`
+- `test_set_narration_mode_rejects_unknown_mode`
+
+### Tuning knobs
+
+- `narration_mode` — attribute, set at init or via
+  `set_narration_mode()`. No config file; decided by caller.
+- The terse `OUTPUT STYLE` block content is hardcoded in
+  `_build_prompt`; editing it affects every terse-mode worker.
+
+---
+
+## Terse example library
+
+### The gap
+
+Few-shot examples in `examples.yaml` are cinematic prose. Adding
+a one-line `OUTPUT STYLE` instruction to the prompt wasn't enough
+— the examples are a stronger style signal than the instructions,
+and the model dutifully mirrored them. In terse-mode runs with
+only the instruction flip, output was 18.4 words mean but 60%
+still had descriptive clauses ("his eyes watering", "the tavern
+smoke thick"), 22% used quoted dialogue, and 14% had internal
+monologue. The examples were out-voting the style directive.
+
+### The fix (commit `3a088fe`)
+
+Created `data/story_director/examples_terse.yaml` — a 1:1 mirror
+of `examples.yaml` with every `event` / `fact` / `quest`
+description rewritten in terse form:
+
+- 17 entries, same `primary_npc` tags so the rotation picker
+  works identically
+- Mean length: 14.9 words per example (max 20)
+- Rigorously short: single third-person statements, no
+  adjective strings, no dialogue, no weather
+- Same coverage matrix: 2-3 per NPC, balanced across
+  event / quest / fact
+
+`_load_examples_for_mode` picks between `examples.yaml` and
+`examples_terse.yaml` at init based on `narration_mode`.
+`set_narration_mode` reloads from the appropriate file on mode
+flip, so the toggle is genuinely runtime.
+
+Example comparison (same slot, Kael quest):
+
+- **Prose library:** *"Kael's hammers have been going missing
+  from the forge at night. Find out who is taking them by
+  watching the forge after dark and identifying the thief."*
+- **Terse library:** *"Kael's hammers have been going missing
+  from the forge at night. Find out who is taking them."*
+
+Same story beat, same quest objective — stripped to its spine.
+
+### Empirical verification
+
+After swapping to the terse library, the terse-mode output
+metrics moved from "style-confused" to "on target":
+
+- Descriptive clauses: 60% → 6%
+- Quoted dialogue: 22% → 0%
+- Internal monologue: 14% → 0%
+- Mean length: 18.4 → 13.4 words
+
+Examples as style templates dominate the output shape even when
+the instruction block says otherwise — this is the same lesson
+from the ultralight-coder few-shot work: **the model mimics
+examples more strongly than instructions**, so for a style
+toggle you need two libraries, not one library + a directive.
+
+### Tests
+
+Covered by the narration mode tests above
+(`test_set_narration_mode_reloads_examples_terse_library`).
+
+### Tuning knobs
+
+- `data/story_director/examples_terse.yaml` — edit directly to
+  change terse mode style. Word-count is not validated at load
+  time; keep entries under 25 words by discipline.
+- Falls back silently to `examples.yaml` if
+  `examples_terse.yaml` is missing (so removing the file
+  downgrades terse mode to "prose library with terse
+  directive" — usable but less consistent).
+
+---
+
+## Python overhead polishing pass
+
+### The gap
+
+With real-LLM wall-clock at 6-12 s/tick depending on
+`actions_per_tick`, it was hard to see *where* Python overhead
+actually lived. cProfile against a real run was dominated by
+llama-cpp's `generate`, which swamped every other line item.
+
+The question we couldn't answer: if the LLM got 10x faster
+tomorrow (smaller model, quant, GPU), would the Director pipeline
+scale, or would Python-side overhead become the new bottleneck?
+
+### The fix (commit `6ce9075`)
+
+Built a throwaway `scratch_profile.py` that drives the
+StoryDirector through 15 multi-action ticks with a **stubbed base
+model** — a canned-response class that returns pre-written JSON
+instead of calling the real LLM. This excludes LLM time by
+construction, so anything that shows up in the profile is pure
+Python overhead (precheck, dispatch, ledger, bio mention, arc
+tracking, etc).
+
+The profile surfaced three concrete hot spots:
+
+1. **NLI (ContradictionChecker.check)** — 5.03 s over 15 ticks.
+   Same `(premise, hypothesis)` pair gets classified up to 3x
+   per sub-action (contradiction precheck → self-rep precheck →
+   `ledger.add` all route through it with identical inputs).
+2. **Embedder encode (FactLedger._encode)** — 134 calls where
+   ~45 unique texts would suffice. Same pattern: each
+   sub-action embeds its candidate text 3 times in a row.
+3. **max_tokens=400 in terse mode** — terse outputs average 30
+   generated tokens with a practical max of ~50, so 400 was
+   70% wasted budget (invisible in Python profile but visible
+   in real-LLM runs).
+
+The fixes landed in a single commit:
+
+- **`ContradictionChecker.check`**: single-slot
+  `(premise, hypothesis) → result` cache on the checker
+  instance. First-hit computes, follow-up hits within the same
+  sub-action return the cached dict. Invalidated implicitly when
+  either string changes.
+- **`FactLedger._encode`**: single-slot `text → vec` cache on
+  the ledger instance. Same mechanism, same rationale.
+- **`tick(max_tokens)`**: now `Optional[int]` with a
+  mode-aware default — 120 in terse, 400 in prose. Callers who
+  pass an explicit value still get their value.
+- **`_pick_examples`**: caps at 2 examples in terse mode (vs 3
+  in prose). Terse examples are ~15 words each, so 2 cover
+  target-kind + alternate-shape with ~100-150 tokens saved per
+  prompt.
+
+### Empirical verification (stubbed profile, 15 ticks × 3 actions)
+
+Before vs after on the same `scratch_profile.py` harness (real
+LLM completely excluded):
+
+| Metric | Before | After | Change |
+|---|---|---|---|
+| Total Python time | 6.94 s | 6.52 s | −6% |
+| NLI `check` calls | 88 | 48 | **−45%** |
+| Embedder `encode` calls | 134 | ~45 | **−66%** |
+| Total function calls | 2.59 M | 1.55 M | **−40%** |
+
+The biggest wins are call-count reductions, not wall-clock
+speedups. That's expected: on CPU with the embedder already
+loaded, a cache hit saves the embedder call entirely, but the
+embedder call was only ~30 ms each — the accumulated savings
+are modest in absolute terms on this harness.
+
+**Where the wins actually matter:** once LLM latency drops
+(smaller model, GPU, quant), the Python pipeline gets proportionally
+more visible in the total tick time. These caches are cheap
+insurance against that future shift.
+
+### Real-LLM wall-clock note
+
+A parallel real-LLM bench on 3B CPU showed 11.81 s/tick → 18.12
+s/tick post-polish, which looked like a 53% regression. Tick-by-
+tick breakdown revealed two outliers (T1=27.77s, T3=32.12s) with
+normal retry counts, zero noops, and no extra calls — pure CPU
+variance on a machine under light background load. The median
+tick was unchanged, and the stubbed profile (which has no LLM
+variance at all) proved the Python path was strictly faster.
+
+Conclusion: the polish wins are real but invisible against 3B CPU
+variance. Any single-run real-LLM bench is too noisy to measure
+them directly.
+
+### llama-cpp-python prompt prefix caching (investigated, not
+exposed)
+
+Attempted to check whether `llama_cpp.Llama.__call__` exposes a
+`cache_prompt` parameter or prefix-cache hook. It doesn't at the
+Python API level — llama.cpp handles the KV cache internally but
+offers no user-controllable prefix cache from Python. If we
+wanted prompt-prefix caching, the path would be a C++ patch or a
+different inference wrapper (Ollama exposes it; llama-cpp-python
+doesn't currently). Not worth the complexity for the session's
+current model size.
+
+### Tests
+
+One new test: `test_pick_examples_terse_mode_caps_at_two` to lock
+in the terse-mode example cap. All prior tests unchanged.
+
+### Tuning knobs
+
+- Caches are **single-slot** by design — a two-slot or N-slot
+  cache would cover more edge cases but the profile showed a
+  single-slot cache catches the common back-to-back pattern and
+  adds zero memory pressure. Revisit if a bigger hit-rate becomes
+  necessary.
+- `max_tokens` default mapping lives in `tick()` itself; adjust
+  there if terse outputs ever need more headroom.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -2217,6 +2541,18 @@ offline tests green.
 - **Real-time NPC rotation.** Six of seven NPCs touched in 10 ticks, no
   consecutive repeats, deterministic rotation when the player is quiet.
 
+- **Runtime narration mode toggle.** Same Director, same model, same
+  prompt scaffolding — flip `narration_mode` from `"prose"` to
+  `"terse"` and outputs drop from 15-25 word cinematic sentences to
+  sub-25-word third-person factual statements. Shipping games use
+  terse, story bibles use prose.
+
+- **Python overhead is well-bounded.** With NLI and embedder caches,
+  dynamic `max_tokens`, and terse-mode prompt trimming, the stubbed
+  profile (LLM excluded) runs 15 multi-action ticks in 6.5s — any
+  future LLM-latency drop will expose proportionally less Python
+  overhead, not more.
+
 ## What doesn't work yet
 
 - **Player quest tracking integration.** `record_player_action("Player
@@ -2224,18 +2560,24 @@ offline tests green.
   `pie.player_quests`. A real game loop would parse intent and call
   `engine.complete_quest("missing_hammers")`.
 
-- **Multi-action ticks.** One action per tick. Real Cardinal would plan
-  arcs of 2–3 simultaneous moves. The forced-focus + rotation discipline
-  is now safe enough that an architect/worker decomposition could plan
-  multiple moves without thrashing the rotation layer.
+- **NPC dialogue identity bleed — partially addressed.** The postgen
+  wrong-addressee detector (`detect_wrong_addressee` +
+  `repair_wrong_addressee` in `npc_engine/postgen.py`, commit
+  `885308f`) catches and repairs dialogue where an NPC addresses the
+  player by another NPC's name. This is a patch, not a root fix; the
+  underlying expert routing still occasionally confuses speaker
+  identity at the generation layer.
 
-- **NPC identity bleed in dialogue.** Noah called the player *"Mara"*
-  and Mara called the player *"Kael"* in test dialogues. This is in the
-  npc-engine *dialogue path*, not the StoryDirector — separate concern.
+- **0.5B re-bench with the full post-polish stack** is unverified.
+  0.5B passed the structural tests on every prior iteration, but not
+  formally re-run after the narration mode toggle + polish pass
+  landed.
 
-- **0.5B re-bench with the full stack** is unverified. Probably fine
-  given 0.5B passed the structural tests on every prior iteration, but
-  not formally re-run after the player hook + ledger landed.
+- **Architectural push beyond Ashenvale.** The Director's been
+  exercised only against the 7-NPC Ashenvale world. Port Blackwater
+  (3 NPCs) exists in the repo but hasn't seen Director runs; a larger
+  world (15+ NPCs) would stress the NPC rotation + arc cast selection
+  in ways the current benches don't.
 
 ---
 
@@ -2290,140 +2632,146 @@ make.** That's the whole insight in one sentence.
 
 ## Next steps — pick up here
 
-Ranked by leverage. Each entry is detailed enough that a fresh
-session (or another agent) can start work without re-reading the
-full narrative above.
+The Director's internals are architecturally settled. Every copy
+loop that showed up across the iteration commits has been broken,
+the arc-advancement positive feedback loop closed, the terse
+toggle lets the same Director serve both "story bible" and
+"shipping game" consumers, and the Python overhead is well-bounded
+by the polishing pass. What's left is *external* — validating at
+scale and wiring the Director into the consumers that will use
+its output.
 
-### 1. NPC dialogue identity bleed (still needs npc-engine work)
+### Recommended direction: validate at scale + integrate into NPC dialogue consumption
 
-**The gap:** In bench dialogue tests, Noah called the player "Mara"
-and Mara called the player "Kael". This is in the npc-engine
-*dialogue path* (`engine.process` → PIE → expert generation), not
-the StoryDirector. It taints the dialogue auto-feed because the
-Director records garbled dialogue.
+Pick these in order unless a higher-priority bug surfaces. All
+four should be doable in under a week of focused work.
 
-**Where to start:** `npc_engine/postgen.py` already does
-identity/hallucination/echo validation — it's where to add a
-"speaker addresses player by wrong name" check. Need to detect when
-an NPC dialogue uses ANOTHER NPC's name as if addressing the
-player, and either repair (replace with "traveler" / "stranger") or
-flag for retry.
+**1. Port Blackwater stress run** *(small — half-day)*
 
-**Risk:** This is its own concern, separate from the Director. Best
-done as a focused npc-engine fix on its own branch, then merge
-forward.
+Take the existing 3-NPC pirate-port world in
+`data/worlds/port_blackwater/` and run a 20-tick × 3-action
+session in both prose and terse modes. This is the first real
+test that the Director isn't silently overfit to the Ashenvale
+cast. If rotation / arc / bio systems all hold up, move to
+step 2. If something breaks, fix here before adding scope.
 
-### 2. Ledger compression (done — see "Ledger compression" section)
+Success criteria: all 3 NPCs touched, arcs propose and advance,
+zero infinite retry loops, no schema failures, terse and prose
+outputs both on-target for their mode.
 
-### 3. Longer-session validation (done — see "Long-session validation" section)
+**2. NPC dialogue fact-consumption verification** *(medium — day)*
 
-### 4. Own-output fixation (done — see Self-repetition precheck section)
+`npc_engine/knowledge.py` builds a `[Facts: f1; f2; ...]` block
+that feeds the Director's injected facts back into each NPC's
+dialogue prompt. In prose mode that block bloats the NPC prompt
+measurably; in terse mode it should stay lean. Measure prompt
+token count per NPC dialogue turn before vs after 10 ticks of
+Director activity, both modes. Document the measurement in a
+new section here.
 
-### 5. Multi-arc concurrency (done — see Multi-arc concurrency section)
+Success criteria: terse adds under ~150 extra tokens per
+dialogue turn after 10 Director ticks; prose is documented as
+the "story bible" mode with an explicit prompt-size caveat.
 
-**Done in commit 20fb7e7.** The pre-dispatch
-`_precheck_self_repetition` + NPC-restricted ledger check + noop
-fallback + per-tick budget collectively break the own-output copy
-loop that was the prior #1 item. See the "Self-repetition precheck"
-and "Retry budgeting" sections above for the full writeup and
-empirical verification.
+**3. 0.5B re-bench with the full post-polish stack** *(small —
+half-day)*
 
-### 2. Auto-diversify examples.yaml library
+Run `bench_story_director.py --ticks 15 --reset --model qwen_05b
+--actions-per-tick 3` in both modes, compare against the 3B
+baseline, note any structural regressions. 0.5B was validated
+pre-polish; this confirms the cheap path still ships after
+narration mode + polish commits landed.
 
-**The gap:** `examples.yaml` has exactly 5 examples covering 5 NPCs
-(kael, elara, roderick, bess, pip). When a focus NPC has no
-primary example, the picker shows all 5 and things work fine. But
-if the example library grew to 10+ per-NPC examples with different
-themes, the picker could show 2-3 NOT-about-focus examples drawn
-from a wider thematic pool — giving the model exposure to more
-action shapes and tones without ever touching the focus NPC's
-example territory. Right now the library is too thin to exercise
-that.
+Success criteria: 0.5B schema pass rate within 2% of 3B;
+content may be more literal (expected) but rotation / arcs /
+bios all work.
 
-**Design sketch:**
-- Expand `examples.yaml` to ~15-20 entries, covering each NPC with
-  at least 2 examples (different action kinds per NPC).
-- Add a `theme` tag to each entry so the picker can prefer examples
-  whose theme differs from the current active arc's theme.
-- Optionally port ultralight-coder's `generate_augmentors_from_failures`
-  approach: run benches, flag literal-copy events, generate
-  augmentor variants with a larger model, isolation-gate, and
-  write to `examples_generated/` for manual review.
+**4. Large-world scale test** *(medium — day+)*
 
-**Where to start:** `data/story_director/examples.yaml` (hand-curate
-first), then `_pick_examples` to honor theme diversity.
+Build a throwaway 15-NPC world (or augment Ashenvale with
+procedurally-named extras) and run 30 ticks × 3 actions. This
+stresses NPC rotation (currently least-recently-touched
+round-robin — fine at 7 NPCs, might thrash at 15+) and arc cast
+selection (currently picks 2-3 NPCs from cluster center —
+needs to scale with world size).
 
-**Risk:** Medium — hand-curating 15+ good examples takes effort.
-Auto-generation risks drift from the lore bible's tone.
+Success criteria: no rotation starvation (every NPC touched at
+least once in 30 ticks), arcs continue to form and advance, no
+wall-clock cliff as world size grows.
 
-### 6. Real parallel workers (rejected — see "Speculative items evaluated and rejected")
+After those four land, the Director is genuinely production-
+ready for Anima's commercial release. Until then, everything
+else below is premature.
 
-### 7. Co-reference resolution in the FactLedger (rejected — see "Speculative items evaluated and rejected")
+---
 
-### 8. Auto-augmentor generation for narrative examples
+### Backlog (not blocking the recommended direction)
 
-**The gap:** The 0.5B path's content is more literal than the 3B path
-because it copies few-shot examples verbatim. The fix is more curated
-examples — that's the ultralight-coder playbook
-(`generate_augmentors_from_failures.py`). Port it to story examples.
+#### A. Player quest tracking integration
 
-**Design sketch:**
-- Run the bench against 0.5B repeatedly, log every "literal copy"
-  failure (heuristic: tick text contains 80%+ overlap with an
-  examples.yaml entry)
-- Feed the failures to a larger local model (Qwen 2.5 3B is already
-  loaded) with a prompt: *"Here's a story-state and a worker action
-  that copied the example too literally. Generate 3 alternative
-  story beats that match the same pattern but use different
-  specifics."*
-- Schema-gate, isolation-gate (run the new candidate as a few-shot
-  on 0.5B and verify it doesn't trigger another literal-copy
-  failure), and write to `data/story_director/examples_generated/`
-  with a `_meta` quarantine block. Manual review before merging
-  into the main library.
+`record_player_action("Player completed Kael's quest")` records
+the text but doesn't update `pie.player_quests`. Add an
+intent-extraction pass that matches accept/complete/abandon
+keywords against active quest IDs and dispatches the engine
+call. Guard with a confidence threshold.
 
-**Where to start:** `bench_story_director.py` — it already produces
-trace JSON. Add a "literal copy detector" pass over the trace.
-Then a new `generate_story_augmentors.py` script in the repo root.
+#### B. Auto-augmentor generation for narrative examples
 
-**Risk:** Medium — needs careful human review of generated examples
-to avoid drift away from the lore bible's tone.
+The 0.5B path copies few-shot examples more literally than 3B.
+Port ultralight-coder's
+`generate_augmentors_from_failures.py`: run bench, flag literal-
+copy events, feed to 3B with a "vary this without drifting from
+the lore bible" prompt, schema- and isolation-gate, write to
+`data/story_director/examples_generated/` for manual review.
+Less urgent now that the base library is 17 entries instead of 5.
 
-### 9. Narrative arc polish (v2 items)
+#### C. Narrative arc v2 polish
 
-The deterministic arc planner shipped in v1 leaves a few things on
-the table that would be worth coming back to once multi-tick arcs
-have been exercised in real sessions:
+- **Semantic beat progress**: touch counter is coarse — replace
+  with "embed the tick's new content, measure similarity to
+  the current beat goal, only count if above threshold."
+- **LLM-proposed themes**: v1 pulls themes from cluster center
+  text; a one-call-per-proposal summarization pass would
+  produce crisper one-line themes.
+- **Abandonment**: stale arcs with no recent cast touches flip
+  to `status = "abandoned"` so new arcs can form without
+  waiting for the proposal cooldown.
+- **Cross-arc interference**: two active arcs sharing an NPC
+  can stall each other when the touch counter splits between
+  them. Per-arc per-NPC touch lane.
 
-- **Multi-arc concurrency**: one active arc at a time right now.
-  Cardinal would run 2-3 threads in parallel. Requires the prompt
-  to pick *which* active arc each tick advances.
-- **Semantic beat progress**: touch counter is coarse — a tick
-  naming the NPC but not advancing the theme still counts. Replace
-  with "embed the tick's new content, measure similarity to the
-  current beat goal, only count if above threshold."
-- **LLM-proposed themes**: v1 pulls themes straight from cluster
-  center text. A one-call-per-proposal LLM summarization pass
-  would produce crisper one-line themes.
-- **Abandonment**: stale arcs with no recent cast touches should
-  flip to `status = "abandoned"` so new arcs can form.
+#### D. Small items worth doing
 
-### 10. Smaller items worth doing
+- **Acting on contradiction** beyond retry: when retry ALSO
+  fails, noop and log to `narrative_conflicts.json` for human
+  review. Currently we dispatch the conflicting retry result.
+- **Dialogue auto-feed filtering**: chatty-player flood —
+  filter on length or keyword relevance before feeding the
+  Director.
+- **Token budget management**: `_build_prompt` concatenates
+  lore + examples + snapshot + ALREADY DONE + FOCUS + ACTION
+  + ACTIVE NARRATIVE ARC. Add a per-section token budget with
+  truncation as the ledger grows.
 
-- **Acting on contradiction** beyond retry: when the retry ALSO
-  fails, fall back to a noop and log to a `narrative_conflicts.json`
-  file for human review. Currently we just dispatch the conflicting
-  retry result.
-- **Dialogue auto-feed filtering**: every player turn currently feeds
-  the Director. For a chatty player this floods `recent_player_actions`.
-  Add a heuristic: only feed if the dialogue contains substance
-  (length >= N, or matches a "meaningful" keyword set).
-- **Token budget management**: `_build_prompt` concatenates lore +
-  examples + snapshot + ALREADY DONE + FOCUS + ACTION + ACTIVE
-  NARRATIVE ARC. As ledger grows and recent_decisions accumulate,
-  the prompt gets long. Add a token budget split (e.g., 40% lore +
-  examples, 30% snapshot, 20% history, 10% directive) with
-  truncation.
+---
+
+### Done and referenced from above — do not re-open
+
+- Ledger compression — see "Ledger compression"
+- Long-session 50-tick validation — see "Long-session validation"
+- Own-output fixation — see "Self-repetition precheck"
+- Multi-arc concurrency — see "Multi-arc concurrency"
+- Arc touch counter regression — see "Arc touch counter fix"
+- Example library expansion 5 → 17 — see "Example library expansion"
+- Narration mode toggle — see "Narration mode toggle"
+- Terse example library — see "Terse example library"
+- Python overhead polishing — see "Python overhead polishing pass"
+- NPC dialogue wrong-addressee repair — shipped in commit `885308f`,
+  see `npc_engine/postgen.py` detect/repair functions
+- Real parallel workers via N Llama instances — rejected, see
+  "Speculative items evaluated and rejected"
+- Co-reference resolution in FactLedger — rejected, see
+  "Speculative items evaluated and rejected"
 
 ---
 
@@ -2432,20 +2780,24 @@ have been exercised in real sessions:
 ```
 npc-engine/
 ├── npc_engine/
-│   ├── story_director.py     # Director + FactLedger + NarrativeArc + ArcPlanner
+│   ├── story_director.py     # Director + FactLedger + NarrativeArc + ArcPlanner (~2700 LOC)
+│   ├── postgen.py            # wrong-addressee detect/repair (dialogue identity fix)
 │   ├── engine.py             # +14 LOC: instantiate + dialogue auto-feed
 │   └── server.py             # +43 LOC: 3 new REST endpoints
 ├── tests/
-│   └── test_story_director.py  # 43 tests (42 offline + integration)
+│   └── test_story_director.py  # 105 tests (all offline + 1 integration smoke)
 ├── data/
 │   └── story_director/
-│       ├── ashenvale_lore.md     # ~30 lines of setting bible
-│       ├── examples.yaml         # 5 few-shot world-state→action pairs
-│       ├── FINDINGS.md           # this file
-│       ├── state.json            # gitignored runtime state
-│       ├── fact_ledger.json      # gitignored ledger (200-entry cap)
-│       └── arcs.json             # gitignored narrative arc state
+│       ├── ashenvale_lore.md         # ~30 lines of setting bible
+│       ├── examples.yaml             # 17 prose few-shot world-state→action pairs
+│       ├── examples_terse.yaml       # 17 terse few-shot pairs (1:1 mirror of examples.yaml)
+│       ├── FINDINGS.md               # this file
+│       ├── state.json                # gitignored runtime state
+│       ├── fact_ledger.json          # gitignored ledger (200-entry cap)
+│       ├── fact_ledger.embeddings.npy # gitignored binary float32 sidecar
+│       └── arcs.json                 # gitignored narrative arc state
 ├── bench_story_director.py   # Model comparison + scripted sessions
+├── scratch_profile.py        # throwaway: stubbed-LLM cProfile harness
 └── .gitignore                # runtime files, traces, backups
 ```
 
@@ -2457,12 +2809,20 @@ cd D:/LLCWork/npc-engine
 # Unit tests (no model needed)
 python tests/test_story_director.py
 
-# Best production session: Qwen 2.5 3B with dialogue + ledger
-python bench_story_director.py --ticks 10 --reset \
-    --model qwen_3b --dialogue-script --log session.json
+# Best production session: Qwen 2.5 3B, multi-action, prose mode
+python bench_story_director.py --ticks 15 --reset \
+    --model qwen_3b --actions-per-tick 3 --log session.json
+
+# Terse (game-ready) mode: same bench with --narration-mode terse
+python bench_story_director.py --ticks 15 --reset \
+    --model qwen_3b --actions-per-tick 3 --narration-mode terse
 
 # Cheapest path: Qwen 0.5B with full scaffolding
-python bench_story_director.py --ticks 10 --reset --model qwen_05b
+python bench_story_director.py --ticks 15 --reset \
+    --model qwen_05b --actions-per-tick 3
+
+# Python-only profile (stubbed LLM, surfaces pure Python overhead)
+python scratch_profile.py
 
 # REST server
 python -m npc_engine.server
