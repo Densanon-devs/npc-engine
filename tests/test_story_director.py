@@ -54,6 +54,10 @@ class _StubNPC:
         self.identity = {"name": npc_id.title(), "role": role}
         self.world_facts: list[str] = []
         self.personal_knowledge: list[str] = []
+        # Mirror the production dynamic lanes that engine.add_knowledge
+        # writes to (see NPCKnowledge in npc_engine/knowledge.py).
+        self.dynamic_world_facts: list[str] = []
+        self.dynamic_personal_knowledge: list[str] = []
         self.quests: list[Quest] = []
         self.events: list[SimpleNamespace] = []
 
@@ -144,9 +148,9 @@ class _StubEngine:
         if not npc:
             return {"error": f"NPC '{npc_id}' not found"}
         if fact_type == "personal":
-            npc.personal_knowledge.append(fact)
+            npc.dynamic_personal_knowledge.append(fact)
         else:
-            npc.world_facts.append(fact)
+            npc.dynamic_world_facts.append(fact)
         return {"npc_id": npc_id, "added": fact, "type": fact_type}
 
     def adjust_trust(self, npc_id: str, delta: int, reason: str = "") -> dict:
@@ -1203,8 +1207,12 @@ def test_dispatch_fact_world_and_personal():
     assert result["ok"], result
 
     noah = engine.pie.npc_knowledge.get("noah")
-    assert "The tax collector was found dead." in noah.world_facts
-    assert "I fear the king's letter." in noah.personal_knowledge
+    # Director-injected facts route into the dynamic lanes, not the
+    # static profile lists. See engine.add_knowledge in engine.py.
+    assert "The tax collector was found dead." in noah.dynamic_world_facts
+    assert "I fear the king's letter." in noah.dynamic_personal_knowledge
+    assert "The tax collector was found dead." not in noah.world_facts
+    assert "I fear the king's letter." not in noah.personal_knowledge
     print("  [PASS] dispatch_fact_world_and_personal")
 
 
@@ -1372,7 +1380,9 @@ def test_integration_tick_mutates_world():
                   for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
     pre_events = {npc_id: len(npc.events)
                   for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
-    pre_facts = {npc_id: (len(npc.world_facts) + len(npc.personal_knowledge))
+    pre_facts = {npc_id: (len(npc.world_facts) + len(npc.personal_knowledge)
+                          + len(npc.dynamic_world_facts)
+                          + len(npc.dynamic_personal_knowledge))
                  for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
 
     result = engine.story_director.tick(max_tokens=300)
@@ -1384,7 +1394,9 @@ def test_integration_tick_mutates_world():
                    for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
     post_events = {npc_id: len(npc.events)
                    for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
-    post_facts = {npc_id: (len(npc.world_facts) + len(npc.personal_knowledge))
+    post_facts = {npc_id: (len(npc.world_facts) + len(npc.personal_knowledge)
+                           + len(npc.dynamic_world_facts)
+                           + len(npc.dynamic_personal_knowledge))
                   for npc_id, npc in engine.pie.npc_knowledge.profiles.items()}
 
     mutated = (

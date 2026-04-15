@@ -237,15 +237,18 @@ def _world_name(engine) -> str:
 def snapshot_npcs(engine) -> dict[str, dict]:
     """
     Build a per-NPC record of the current ``build_context`` output plus
-    the underlying counts that drive it. This is the measurement unit —
-    the same shape is captured both before the Director runs and after,
-    so deltas are trivially computed.
+    the underlying counts that drive it. The same shape is captured
+    both before the Director runs and after, so deltas are trivially
+    computed.
+
+    Director-injected facts route into ``dynamic_world_facts`` /
+    ``dynamic_personal_knowledge``; the static profile lists don't
+    grow at runtime. The bench tracks both, plus the combined view,
+    so the slice-survival math knows the difference.
     """
     pie = engine.pie
     out = {}
     for npc_id, npc in pie.npc_knowledge.profiles.items():
-        # Mirror how the NPC dialogue pipeline actually calls
-        # build_context: include quests and events, pass world_name.
         context = npc.build_context(
             include_quests=True,
             include_events=True,
@@ -259,12 +262,16 @@ def snapshot_npcs(engine) -> dict[str, dict]:
             "token_count": token_count,
             "world_facts_total": len(npc.world_facts),
             "personal_total":    len(npc.personal_knowledge),
+            "dynamic_world_total":    len(getattr(npc, "dynamic_world_facts", []) or []),
+            "dynamic_personal_total": len(getattr(npc, "dynamic_personal_knowledge", []) or []),
             "events_total":      len(npc.events),
             "quests_total":      len(npc.quests),
-            # Snapshot the actual list contents so the delta pass can
-            # tell which items were added by the Director vs pre-existing.
+            # Snapshot list contents so the delta pass can tell which
+            # items were added by the Director vs pre-existing.
             "world_facts":       list(npc.world_facts),
             "personal":          list(npc.personal_knowledge),
+            "dynamic_world":     list(getattr(npc, "dynamic_world_facts", []) or []),
+            "dynamic_personal":  list(getattr(npc, "dynamic_personal_knowledge", []) or []),
             "events":            [e.description for e in npc.events],
             "sections":          _section_breakdown(context),
         }
@@ -272,24 +279,59 @@ def snapshot_npcs(engine) -> dict[str, dict]:
     return out
 
 
+# Mirror NPCKnowledge.build_context's interleave parameters so the
+# bench's slice-survival accounting matches the production rule.
+_WORLD_TOTAL_CAP = 6
+_WORLD_DYNAMIC_RESERVE_MIN = 2
+_PERSONAL_TOTAL_CAP = 4
+_PERSONAL_DYNAMIC_RESERVE_MIN = 2
+
+
+def _dynamic_in_prompt(static_count: int, dynamic_count: int,
+                       total_cap: int, reserve_min: int) -> int:
+    """How many dynamic items reach the prompt under the interleave rule?"""
+    if dynamic_count <= 0:
+        return 0
+    dyn_slots = max(reserve_min, total_cap - static_count)
+    return min(dyn_slots, dynamic_count, total_cap)
+
+
 def compute_delta(before: dict, after: dict) -> dict:
     """For one NPC, compute what changed between the two snapshots."""
-    added_world_facts = after["world_facts"][len(before["world_facts"]):]
-    added_personal    = after["personal"][len(before["personal"]):]
+    # Director writes only to the dynamic lanes now, so growth in the
+    # static lists is unexpected (would mean a profile re-load or a
+    # caller bypassing engine.add_knowledge). Track both for safety.
+    added_static_world    = after["world_facts"][len(before["world_facts"]):]
+    added_static_personal = after["personal"][len(before["personal"]):]
+    added_dynamic_world =       after["dynamic_world"][len(before["dynamic_world"]):]
+    added_dynamic_personal =    after["dynamic_personal"][len(before["dynamic_personal"]):]
+    added_world_facts = added_static_world + added_dynamic_world
+    added_personal    = added_static_personal + added_dynamic_personal
     added_events      = after["events"][len(before["events"]):]
 
-    # Slice-surviving accounting: build_context takes world_facts[:6]
-    # and personal_knowledge[:4]. Only Director-injected items that
-    # land in those index ranges actually reach the dialogue prompt.
-    world_cap    = 6
-    personal_cap = 4
-    baseline_world    = len(before["world_facts"])
-    baseline_personal = len(before["personal"])
-    world_survives = max(0, world_cap    - baseline_world)
-    personal_survives = max(0, personal_cap - baseline_personal)
-    # Of the N items actually added, how many sit in surviving slots?
-    added_world_in_prompt    = min(len(added_world_facts), world_survives)
-    added_personal_in_prompt = min(len(added_personal),    personal_survives)
+    # Slice-survival under the interleave rule. Static items in the
+    # baseline don't move; dynamic items reach the prompt only if they
+    # sit in the dynamic-reserved tail slots.
+    static_world_count    = after["world_facts_total"]
+    static_personal_count = after["personal_total"]
+    dynamic_world_in_prompt = _dynamic_in_prompt(
+        static_world_count, len(added_dynamic_world),
+        _WORLD_TOTAL_CAP, _WORLD_DYNAMIC_RESERVE_MIN,
+    )
+    dynamic_personal_in_prompt = _dynamic_in_prompt(
+        static_personal_count, len(added_dynamic_personal),
+        _PERSONAL_TOTAL_CAP, _PERSONAL_DYNAMIC_RESERVE_MIN,
+    )
+    # Static appends (rare/unexpected) get the same forward-slice
+    # treatment they used to: the first N items reach the prompt up
+    # to the cap, anything past the cap is sliced.
+    static_world_survives = max(0, _WORLD_TOTAL_CAP - len(before["world_facts"]))
+    static_personal_survives = max(0, _PERSONAL_TOTAL_CAP - len(before["personal"]))
+    static_world_in_prompt    = min(len(added_static_world),    static_world_survives)
+    static_personal_in_prompt = min(len(added_static_personal), static_personal_survives)
+
+    added_world_in_prompt    = dynamic_world_in_prompt    + static_world_in_prompt
+    added_personal_in_prompt = dynamic_personal_in_prompt + static_personal_in_prompt
     # Events use [-3:] so the last 3 always reach the prompt.
     added_events_in_prompt = min(len(added_events), 3)
 
@@ -302,6 +344,8 @@ def compute_delta(before: dict, after: dict) -> dict:
         "token_delta": after["token_count"] - before["token_count"],
         "added_world_facts": len(added_world_facts),
         "added_personal":    len(added_personal),
+        "added_dynamic_world":    len(added_dynamic_world),
+        "added_dynamic_personal": len(added_dynamic_personal),
         "added_events":      len(added_events),
         "added_quests":      after["quests_total"] - before["quests_total"],
         "added_world_in_prompt":    added_world_in_prompt,

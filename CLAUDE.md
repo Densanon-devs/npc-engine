@@ -237,6 +237,63 @@ Edit `data/story_director/ashenvale_lore.md` (compact setting bible
 with standing tensions + narrative rules) and `examples.yaml` (few-shot
 world-state→action pairs). Both are reloaded on engine init.
 
+### Per-world story packs
+
+A world can ship its own Director assets at
+`data/worlds/<world>/story/{lore.md,examples.yaml,examples_terse.yaml}`.
+When a world has its own `story/` directory, `StoryDirector._resolve_paths`
+swaps in those files for the defaults at init AND isolates state, ledger,
+and arcs into the same per-world `story/` directory. Worlds without a
+per-world pack (currently Ashenvale) fall through to the legacy
+`data/story_director/` paths so existing tests and benches stay stable.
+Port Blackwater is the reference per-world implementation
+(`data/worlds/port_blackwater/story/`).
+
+### Director → NPC dialogue: dynamic knowledge lanes
+
+`engine.add_knowledge(npc_id, fact, fact_type)` is how the Director
+injects facts into an NPC's view of the world. Two design constraints
+collide here:
+
+1. The dialogue prompt builder
+   (`NPCKnowledge.build_context` in `engine/npc_knowledge.py`) has a
+   small budget — `[Facts: ...]` is capped at 6 entries, `[Personal:
+   ...]` at 4. Going over the cap means slower per-turn dialogue.
+2. Profile YAML authors put identity-grounding lore in those slots
+   (relationships, secrets, defining backstories). The Director's
+   runtime injections must not silently push that lore out of the
+   prompt.
+
+The fix: `NPCKnowledge` keeps two parallel lanes per slot:
+
+- **Static** — `world_facts`, `personal_knowledge`. Loaded from YAML,
+  never mutated at runtime. Holds profile-author content.
+- **Dynamic** — `dynamic_world_facts`, `dynamic_personal_knowledge`.
+  Empty at load. `engine.add_knowledge` appends here. Not persisted
+  to YAML (would corrupt the profile); re-derived from the
+  FactLedger on restart.
+
+`build_context` interleaves both lanes via
+`_combine_static_and_dynamic(static, dynamic, total_cap,
+dynamic_reserve_min)`. When the dynamic lane is empty the result is
+exactly `static[:total_cap]` — pre-fix behaviour. When dynamic facts
+exist, at least `dynamic_reserve_min` slots are reserved for the
+newest dynamic items and the rest go to static items from the front.
+World facts: cap 6, reserve 2 (static slots 1–4 always preserved).
+Personal: cap 4, reserve 2 (static slots 1–2 always preserved).
+
+There are three NPCKnowledge copies kept in sync by convention:
+`npc-engine/npc_engine/knowledge.py` (legacy in-tree),
+`densanon-core/densanon/core/npc_knowledge/knowledge.py` (canonical),
+and `plug-in-intelligence-engine/engine/npc_knowledge.py` (the runtime
+copy PIE actually loads). Editing only one and missing the runtime
+copy surfaces as `AttributeError: 'NPCKnowledge' object has no
+attribute 'dynamic_world_facts'` in the integration smoke test.
+
+See `data/story_director/FINDINGS.md` § "Personal/world slice fix —
+dynamic lanes (2026-04-14)" for the empirical before/after numbers
+and the rationale for picking interleave over `[-N:]`.
+
 ### Picking a model
 
 | Model | Use when |

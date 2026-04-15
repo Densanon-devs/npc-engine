@@ -60,6 +60,36 @@ class Event:
             self.timestamp = time.time()
 
 
+def _combine_static_and_dynamic(
+    static_list: list,
+    dynamic_list: list,
+    total_cap: int,
+    dynamic_reserve_min: int = 0,
+) -> list:
+    """
+    Pick at most ``total_cap`` items to surface in a prompt block,
+    combining a profile-authored static list with a runtime-injected
+    dynamic list.
+
+    Static items come from the profile YAML and represent
+    identity-grounding lore (relationships, secrets, backstory).
+    They're authored in priority order, so we take from the front.
+    Dynamic items are appended at runtime by the Story Director and
+    represent situational facts (recent events, new rumours). They're
+    appended in chronological order, so we take from the back to keep
+    newest. When dynamic_list is empty the result is exactly
+    ``static_list[:total_cap]`` — identical to the pre-dynamic-lane
+    behaviour, so tests and worlds that don't exercise runtime
+    injection see no shape change.
+    """
+    if not dynamic_list:
+        return list(static_list[:total_cap])
+    dyn_slots = max(dynamic_reserve_min, total_cap - len(static_list))
+    dyn_slots = min(dyn_slots, len(dynamic_list), total_cap)
+    static_slots = total_cap - dyn_slots
+    return list(static_list[:static_slots]) + list(dynamic_list[-dyn_slots:])
+
+
 class NPCKnowledge:
     """
     Manages a single NPC's knowledge sheet.
@@ -71,6 +101,13 @@ class NPCKnowledge:
         self.identity: dict = {}
         self.world_facts: list[str] = []
         self.personal_knowledge: list[str] = []
+        # Runtime-only lanes for Story Director / engine.add_knowledge
+        # injections. Kept separate from the YAML-loaded static lists
+        # so identity-grounding profile lore can't be silently pushed
+        # out of the dialogue prompt by accumulated runtime facts.
+        # Not persisted: re-derived from the FactLedger on restart.
+        self.dynamic_world_facts: list[str] = []
+        self.dynamic_personal_knowledge: list[str] = []
         self.quests: list[Quest] = []
         self.events: list[Event] = []
         self.capability_configs: dict = {}  # Raw YAML for capability system
@@ -151,15 +188,30 @@ class NPCKnowledge:
         if speech:
             parts.append(f"[Speech: {speech}]")
 
-        # World facts (compact)
-        if self.world_facts:
-            facts = "; ".join(self.world_facts[:6])
-            parts.append(f"[Facts: {facts}]")
+        # World facts: profile-authored static lore + Director-injected
+        # dynamic facts. Reserve up to 2 slots for newest dynamic items
+        # when any exist so the Director's recent injections always
+        # reach the dialogue prompt; static items 1-4 are preserved.
+        if self.world_facts or self.dynamic_world_facts:
+            fact_items = _combine_static_and_dynamic(
+                self.world_facts, self.dynamic_world_facts,
+                total_cap=6, dynamic_reserve_min=2,
+            )
+            if fact_items:
+                facts = "; ".join(fact_items)
+                parts.append(f"[Facts: {facts}]")
 
-        # Personal knowledge (compact)
-        if self.personal_knowledge:
-            personal = "; ".join(self.personal_knowledge[:4])
-            parts.append(f"[Personal: {personal}]")
+        # Personal knowledge: same shape, smaller cap. Reserve up to 2
+        # slots for newest dynamic items; static items 1-2 (the most
+        # identity-critical ones in profile order) are always preserved.
+        if self.personal_knowledge or self.dynamic_personal_knowledge:
+            personal_items = _combine_static_and_dynamic(
+                self.personal_knowledge, self.dynamic_personal_knowledge,
+                total_cap=4, dynamic_reserve_min=2,
+            )
+            if personal_items:
+                personal = "; ".join(personal_items)
+                parts.append(f"[Personal: {personal}]")
 
         # Active quests — EXPLICIT format so model copies the details
         if include_quests and self.quests:

@@ -2871,6 +2871,143 @@ python bench_fact_consumption.py --ticks 10 --world port_blackwater \
 
 ---
 
+## Personal/world slice fix — dynamic lanes (2026-04-14)
+
+### The fix
+
+`NPCKnowledge` now keeps two parallel lanes per content slot:
+
+- **Static lane**: `world_facts` and `personal_knowledge`. Loaded
+  from the YAML profile, never mutated at runtime. Holds
+  identity-grounding lore the profile author chose deliberately —
+  Bess's late husband, Reva's lost ship the Tempest, Finn's hidden
+  glass shard.
+- **Dynamic lane**: `dynamic_world_facts` and
+  `dynamic_personal_knowledge`. Empty at load. The Story Director's
+  `engine.add_knowledge(npc_id, fact, fact_type)` now appends here
+  instead of touching the static lists. Re-derived from the
+  FactLedger on restart; not persisted to YAML (which would corrupt
+  the author's profile).
+
+`build_context` interleaves both lanes via a new helper
+`_combine_static_and_dynamic(static, dynamic, total_cap,
+dynamic_reserve_min)`:
+
+- If the dynamic list is empty → return `static[:total_cap]`. This
+  is identical to the pre-fix behaviour, so worlds and tests that
+  don't exercise runtime injection see no shape change.
+- Otherwise → reserve at least `dynamic_reserve_min` slots for the
+  newest dynamic items (or all of them, if fewer exist), then fill
+  the rest with static items from the front. Newest-wins on the
+  dynamic side, profile-order on the static side.
+
+Calibration:
+
+- World facts: `total_cap=6`, `dynamic_reserve_min=2`. When dynamic
+  facts exist, static slots 1–4 are always preserved and the 2
+  newest dynamic facts always reach the prompt.
+- Personal knowledge: `total_cap=4`, `dynamic_reserve_min=2`. When
+  dynamic facts exist, static slots 1–2 (the two most identity-
+  critical items in profile order) are always preserved and the 2
+  newest dynamic facts always reach the prompt.
+
+The change touches three NPCKnowledge copies that are kept in sync
+by convention: `npc_engine/knowledge.py` (legacy in-tree),
+`densanon-core/densanon/core/npc_knowledge/knowledge.py` (canonical
+package), and `plug-in-intelligence-engine/engine/npc_knowledge.py`
+(the runtime copy PIE actually loads via `engine.npc_knowledge`).
+The integration smoke test goes through PIE so the third copy is
+the one whose absence will surface as `AttributeError:
+'NPCKnowledge' object has no attribute 'dynamic_world_facts'`.
+
+### Why interleave instead of `[-N:]`
+
+The cheap fix considered earlier — flip `personal_knowledge[:4]` to
+`personal_knowledge[-4:]` — would have erased identity-grounding
+profile lore the moment the Director added more than 4 personal
+facts. Profile authors put non-interchangeable anchors in those
+slots: relationships, secrets, defining backstories. The interleave
+rule preserves the most-critical static items always while still
+giving newest dynamic injections a guaranteed lane.
+
+### Results — 10 ticks × 3 actions, Qwen 2.5 3B, before vs after fix
+
+| Run            | v1 sliced (W/P) | v2 sliced (W/P) | v1 mean Δtok | v2 mean Δtok | v1 max Δtok | v2 max Δtok |
+|----------------|-----------------|-----------------|--------------|--------------|-------------|-------------|
+| ash prose      | 1 / 2           | 1 / 0           | +215         | +232         | +273        | +273        |
+| ash terse      | 1 / 3           | 0 / 0           | +130         | +139         | +185        | +197        |
+| pb prose       | 2 / 5           | 2 / 1           | +455         | +515         | +545        | +680        |
+| pb terse       | 0 / 8           | 0 / 4           | +155         | +191         | +176        | +229        |
+
+v2 logs: `logs/facts_{ash,pb}_{prose,terse}_v2.json`
+
+### What the fix changed
+
+**1. Personal slice-off dropped 18 → 5 across all four runs.** Ashenvale
+prose and terse now slice off 0 personal facts (was 2 and 3). PB
+prose dropped from 5 to 1. PB terse dropped from 8 to 4. The
+remaining 5 across all runs are legitimate aging-out under the
+interleave rule, not the silent 100%-loss bug — when the Director
+adds more dynamic personal facts than the 2 reserved slots can
+hold, the older ones age out by design (newest wins, same
+convention as `events[-3:]`).
+
+**2. Token bloat went up by 9–60 tokens mean**, biggest on PB prose
+(+60 tokens). This is the deliberate cost of the fix: dynamic
+facts that were silently dropped before are now reaching the
+prompt, so prompts grow. Per-NPC max climbed to 680 on PB prose
+(was 545) and 229 on PB terse (was 176).
+
+**3. Terse mode now fails the <150 max goal more decisively** — 197
+on Ashenvale terse, 229 on PB terse. The mean stays under 150 in
+ash terse (139) but is over in pb terse (191). Combined with the
+small-cast amplification observed in the prior bench section,
+this makes the per-NPC per-tick action budget cap for small
+casts (≤4 NPCs) urgent rather than nice-to-have.
+
+**4. World fact slice-off shape unchanged.** Still 1–2 sliced per run
+on profiles that ship with 4+ static world facts. Same rule as
+personal — the 6-cap with 2 reserved dynamic slots means static
+items 1–4 are preserved and 2 newest dynamic items survive. Lower
+urgency than the personal fix because the 6-cap is more
+forgiving.
+
+**5. The 105 offline tests + integration smoke test stayed green.** The
+test stub `_StubNPC` was updated to mirror the dynamic lanes; two
+existing assertions in `test_dispatch_fact_world_and_personal`
+and `test_integration_tick_mutates_world` were updated to read
+from `dynamic_world_facts` / `dynamic_personal_knowledge`.
+
+### What's queued after this
+
+The remaining max-token gap on terse mode is structural — small-cast
+amplification, not slice-direction. The recommended fix is the
+per-NPC per-tick action budget cap for casts ≤4, scoped only to the
+narrow case where it matters. Until that lands, ship terse as the
+live-dialogue setting on worlds with 5+ NPCs and document the small-
+cast caveat in the SDK examples.
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# v2 matrix — same flags as v1, different log filenames
+python bench_fact_consumption.py --ticks 10 --world ashenvale \
+    --narration-mode prose --log logs/facts_ash_prose_v2.json
+python bench_fact_consumption.py --ticks 10 --world ashenvale \
+    --narration-mode terse --log logs/facts_ash_terse_v2.json
+python bench_fact_consumption.py --ticks 10 --world port_blackwater \
+    --narration-mode prose --log logs/facts_pb_prose_v2.json
+python bench_fact_consumption.py --ticks 10 --world port_blackwater \
+    --narration-mode terse --log logs/facts_pb_terse_v2.json
+
+# Unit + integration smoke
+python tests/test_story_director.py
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
@@ -3112,6 +3249,59 @@ Less urgent now that the base library is 17 entries instead of 5.
   lore + examples + snapshot + ALREADY DONE + FOCUS + ACTION
   + ACTIVE NARRATIVE ARC. Add a per-section token budget with
   truncation as the ledger grows.
+
+#### E. Look-into: SECL-style discriminative gate as a cheap extra check
+
+Research reference: **SECL — Self-Calibrating LMs via Test-Time
+Discriminative Distillation** (arXiv 2604.09624, April 2026). The
+paper's empirical claim is that the token probability of `"True"`
+when an LLM is asked `"Is this answer correct?"` is a
+significantly better-calibrated signal than the model's generative
+confidence — ~56–78% ECE reduction across four small LMs and four
+domains. The paper's test-time *training* loop is out of scope for
+a Cython-compiled shipping binary, but the *discriminative readout*
+is cheap to try.
+
+Where it would plug in: **after the current `ContradictionChecker`
+NLI gate and before dispatch.** Today the flow is generate → NLI
+check against FactLedger → retry once if contradicted → dispatch.
+A SECL-style second pass would ask the same local model
+`"Given the NPC bio and the current world snapshot, is the
+following story beat consistent? Answer True or False."` and read
+the True-token probability. Below a threshold (empirically tuned
+against the 10-tick × 3-action benches in "Port Blackwater stress
+run" and "NPC dialogue fact-consumption verification") the beat
+gets flagged — potentially folded into the same retry budget as
+the NLI contradiction path, not a new one.
+
+Why it might be worth the experiment: the NLI check catches
+*pairwise* factual contradiction against prior ledger entries, but
+doesn't catch "this beat is technically consistent but tonally
+wrong for this NPC given their bio" — which is the failure mode
+still visible in terse-mode Port Blackwater runs. A discriminative
+pass against the full bio + snapshot prompt window is exactly the
+check the NLI layer can't do. Budget: one extra LLM call per tick,
+~0.8–2.5s depending on model (Qwen 0.5B vs 3B). Retry budgeting
+("Retry budgeting" section above) already proves we can afford one
+extra call per tick on the 3B path.
+
+Why it might not be worth it: the 10-tick benches show terse-mode
+3B already at high pass rates, and the remaining failures are
+mostly literal-copy from few-shot examples, not inconsistency with
+bio. "Intra-bio rotation" and "Self-repetition precheck" already
+target those. If a quick smoke run (5 ticks on Ashenvale, check
+whether True-probability correlates with manual pass/fail on a
+handful of injections) shows weak correlation, drop it. Do NOT
+adopt the paper's weight-updating test-time training loop — weight
+mutation mid-session breaks the license-system assumptions in the
+Cython build and has no upside for a game dialogue engine.
+
+Experiment entry point: a new `scripts/bench_secl_gate.py` that
+replays the existing `bench_story_director.py` output JSONs, runs
+the discriminative readout pass against each dispatched beat, and
+reports whether True-probability separates the manually-labeled
+passes from the manually-labeled failures. No Director code
+changes until the correlation is shown.
 
 ---
 

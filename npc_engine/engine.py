@@ -398,23 +398,34 @@ class NPCEngine:
                       fact_type: str = "world") -> dict:
         """
         Add a fact to an NPC's knowledge at runtime.
-        fact_type: "world" (world_facts) or "personal" (personal_knowledge)
+        fact_type: "world" (dynamic_world_facts) or "personal"
+        (dynamic_personal_knowledge).
+
+        Runtime injections route into the dynamic lane on NPCKnowledge,
+        not the static profile lists. ``build_context`` interleaves
+        the two — the Director's newest injections reach the dialogue
+        prompt without erasing identity-grounding profile lore. See
+        ``NPCKnowledge._combine_static_and_dynamic`` for the rule.
         """
         npc = self.pie.npc_knowledge.get(npc_id)
         if not npc:
             return {"error": f"NPC '{npc_id}' not found"}
 
         if fact_type == "personal":
-            npc.personal_knowledge.append(fact)
+            npc.dynamic_personal_knowledge.append(fact)
         else:
-            npc.world_facts.append(fact)
+            npc.dynamic_world_facts.append(fact)
 
         return {
             "npc_id": npc_id,
             "added": fact,
             "type": fact_type,
-            "total_world_facts": len(npc.world_facts),
-            "total_personal": len(npc.personal_knowledge),
+            "total_world_facts": (
+                len(npc.world_facts) + len(npc.dynamic_world_facts)
+            ),
+            "total_personal": (
+                len(npc.personal_knowledge) + len(npc.dynamic_personal_knowledge)
+            ),
         }
 
     def unlock_knowledge_gate(self, npc_id: str, gate_id: str) -> dict:
