@@ -284,6 +284,57 @@ _NO_QUEST_ACTIVITIES: frozenset[str] = frozenset({
 _PAUSED_NEXT_TICK_HINT_SECONDS = 10
 
 
+# ── GPU coordination + next-tick hint (Phase 4c) ────────────────
+# Explicit pause state is orthogonal to player activity — the game can
+# hold the Director entirely via ``POST /story/pause`` (menu overlay,
+# cutscene) and resume with ``POST /story/resume``. Separate from the
+# activity-based pause in 4a so the two paths can coexist; the reason
+# string lets the client tell them apart (``explicit_pause`` vs
+# ``paused: in_combat``).
+
+# Tick budget: rolling-window cap on LLM seconds consumed per real-
+# time minute. -1 = no cap (default). The 60-second trailing window
+# smooths out bursty sessions — one slow tick doesn't force a pause
+# if the prior minute was idle.
+_TICK_BUDGET_WINDOW_SECONDS = 60.0
+
+# Cap on the size of the tick-time log. We prune entries older than
+# the window anyway; this just prevents pathological growth when a
+# caller forgets to consume results.
+_TICK_TIME_LOG_CAP = 2048
+
+# Adaptive next-tick hint defaults. These go into the tick response so
+# a cooperative game client knows when it's worth calling tick() again.
+# Values are in seconds. Calibrated against the 2026-04-16 plan:
+#   in_combat:   10   (check back quickly — combat ends fast)
+#   in_menu:     30   (menus are brief)
+#   idle:        120  (player AFK, stretch it out)
+#   wandering:   900  (wilderness, low cadence)
+#   in_dungeon:  600  (dungeon runs are longer arcs)
+#   in_town / in_dialogue / unknown: 300 (town default)
+#   confront-beat accelerator: 60 (climactic pacing)
+# Override by editing the ``_NEXT_TICK_HINT_BY_ACTIVITY`` table rather
+# than scattering magic numbers in the helper.
+_NEXT_TICK_HINT_BY_ACTIVITY: dict[str, int] = {
+    "in_combat": 10,
+    "in_menu": 30,
+    "idle": 120,
+    "wandering": 900,
+    "in_dungeon": 600,
+    "traveling": 300,
+    "in_town": 300,
+    "in_dialogue": 300,
+    "unknown": 300,
+}
+_NEXT_TICK_HINT_DEFAULT = 300
+_NEXT_TICK_HINT_CONFRONT = 60
+
+# Beat index at which an active arc is considered to be in its
+# climactic phase. Arc beat skeleton is (seed=0, escalate=1,
+# confront=2, resolve=3). ``>= 2`` covers confront + resolve.
+_ARC_CONFRONT_BEAT_INDEX = 2
+
+
 # Only consider self-repetition against recent same-NPC entries.
 # Older matches are stale and may legitimately be echoed; cross-NPC
 # similarity is gossip propagation, not self-repetition.
@@ -1311,6 +1362,26 @@ class StoryDirector:
         # survives a restart.
         self._max_unoffered_quests_override: Optional[int] = None
         self._quest_cooldown_ticks_override: Optional[int] = None
+        # Phase 4c — explicit pause state. Orthogonal to the Phase 4a
+        # activity-based pause; game clients use this for menu
+        # overlays, cutscenes, save/load, or any global hold. Stamped
+        # with the tick at which it was set so the client can tell
+        # how long a pause has held. Persisted in state.json.
+        self._paused: bool = False
+        self._paused_at_tick: int = 0
+        # Phase 4c — tick budget. Rolling 60-second cap on LLM time.
+        # -1 = unconstrained (default, keeps every existing bench
+        # behavior identical). Positive = max LLM seconds allowed in
+        # the trailing 60s window; when exceeded, the Director returns
+        # a paused dict with reason="budget_exceeded" until the window
+        # rolls forward and frees capacity.
+        self._tick_budget_seconds: float = -1.0
+        # Tick-time log: [(timestamp_wall_clock, llm_seconds), ...].
+        # Pruned to the trailing window at every budget check. NOT
+        # persisted — the window is short enough that a restart
+        # effectively resets the cap, which is the right behavior
+        # (a fresh process should start with full capacity).
+        self._tick_time_log: list[tuple[float, float]] = []
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1550,6 +1621,15 @@ class StoryDirector:
             raw_cooldown = state.get("quest_cooldown_ticks_override")
             if isinstance(raw_cooldown, (int, float)):
                 self._quest_cooldown_ticks_override = max(0, int(raw_cooldown))
+            raw_paused = state.get("paused", False)
+            if isinstance(raw_paused, bool):
+                self._paused = raw_paused
+            raw_paused_tick = state.get("paused_at_tick", 0)
+            if isinstance(raw_paused_tick, (int, float)):
+                self._paused_at_tick = max(0, int(raw_paused_tick))
+            raw_budget = state.get("tick_budget_seconds")
+            if isinstance(raw_budget, (int, float)):
+                self._tick_budget_seconds = float(raw_budget)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1582,6 +1662,9 @@ class StoryDirector:
             "last_quest_dispatched_per_npc": self._last_quest_dispatched_per_npc,
             "max_unoffered_quests_override": self._max_unoffered_quests_override,
             "quest_cooldown_ticks_override": self._quest_cooldown_ticks_override,
+            "paused": self._paused,
+            "paused_at_tick": self._paused_at_tick,
+            "tick_budget_seconds": self._tick_budget_seconds,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -1613,15 +1696,51 @@ class StoryDirector:
         if actions_per_tick < 1:
             actions_per_tick = 1
 
+        # Phase 4c — explicit pause takes precedence over every other
+        # tick path. Game client paused us (menu overlay, cutscene,
+        # save/load) and nothing else is safe to do. Don't bump
+        # tick_count: explicit pauses are expected to be held for
+        # minutes-to-hours and advancing would move every cooldown
+        # forward against real time.
+        if self._paused:
+            return {
+                "tick": self.tick_count,
+                "action": {"action": "noop", "reason": "explicit_pause"},
+                "dispatch": {"ok": True, "kind": "noop"},
+                "raw_response": "",
+                "paused": True,
+                "paused_reason": "explicit_pause",
+                "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
+                **({"sub_actions": []} if actions_per_tick > 1 else {}),
+            }
+
+        # Phase 4c — tick budget. If LLM time in the rolling window
+        # is at or above the configured cap, return a paused dict so
+        # the client backs off and the window can free capacity.
+        # Also does NOT bump tick_count — otherwise a hot game loop
+        # that polls through budget saturation would rotate focus
+        # without producing content.
+        if self._budget_exceeded():
+            return {
+                "tick": self.tick_count,
+                "action": {"action": "noop", "reason": "budget_exceeded"},
+                "dispatch": {"ok": True, "kind": "noop"},
+                "raw_response": "",
+                "paused": True,
+                "paused_reason": "budget_exceeded",
+                "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
+                **({"sub_actions": []} if actions_per_tick > 1 else {}),
+            }
+
         # Phase 4a — paused activities short-circuit the tick. During
         # combat, menus, and idle the Director has nothing useful to
         # say; burning a generation for a beat the player can't react
         # to is pure waste. Return a paused noop that still increments
         # tick_count so calling code advances uniformly whether paused
-        # or not, and hand the client a small next-tick hint in case
-        # it's polling. State is NOT saved here — the paused path is
-        # hit many times in a row and each write would add I/O churn
-        # with no new information to record.
+        # or not, and hand the client an activity-adaptive next-tick
+        # hint (in_combat=10s, in_menu=30s, idle=120s). State is NOT
+        # saved here — the paused path is hit many times in a row and
+        # each write would add I/O churn with no new information.
         if self._player_activity in _PAUSED_ACTIVITIES:
             self.tick_count += 1
             self.last_tick_at = datetime.now(timezone.utc).isoformat()
@@ -1632,7 +1751,8 @@ class StoryDirector:
                 "dispatch": {"ok": True, "kind": "noop"},
                 "raw_response": "",
                 "paused": True,
-                "next_tick_recommended_in_seconds": _PAUSED_NEXT_TICK_HINT_SECONDS,
+                "paused_reason": f"activity:{self._player_activity}",
+                "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
             }
             if actions_per_tick > 1:
                 result["sub_actions"] = []
@@ -1729,9 +1849,20 @@ class StoryDirector:
                     "action": empty,
                     "dispatch": {"ok": True, "kind": "noop"},
                     "raw_response": "",
+                    "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
                 }
-            return {"tick": self.tick_count, "sub_actions": []}
+            return {
+                "tick": self.tick_count,
+                "sub_actions": [],
+                "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
+            }
 
+        # Phase 4c — time the worker loop so the rolling budget
+        # window sees LLM cost. The Director's Python overhead is
+        # negligible next to generation, so measuring the full loop
+        # (vs just the LLM calls) is close enough and keeps the
+        # instrumentation out of _run_single_action.
+        tick_start_time = time.monotonic()
         sub_results: list[dict] = []
         for focus_npc, action_kind in plan:
             sub_results.append(self._run_single_action(
@@ -1741,6 +1872,7 @@ class StoryDirector:
                 max_tokens=max_tokens,
                 temperature=temperature,
             ))
+        self._record_tick_duration(time.monotonic() - tick_start_time)
 
         self.tick_count += 1
         self.last_tick_at = datetime.now(timezone.utc).isoformat()
@@ -1785,10 +1917,12 @@ class StoryDirector:
                 "action": r["action"],
                 "dispatch": r["dispatch"],
                 "raw_response": r["raw_response"],
+                "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
             }
         return {
             "tick": self.tick_count,
             "sub_actions": sub_results,
+            "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
         }
 
     def _run_single_action(self, snapshot: str, focus_npc: Optional[str],
@@ -2363,6 +2497,74 @@ class StoryDirector:
             "cooldown_ticks": self._effective_quest_cooldown_ticks(),
             "max_unoffered_override": self._max_unoffered_quests_override,
             "cooldown_ticks_override": self._quest_cooldown_ticks_override,
+        }
+
+    def pause_ticks(self) -> dict:
+        """
+        Phase 4c — hold every future tick() call until ``resume_ticks``
+        is called. Does not bump tick_count, so cooldowns (Phase 4b,
+        arc cooldowns) don't tick down against real time during a
+        pause. Idempotent — pausing an already-paused Director is a
+        no-op but still returns ok.
+        """
+        if not self._paused:
+            self._paused = True
+            self._paused_at_tick = self.tick_count
+            logger.info(f"Story Director paused at tick {self.tick_count}")
+            self._save_state()
+        return {
+            "ok": True,
+            "paused": self._paused,
+            "paused_at_tick": self._paused_at_tick,
+        }
+
+    def resume_ticks(self) -> dict:
+        """Clear the explicit-pause flag. Idempotent."""
+        if self._paused:
+            self._paused = False
+            logger.info(f"Story Director resumed at tick {self.tick_count}")
+            self._save_state()
+        return {
+            "ok": True,
+            "paused": self._paused,
+            "paused_at_tick": self._paused_at_tick,
+        }
+
+    def get_pause_state(self) -> dict:
+        """
+        Return the full Phase 4c pause state: explicit flag, budget
+        config, trailing-window usage snapshot, and the next-tick
+        hint the client would receive right now.
+        """
+        self._prune_tick_time_log()
+        window_sum = sum(dur for _ts, dur in self._tick_time_log)
+        return {
+            "paused": self._paused,
+            "paused_at_tick": self._paused_at_tick,
+            "tick_budget_seconds": self._tick_budget_seconds,
+            "tick_budget_window_seconds": _TICK_BUDGET_WINDOW_SECONDS,
+            "window_llm_seconds_used": round(window_sum, 3),
+            "budget_exceeded": self._budget_exceeded(),
+            "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
+        }
+
+    def set_tick_budget(self, max_seconds_per_minute: float) -> dict:
+        """
+        Set the rolling-window LLM-time budget. Pass a negative value
+        (including -1) to clear the cap and run unconstrained — the
+        pre-Phase-4c default. Non-numeric inputs are rejected.
+        """
+        if isinstance(max_seconds_per_minute, bool):
+            return {"ok": False, "reason": "budget must be a number"}
+        if not isinstance(max_seconds_per_minute, (int, float)):
+            return {"ok": False, "reason": "budget must be a number"}
+        value = float(max_seconds_per_minute)
+        self._tick_budget_seconds = -1.0 if value < 0 else value
+        self._save_state()
+        return {
+            "ok": True,
+            "tick_budget_seconds": self._tick_budget_seconds,
+            "tick_budget_window_seconds": _TICK_BUDGET_WINDOW_SECONDS,
         }
 
     def get_quest_pacing(self) -> dict:
@@ -3222,6 +3424,63 @@ class StoryDirector:
         if self._quest_cooldown_ticks_override is not None:
             return self._quest_cooldown_ticks_override
         return _NPC_QUEST_COOLDOWN_TICKS
+
+    # ── Phase 4c — GPU coordination helpers ─────────────────────
+
+    def _prune_tick_time_log(self) -> None:
+        """Drop log entries whose timestamp is older than the rolling
+        window (or beyond the absolute cap). Called before every
+        budget evaluation so the window is always fresh."""
+        if not self._tick_time_log:
+            return
+        cutoff = time.time() - _TICK_BUDGET_WINDOW_SECONDS
+        kept = [(ts, dur) for ts, dur in self._tick_time_log if ts >= cutoff]
+        if len(kept) > _TICK_TIME_LOG_CAP:
+            kept = kept[-_TICK_TIME_LOG_CAP:]
+        self._tick_time_log = kept
+
+    def _record_tick_duration(self, duration_seconds: float) -> None:
+        """Append a (now, duration) sample to the rolling log. Called
+        at the end of every non-paused tick so the next call's budget
+        check sees the latest LLM cost."""
+        if duration_seconds <= 0:
+            return
+        self._tick_time_log.append((time.time(), float(duration_seconds)))
+        self._prune_tick_time_log()
+
+    def _budget_exceeded(self) -> bool:
+        """True iff the trailing-window LLM time sum is at or above
+        the configured budget. Returns False when the budget is
+        unconstrained (-1) or unset."""
+        if self._tick_budget_seconds < 0:
+            return False
+        self._prune_tick_time_log()
+        window_sum = sum(dur for _ts, dur in self._tick_time_log)
+        return window_sum >= self._tick_budget_seconds
+
+    def _compute_next_tick_hint(self) -> int:
+        """Seconds the game client is advised to wait before calling
+        tick() again. Derived from player activity plus an arc-
+        climax accelerator. See ``_NEXT_TICK_HINT_BY_ACTIVITY`` for
+        the per-activity defaults; ``_NEXT_TICK_HINT_CONFRONT`` wins
+        whenever any active arc has reached the confront beat and
+        the activity hint would otherwise be above it — climactic
+        arcs shouldn't be held behind a 15-minute wandering wait."""
+        base = _NEXT_TICK_HINT_BY_ACTIVITY.get(
+            self._player_activity, _NEXT_TICK_HINT_DEFAULT
+        )
+        # Arc-climax accelerator — only shortens the hint, never
+        # lengthens it. Paused activities (combat=10, menu=30) keep
+        # their fast poll so combat ending still picks up quickly.
+        try:
+            for arc in self.arc_planner.active_arcs():
+                if arc.current_beat >= _ARC_CONFRONT_BEAT_INDEX:
+                    return min(base, _NEXT_TICK_HINT_CONFRONT)
+        except Exception:
+            # Defensive — a broken arc planner must not crash a tick
+            # response. Fall through to the base hint.
+            pass
+        return base
 
     def _pick_action_kind(self, focus_npc: Optional[str],
                            bypass_per_npc_cap: bool = False) -> str:

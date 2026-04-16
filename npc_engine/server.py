@@ -225,6 +225,10 @@ def create_app():
         max_unoffered: Optional[int] = None
         cooldown_ticks: Optional[int] = None
 
+    class TickBudgetRequest(BaseModel):
+        # Max LLM seconds per trailing 60s window. Negative clears.
+        max_seconds_per_minute: float
+
     class NPCZoneRequest(BaseModel):
         npc_id: str
         zone: str
@@ -423,6 +427,47 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_quest_pacing()
+
+    @app.post("/story/pause")
+    async def story_pause():
+        """Hold every future tick() call until /story/resume. Does
+        not advance tick_count, so cooldowns don't tick down against
+        real time during the pause (Phase 4c)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.pause_ticks()
+
+    @app.post("/story/resume")
+    async def story_resume():
+        """Clear the explicit-pause flag (Phase 4c). Idempotent."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.resume_ticks()
+
+    @app.get("/story/pause_state")
+    async def story_pause_state():
+        """Phase 4c pause state: explicit flag, budget config,
+        trailing-window usage, and the next-tick hint the client
+        would currently receive."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_pause_state()
+
+    @app.post("/story/tick_budget")
+    async def story_tick_budget(req: TickBudgetRequest):
+        """Configure the rolling-window LLM-time cap (Phase 4c). Pass
+        a negative value to clear the cap and run unconstrained — the
+        pre-4c default."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.set_tick_budget(req.max_seconds_per_minute)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
 
     @app.post("/story/npc_death")
     async def story_npc_death(req: NPCDeathRequest):

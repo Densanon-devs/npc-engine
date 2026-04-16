@@ -1065,6 +1065,178 @@ def test_main_line_bypasses_per_npc_cap():
     print("  [PASS] main_line_bypasses_per_npc_cap")
 
 
+# ── GPU coordination tests (Phase 4c) ────────────────────────────
+
+def test_pause_state_blocks_ticks():
+    """pause_ticks() holds every future tick(). The returned dict has
+    paused=True with reason=explicit_pause, tick_count doesn't bump
+    (so cooldowns don't tick forward against real time), and the LLM
+    is not called."""
+    restore = _isolate_state_file("phase4c_pause_blocks")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "should not fire"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        result = director.pause_ticks()
+        assert result["paused"] is True, result
+
+        before = director.tick_count
+        tick_result = director.tick(actions_per_tick=1)
+        assert tick_result.get("paused") is True, tick_result
+        assert tick_result.get("paused_reason") == "explicit_pause", tick_result
+        assert tick_result["action"]["reason"] == "explicit_pause", tick_result
+        assert "next_tick_recommended_in_seconds" in tick_result, tick_result
+        assert director.tick_count == before, director.tick_count
+        assert engine.pie.base_model.prompts == [], engine.pie.base_model.prompts
+    finally:
+        restore()
+    print("  [PASS] pause_state_blocks_ticks")
+
+
+def test_resume_restores_normal_ticks():
+    """After resume_ticks(), tick() runs the normal pipeline again and
+    bumps tick_count. Pause state persists across Director instances
+    (bounced against the state file)."""
+    restore = _isolate_state_file("phase4c_resume")
+    try:
+        engine1 = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        d1 = StoryDirector(engine1)
+        d1.pause_ticks()
+        # Reload from disk — persistence round-trip.
+        engine2 = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "first real beat"}',
+            ],
+        )
+        d2 = StoryDirector(engine2)
+        assert d2._paused is True, d2._paused
+        # Paused tick still blocked.
+        paused = d2.tick(actions_per_tick=1)
+        assert paused.get("paused") is True, paused
+        # Resume → next tick fires for real.
+        d2.resume_ticks()
+        result = d2.tick(actions_per_tick=1)
+        assert result.get("paused") is not True, result
+        assert result["action"]["action"] == "event", result
+        assert d2.tick_count == 1, d2.tick_count
+        assert "next_tick_recommended_in_seconds" in result, result
+    finally:
+        restore()
+    print("  [PASS] resume_restores_normal_ticks")
+
+
+def test_tick_budget_throttles_when_exceeded():
+    """Once the trailing-window LLM-time sum meets the budget, tick()
+    returns paused with reason=budget_exceeded. Negative budget
+    clears the cap and un-throttles immediately."""
+    restore = _isolate_state_file("phase4c_budget")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "x"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        director.set_tick_budget(1.0)
+        # Seed the log so the next tick trips the budget.
+        import time as _t
+        director._tick_time_log.append((_t.time(), 5.0))
+        assert director._budget_exceeded() is True
+
+        before = director.tick_count
+        result = director.tick(actions_per_tick=1)
+        assert result.get("paused") is True, result
+        assert result.get("paused_reason") == "budget_exceeded", result
+        assert director.tick_count == before, director.tick_count
+
+        # Clear the budget — the next tick runs for real.
+        cleared = director.set_tick_budget(-1.0)
+        assert cleared["tick_budget_seconds"] == -1.0, cleared
+        assert director._budget_exceeded() is False
+        result2 = director.tick(actions_per_tick=1)
+        assert result2.get("paused") is not True, result2
+    finally:
+        restore()
+    print("  [PASS] tick_budget_throttles_when_exceeded")
+
+
+def test_next_tick_hint_reflects_activity():
+    """The hint helper returns activity-specific seconds per the
+    _NEXT_TICK_HINT_BY_ACTIVITY table: in_combat=10, in_menu=30,
+    idle=120, wandering=900, in_dungeon=600, default=300."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4c_hint_activity")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        for activity, expected in [
+            ("in_combat", 10),
+            ("in_menu", 30),
+            ("idle", 120),
+            ("wandering", 900),
+            ("in_dungeon", 600),
+            ("in_town", 300),
+            ("in_dialogue", 300),
+            ("traveling", 300),
+            ("unknown", 300),
+        ]:
+            director.set_player_activity(activity)
+            hint = director._compute_next_tick_hint()
+            assert hint == expected, (activity, hint, expected)
+    finally:
+        restore()
+    print("  [PASS] next_tick_hint_reflects_activity")
+
+
+def test_next_tick_hint_accelerates_during_confront_beat():
+    """An active arc at current_beat >= 2 (confront or resolve)
+    short-circuits the activity hint down to _NEXT_TICK_HINT_CONFRONT
+    whenever the activity hint would otherwise be larger. Paused
+    activities (combat/menu) keep their fast poll untouched because
+    we take the min — so combat-during-confront still returns 10s."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4c_hint_confront")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="climax", theme="climax",
+            focus_npcs=["kael"],
+            beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=2, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("climax")
+
+        # Slow activities accelerate down to the confront value.
+        director.set_player_activity("wandering")
+        assert director._compute_next_tick_hint() == sd_mod._NEXT_TICK_HINT_CONFRONT
+
+        director.set_player_activity("in_town")
+        assert director._compute_next_tick_hint() == sd_mod._NEXT_TICK_HINT_CONFRONT
+
+        # Fast activities keep their shorter hint — min(10, 60) = 10.
+        director.set_player_activity("in_combat")
+        assert director._compute_next_tick_hint() == 10
+
+        # After the arc resolves, accelerator stops firing.
+        arc.current_beat = 3
+        arc.status = "resolved"
+        director.arc_planner.active_arc_ids.clear()
+        director.set_player_activity("wandering")
+        assert director._compute_next_tick_hint() == 900
+    finally:
+        restore()
+    print("  [PASS] next_tick_hint_accelerates_during_confront_beat")
+
+
 # ── Zone layer tests (Phase 1) ───────────────────────────────────
 
 _ZONED_PROFILES = (
@@ -4681,6 +4853,13 @@ def main():
     test_quest_cooldown_skips_quest_within_window()
     test_cooldown_resets_after_ticks_elapse()
     test_main_line_bypasses_per_npc_cap()
+
+    print("\nStory Director — GPU coordination tests (Phase 4c)")
+    test_pause_state_blocks_ticks()
+    test_resume_restores_normal_ticks()
+    test_tick_budget_throttles_when_exceeded()
+    test_next_tick_hint_reflects_activity()
+    test_next_tick_hint_accelerates_during_confront_beat()
 
     print("\nStory Director — zone layer tests (Phase 1)")
     test_empty_active_zones_preserves_world_wide_mode()
