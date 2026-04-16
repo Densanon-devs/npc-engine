@@ -1057,6 +1057,293 @@ def test_burst_rotation_locks_to_in_zone():
     print("  [PASS] burst_rotation_locks_to_in_zone")
 
 
+# ── Lifecycle: death plumbing tests (Phase 2a) ─────────────────
+
+def _seed_zoned_director(tag: str):
+    """Shared helper: fresh zoned director with isolated state."""
+    restore = _isolate_state_file(tag)
+    engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+    director = StoryDirector(engine)
+    return engine, director, restore
+
+
+def test_queue_death_request_validates_alive_and_exists():
+    """queue_death_request rejects unknown NPCs and already-dead
+    NPCs with clear error messages."""
+    engine, director, restore = _seed_zoned_director("death_queue_valid")
+    try:
+        result = director.queue_death_request("nobody_id")
+        assert result["ok"] is False
+        assert "unknown" in result["reason"]
+        # Kill reva manually then try to kill her again
+        engine.pie.npc_knowledge.profiles["reva"].status = "deceased"
+        result = director.queue_death_request("reva")
+        assert result["ok"] is False
+        assert "not alive" in result["reason"]
+    finally:
+        restore()
+    print("  [PASS] queue_death_request_validates_alive_and_exists")
+
+
+def test_death_dispatch_marks_npc_deceased_and_breaks_burst():
+    """A death dispatch must flip status to deceased, stamp
+    death_tick/death_cause, drop the burst focus if it matches, and
+    record the death in _deceased_npcs."""
+    engine, director, restore = _seed_zoned_director("death_dispatch")
+    try:
+        director._burst_focus_npc = "reva"
+        director._burst_remaining = 3
+        result = director._dispatch_npc_death(
+            npc_id="reva", cause="bandit ambush",
+            transfers_quests_to=None,
+        )
+        assert result["ok"] is True
+        npc = engine.pie.npc_knowledge.profiles["reva"]
+        assert npc.status == "deceased"
+        assert npc.death_cause == "bandit ambush"
+        assert npc.death_tick == 1
+        # Burst broke
+        assert director._burst_focus_npc is None
+        assert director._burst_remaining == 0
+        # Deceased record exists
+        assert "reva" in director._deceased_npcs
+        rec = director._deceased_npcs["reva"]
+        assert rec["death_cause"] == "bandit ambush"
+        assert rec["name"] == "Reva"
+    finally:
+        restore()
+    print("  [PASS] death_dispatch_marks_npc_deceased_and_breaks_burst")
+
+
+def test_deceased_npc_excluded_from_focus_selection():
+    """_pick_focus_npc must never return a deceased NPC, even if
+    they're in the alphabetical-first slot in the rotation."""
+    engine, director, restore = _seed_zoned_director("death_focus_exclude")
+    try:
+        # Kill reva (rotation's alphabetically-first dock NPC)
+        engine.pie.npc_knowledge.profiles["reva"].status = "deceased"
+        for _ in range(20):
+            focus = director._pick_focus_npc()
+            assert focus is not None
+            assert focus != "reva"
+            director._npc_last_planned_tick[focus] = director._npc_last_planned_tick.get(focus, 0) + 1
+    finally:
+        restore()
+    print("  [PASS] deceased_npc_excluded_from_focus_selection")
+
+
+def test_death_transfers_open_quests_to_inheritor():
+    """When transfers_quests_to is set, open quests from the deceased
+    NPC move to the inheritor with inherited=True tagged in the
+    dispatch record."""
+    engine, director, restore = _seed_zoned_director("death_inherit")
+    try:
+        from npc_engine.knowledge import Quest
+        # Give reva an open quest
+        engine.pie.npc_knowledge.profiles["reva"].add_quest(
+            Quest(id="keep_port_safe", name="Keep the Port Safe",
+                   description="Protect the harbor from pirates")
+        )
+        pre_finn_quests = len(engine.pie.npc_knowledge.profiles["finn"].quests)
+        result = director._dispatch_npc_death(
+            npc_id="reva", cause="drowned",
+            transfers_quests_to="finn",
+        )
+        assert result["ok"] is True
+        # Finn inherited the quest
+        post_finn_quests = len(engine.pie.npc_knowledge.profiles["finn"].quests)
+        assert post_finn_quests == pre_finn_quests + 1
+        quest_records = result["record"]["quests_cleaned"]
+        assert any(
+            q["quest_id"] == "keep_port_safe" and q["transition"] == "transferred"
+            for q in quest_records
+        )
+    finally:
+        restore()
+    print("  [PASS] death_transfers_open_quests_to_inheritor")
+
+
+def test_death_aborts_open_quests_without_inheritor():
+    """When there's no inheritor, open quests get marked aborted
+    with giver_deceased as the reason."""
+    engine, director, restore = _seed_zoned_director("death_abort")
+    try:
+        from npc_engine.knowledge import Quest
+        reva = engine.pie.npc_knowledge.profiles["reva"]
+        reva.add_quest(Quest(id="orphan_quest", name="Orphan",
+                              description="No inheritor for this one"))
+        result = director._dispatch_npc_death(
+            npc_id="reva", cause="fell overboard",
+            transfers_quests_to=None,
+        )
+        assert result["ok"] is True
+        # Quest still on the deceased NPC but marked aborted
+        assert any(
+            q.id == "orphan_quest" and q.status == "aborted"
+            for q in reva.quests
+        )
+        quest_records = result["record"]["quests_cleaned"]
+        assert any(
+            q["quest_id"] == "orphan_quest" and q["transition"] == "aborted"
+            for q in quest_records
+        )
+    finally:
+        restore()
+    print("  [PASS] death_aborts_open_quests_without_inheritor")
+
+
+def test_arc_on_cast_death_resolves_post_confront_arc():
+    """An arc already past the confront beat (current_beat >= 2)
+    should resolve immediately when a cast member dies — the death
+    IS the resolution."""
+    engine, director, restore = _seed_zoned_director("death_arc_resolve")
+    try:
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="test_arc", theme="Reva's fate",
+            focus_npcs=["reva"], beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=2,  # at confront
+            status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("test_arc")
+        result = director.arc_planner.on_cast_death(
+            npc_id="reva", current_tick=5,
+        )
+        assert arc.status == "resolved"
+        assert "test_arc" not in director.arc_planner.active_arc_ids
+        assert len(result["arcs_affected"]) == 1
+        assert result["arcs_affected"][0]["transition"] == "resolved_by_death"
+    finally:
+        restore()
+    print("  [PASS] arc_on_cast_death_resolves_post_confront_arc")
+
+
+def test_arc_on_cast_death_trims_cast_on_early_arc():
+    """An arc still at seed or escalate with multiple cast members
+    should drop the deceased NPC from its cast and keep running."""
+    engine, director, restore = _seed_zoned_director("death_arc_trim")
+    try:
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="trim_arc", theme="Dock trio",
+            focus_npcs=["reva", "finn", "old_bones"],
+            beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=1,  # at escalate, still early
+            status="active", started_at_tick=1,
+            touches_since_last_advance=3,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("trim_arc")
+        result = director.arc_planner.on_cast_death(
+            npc_id="reva", current_tick=4,
+        )
+        assert arc.status == "active"
+        assert "reva" not in arc.focus_npcs
+        assert set(arc.focus_npcs) == {"finn", "old_bones"}
+        # Touch counter resets so we earn the next beat with the
+        # smaller cast
+        assert arc.touches_since_last_advance == 0
+        assert result["arcs_affected"][0]["transition"] == "cast_trimmed"
+    finally:
+        restore()
+    print("  [PASS] arc_on_cast_death_trims_cast_on_early_arc")
+
+
+def test_lifecycle_tick_drains_pending_death():
+    """A queued death request must be dispatched on the next
+    lifecycle tick. The NPC flips to deceased before the architect
+    plans its focus picks."""
+    restore = _isolate_state_file("lifecycle_drain")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_ZONED_PROFILES,
+            responses=[
+                '{"action": "event", "target": "reva", "event": "x"}'
+                for _ in range(5)
+            ],
+        )
+        director = StoryDirector(engine)
+        director.queue_death_request("reva", cause="stabbed",
+                                      transfers_quests_to=None)
+        assert len(director._pending_death_requests) == 1
+        # Run a tick — lifecycle should drain and dispatch the death
+        director.tick()
+        assert len(director._pending_death_requests) == 0
+        assert engine.pie.npc_knowledge.profiles["reva"].status == "deceased"
+        assert "reva" in director._deceased_npcs
+    finally:
+        restore()
+    print("  [PASS] lifecycle_tick_drains_pending_death")
+
+
+def test_recently_departed_section_in_snapshot():
+    """When a deceased NPC is in an active arc's cast OR died within
+    the last 10 ticks, the world snapshot should include a
+    RECENTLY DEPARTED section."""
+    engine, director, restore = _seed_zoned_director("death_snapshot")
+    try:
+        director.tick_count = 5
+        director._dispatch_npc_death(
+            npc_id="finn", cause="accident at the docks",
+            transfers_quests_to=None,
+        )
+        snap = director._world_snapshot()
+        assert "RECENTLY DEPARTED" in snap, snap
+        assert "finn" in snap.lower() or "Finn" in snap
+        assert "accident at the docks" in snap
+        # The live roster should NOT include finn
+        assert "- finn (dock_worker)" not in snap
+    finally:
+        restore()
+    print("  [PASS] recently_departed_section_in_snapshot")
+
+
+def test_postgen_detect_deceased_reference_catches_living_action():
+    """detect_deceased_reference should return the dead NPC's name
+    when the dialogue treats them as an active subject, and None
+    when the dialogue already frames the death."""
+    from npc_engine.postgen import detect_deceased_reference
+    deceased = ["Kael", "Mara"]
+    # Living-action: should catch
+    d1 = "Kael walks into the tavern and greets everyone."
+    assert detect_deceased_reference(d1, deceased) == "Kael"
+    d2 = "Hello Mara, I have news from the road."
+    assert detect_deceased_reference(d2, deceased) == "Mara"
+    # Acknowledged: should NOT catch
+    d3 = "The late Kael used to drink at this very table."
+    assert detect_deceased_reference(d3, deceased) is None
+    d4 = "Kael was a fine blacksmith before the bandits came."
+    assert detect_deceased_reference(d4, deceased) is None
+    d5 = "We visit Mara's grave on the solstice."
+    assert detect_deceased_reference(d5, deceased) is None
+    # No dead NPC mentioned
+    d6 = "The harbor is busy today."
+    assert detect_deceased_reference(d6, deceased) is None
+    print("  [PASS] postgen_detect_deceased_reference_catches_living_action")
+
+
+def test_postgen_repair_deceased_reference_adds_late_prefix():
+    """repair_deceased_reference wraps the first name occurrence in
+    'the late {name}' and optionally appends the death cause."""
+    from npc_engine.postgen import repair_deceased_reference
+    out1 = repair_deceased_reference(
+        "Kael walks into the tavern.",
+        deceased_name="Kael", death_cause="",
+    )
+    assert "the late Kael" in out1
+    assert "walks into the tavern" in out1
+
+    out2 = repair_deceased_reference(
+        "Kael greets the patrons, Kael smiles.",
+        deceased_name="Kael", death_cause="plague",
+    )
+    # First occurrence wrapped, second left alone
+    assert "the late Kael (plague)" in out2
+    assert out2.count("the late Kael") == 1
+    print("  [PASS] postgen_repair_deceased_reference_adds_late_prefix")
+
+
 def test_pending_player_target_bypasses_zone_filter():
     """When the player has an outstanding action targeting an
     out-of-zone NPC (e.g. sent a letter ahead), that NPC must still
@@ -3676,6 +3963,19 @@ def main():
     test_zone_change_breaks_burst_rotation()
     test_burst_rotation_locks_to_in_zone()
     test_pending_player_target_bypasses_zone_filter()
+
+    print("\nStory Director — lifecycle: death plumbing (Phase 2a)")
+    test_queue_death_request_validates_alive_and_exists()
+    test_death_dispatch_marks_npc_deceased_and_breaks_burst()
+    test_deceased_npc_excluded_from_focus_selection()
+    test_death_transfers_open_quests_to_inheritor()
+    test_death_aborts_open_quests_without_inheritor()
+    test_arc_on_cast_death_resolves_post_confront_arc()
+    test_arc_on_cast_death_trims_cast_on_early_arc()
+    test_lifecycle_tick_drains_pending_death()
+    test_recently_departed_section_in_snapshot()
+    test_postgen_detect_deceased_reference_catches_living_action()
+    test_postgen_repair_deceased_reference_adds_late_prefix()
 
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()

@@ -288,6 +288,117 @@ def detect_wrong_identity(dialogue: str, profile: Optional[dict]) -> bool:
     return has_wrong and not has_correct
 
 
+# ── Deceased reference detection (Phase 2a lifecycle) ──────────
+
+# Verb forms that imply a living, presently-acting subject. Paired
+# with a deceased NPC name in the dialogue they indicate the model
+# doesn't know the NPC is dead and needs to be corrected before the
+# response reaches the player.
+_LIVING_ACTION_PATTERNS = [
+    # "Kael visits the tavern", "Kael walks", "Kael opens the door"
+    r"\b{name}\s+(?:visits|walks|opens|enters|leaves|stands|sits|greets|tells|says|asks|nods|smiles|frowns|laughs|cries|shouts|whispers|runs|climbs|drinks|eats|watches|hears|feels|sees|looks|gives|takes|holds|carries|drops|pulls|pushes|wears|drinks|sells|buys|trades|waits|arrives|returns|departs)\b",
+    # "Kael is here", "Kael is at the tavern", "Kael is busy"
+    r"\b{name}\s+is\s+(?:here|at|in|on|inside|outside|busy|available|ready|working|drinking|eating|waiting|watching|looking)",
+    # Direct address / greeting — "Hello Kael", "Kael, can you..."
+    r"\b(?:hello|hi|hey|greetings)\s*,?\s*{name}\b",
+]
+
+# Narrative framings that already acknowledge the death and should
+# NOT trigger a repair. "The late Kael...", "Kael's grave", "Kael,
+# who died last month...".
+_DEATH_ACKNOWLEDGED_PATTERNS = [
+    r"\bthe\s+late\s+{name}\b",
+    r"\b{name}'s\s+grave\b",
+    r"\b{name}'s\s+funeral\b",
+    r"\b{name}'s\s+memory\b",
+    r"\b{name}\s+(?:was|had|used\s+to)\s+",
+    r"\b{name},\s+who\s+(?:died|passed|was\s+killed)",
+    r"\brest\s+in\s+peace,?\s+{name}\b",
+    r"\bremember(?:ing)?\s+{name}\b",
+]
+
+
+def detect_deceased_reference(dialogue: str,
+                                deceased_names: list[str]) -> Optional[str]:
+    """
+    Return the first deceased NPC name that the dialogue references
+    AS IF the NPC were still alive. Returns None if no deceased NPC
+    is mentioned at all, OR if every mention is framed as a death
+    acknowledgement (the late Kael, Kael's grave, Kael was...). Takes
+    a list of deceased names (not profiles) because the caller
+    passes the Director's ``_deceased_npcs`` keys.
+
+    The caller is ``postgen.validate_and_repair``, which runs on
+    every NPC dialogue response. The deceased list comes from the
+    Story Director via a new optional ``deceased_names`` parameter
+    so the postgen layer can catch the LLM confusing a dead NPC for
+    a living one.
+    """
+    if not dialogue or not deceased_names:
+        return None
+    d_lower = dialogue.lower()
+    for name in deceased_names:
+        name_lower = name.lower().strip()
+        if not name_lower:
+            continue
+        # Cheap pre-check: is the name in the dialogue at all?
+        if name_lower not in d_lower:
+            continue
+        # Check for acknowledgement framings — if any match, the
+        # model knows the NPC is dead; skip the repair.
+        escaped = re.escape(name_lower)
+        acknowledged = any(
+            re.search(pattern.format(name=escaped), d_lower)
+            for pattern in _DEATH_ACKNOWLEDGED_PATTERNS
+        )
+        if acknowledged:
+            continue
+        # Check for living-action framings — if any match, we have
+        # a confirmed deceased-reference that needs repair.
+        living = any(
+            re.search(pattern.format(name=escaped), d_lower)
+            for pattern in _LIVING_ACTION_PATTERNS
+        )
+        if living:
+            return name
+    return None
+
+
+def repair_deceased_reference(dialogue: str, deceased_name: str,
+                                death_cause: str = "") -> str:
+    """
+    Rewrite a dialogue line that treats a deceased NPC as alive into
+    an aftermath framing. Cheap in-place replacement: wrap the NPC's
+    name in "the late {name}" the first time it appears, which is
+    enough to flip the tense register of most model outputs
+    without destroying the surrounding sentence structure.
+
+    If ``death_cause`` is provided, appends a parenthetical the
+    first time, which gives the player narrative context for the
+    death. Subsequent mentions are left alone so the repair isn't
+    destructively verbose.
+    """
+    if not dialogue or not deceased_name:
+        return dialogue
+    escaped = re.escape(deceased_name)
+    first_match_pattern = re.compile(
+        rf"\b({escaped})\b",
+        flags=re.IGNORECASE,
+    )
+    replacement_done = {"count": 0}
+
+    def _replace(match: "re.Match") -> str:
+        if replacement_done["count"] > 0:
+            return match.group(0)
+        replacement_done["count"] += 1
+        name = match.group(1)
+        if death_cause:
+            return f"the late {name} ({death_cause})"
+        return f"the late {name}"
+
+    return first_match_pattern.sub(_replace, dialogue)
+
+
 # Patterns where an NPC is addressing someone by name. The regex
 # captures the name in group 1 so we know WHICH name to check and
 # WHAT to replace. Case-insensitive match.

@@ -362,6 +362,14 @@ def main():
                              "world-wide mode (current behaviour). Only "
                              "meaningful for worlds with NPCs that have "
                              "zone: fields in their profile YAML.")
+    parser.add_argument("--kill-npc-at-tick", action="append", default=None,
+                        help="Scripted death for Phase 2a lifecycle testing. "
+                             "Format: 'tick:npc_id[:cause]'. May be passed "
+                             "multiple times to script multiple deaths. "
+                             "Example: --kill-npc-at-tick 6:captain_reva:drowned_in_storm. "
+                             "Death fires AFTER the specified tick completes "
+                             "(queued via queue_death_request, dispatched on "
+                             "the next lifecycle tick).")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
@@ -410,6 +418,26 @@ def main():
     rss_baseline_mb = _sample_rss_mb()
     print(f"RSS baseline: {rss_baseline_mb:.0f} MB"
           + (" (psutil unavailable, all RSS metrics will read 0)" if _proc is None else ""))
+
+    # Parse --kill-npc-at-tick into a dict tick_num -> list of
+    # (npc_id, cause) tuples for lookup in the tick loop.
+    scripted_deaths: dict[int, list[tuple[str, str]]] = {}
+    if args.kill_npc_at_tick:
+        for spec in args.kill_npc_at_tick:
+            parts = spec.split(":", 2)
+            if len(parts) < 2:
+                print(f"  [warn] bad --kill-npc-at-tick spec: {spec}")
+                continue
+            try:
+                tick_n = int(parts[0])
+            except ValueError:
+                print(f"  [warn] bad tick number in --kill-npc-at-tick: {spec}")
+                continue
+            npc_id = parts[1].strip()
+            cause = parts[2].strip() if len(parts) > 2 else "scripted death"
+            scripted_deaths.setdefault(tick_n, []).append((npc_id, cause))
+        if scripted_deaths:
+            print(f"Scripted deaths: {dict(scripted_deaths)}")
 
     try:
         outcomes = Counter()
@@ -641,6 +669,20 @@ def main():
                 "dispatch": tick_actions[0]["dispatch"],
                 "outcome": tick_actions[0]["outcome"],
             })
+
+            # Scripted deaths fire AFTER this tick's outputs are
+            # recorded — they'll be dispatched on the next lifecycle
+            # tick at the start of tick_num+1. This matches the REST
+            # path: POST /story/npc_death queues, the next tick
+            # drains and dispatches.
+            if tick_num in scripted_deaths:
+                for npc_id, cause in scripted_deaths[tick_num]:
+                    print(f"\n[KILL after T{tick_num}] {npc_id} — {cause}")
+                    result = engine.story_director.queue_death_request(
+                        npc_id, cause=cause,
+                    )
+                    if not result.get("ok"):
+                        print(f"  [warn] death queue rejected: {result.get('reason')}")
 
         # Summary
         print("\n" + "=" * 72)

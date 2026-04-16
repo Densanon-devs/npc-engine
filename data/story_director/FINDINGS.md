@@ -3938,6 +3938,200 @@ python bench_story_director.py --ticks 20 --reset --model qwen_3b \
 
 ---
 
+## Phase 2a — death plumbing (2026-04-15)
+
+NPCs can now die permanently. The feature is game-authoritative
+for Phase 2a: the game client calls `POST /story/npc_death` with
+an npc_id + cause + optional inheritor, the request queues on
+the Director, and the next `tick()`'s lifecycle phase (a new
+`_lifecycle_tick()` method that runs before `_architect_plan`)
+drains the queue and dispatches the death. Director-autonomous
+deaths are Phase 2c, gated behind a config flag.
+
+### Data model
+
+NPCKnowledge lifecycle fields (all three in-sync copies):
+
+```python
+status: str = "alive"            # or "deceased"
+death_tick: Optional[int] = None
+death_cause: Optional[str] = None
+inheritor: Optional[str] = None  # successor npc_id for open quests
+```
+
+Loaded from profile YAML:
+```yaml
+status: deceased
+death_tick: 42
+death_cause: "bandit ambush on the north road"
+inheritor: kael_apprentice_pip   # optional
+```
+
+Default `alive` keeps every pre-Phase-2a profile working unchanged.
+
+StoryDirector state:
+```python
+self._deceased_npcs: dict[str, dict] = {}       # full death records
+self._pending_death_requests: list[dict] = []    # FIFO queue
+```
+
+Both persisted in `state.json`. A game restart honors every
+previously-dispatched death and any still-queued requests.
+
+### Dispatch semantics
+
+`_dispatch_npc_death(npc_id, cause, transfers_quests_to)`:
+
+1. Validate NPC exists and is alive. Returns `{ok: False, reason}`
+   on failure without mutating anything.
+2. Flip `status = "deceased"`, stamp `death_tick` (= current_tick
+   + 1 because lifecycle runs BEFORE tick_count increments) and
+   `death_cause`. Record `inheritor` if provided.
+3. Call `arc_planner.on_cast_death(npc_id, current_tick)`:
+   - Arc at `confront` or later, or deceased was sole cast →
+     mark resolved. The death IS the resolution.
+   - Arc at `seed`/`escalate` with multiple cast members → trim
+     the deceased from the cast list, reset the touch counter
+     so the next beat is earned with the smaller cohort, keep
+     the arc active.
+4. Walk open quests: transfer to `inheritor` if set, otherwise
+   mark `status = "aborted"` with a `quests_cleaned` record.
+5. Emit a FactLedger entry so gossip can carry the death across
+   ticks: `"{name} is dead — {cause}"`.
+6. Break burst rotation if the deceased NPC was holding slot 0.
+7. Record the full death trail in `_deceased_npcs[npc_id]` for
+   snapshot display, bench audit, and graveyard REST queries.
+
+### Deceased propagation across the Director
+
+- **`_pick_focus_npc`**: partitions `profiles` through
+  `_alive_npcs()` before any zone filter or rotation logic.
+  Deceased NPCs never enter the rotation pool. Burst rotation
+  self-heals if its sticky focus dies.
+- **`_world_snapshot`**: filters deceased from the live roster
+  iteration, AND adds a new "RECENTLY DEPARTED" section that
+  shows any NPC either in an active arc's cast or dead within
+  the last 10 ticks. Format:
+  `- Captain Reva (Harbor Master) — drowned in the harbor storm [T6]`
+  Gives the LLM narrative context so aftermath beats can
+  reference the dead without pretending they're alive.
+- **`postgen.py`**: two new functions —
+  `detect_deceased_reference(dialogue, deceased_names)` scans
+  NPC dialogue for living-action patterns that name a dead NPC
+  ("Kael walks", "Hello Mara"), and
+  `repair_deceased_reference(dialogue, deceased_name, cause)`
+  wraps the first name occurrence in `the late {name} ({cause})`
+  to flip the tense register. Acknowledged framings ("the late
+  Kael", "Kael's grave", "Kael was...") are left alone.
+  Patterns cover ~20 common living-action verbs and several
+  direct-address openings.
+
+### REST endpoints
+
+| Endpoint | Body | Purpose |
+|---|---|---|
+| `POST /story/npc_death` | `{"npc_id", "cause", "transfers_quests_to"}` | Queue a death. Dispatched on next lifecycle tick. |
+| `GET /story/graveyard` | — | Full death history + pending queue for audit. |
+
+### Bench flag
+
+`bench_story_director.py` gains `--kill-npc-at-tick
+TICK:NPC_ID[:CAUSE]` (repeatable) for scripted death events in
+benches. The death fires AFTER the specified tick completes,
+matching the REST path — next lifecycle tick drains and
+dispatches.
+
+### Phase 2a tests
+
+11 new offline unit tests:
+
+1. `test_queue_death_request_validates_alive_and_exists`
+2. `test_death_dispatch_marks_npc_deceased_and_breaks_burst`
+3. `test_deceased_npc_excluded_from_focus_selection`
+4. `test_death_transfers_open_quests_to_inheritor`
+5. `test_death_aborts_open_quests_without_inheritor`
+6. `test_arc_on_cast_death_resolves_post_confront_arc`
+7. `test_arc_on_cast_death_trims_cast_on_early_arc`
+8. `test_lifecycle_tick_drains_pending_death`
+9. `test_recently_departed_section_in_snapshot`
+10. `test_postgen_detect_deceased_reference_catches_living_action`
+11. `test_postgen_repair_deceased_reference_adds_late_prefix`
+
+Test suite at **135 offline tests green** (was 124 at end of
+Phase 1).
+
+### Integration bench — kill captain_reva at T5 on PB zoned
+
+`logs/pb_death_captain_15.json`. 15 ticks × 3 actions, PB zoned,
+dock_district active. Bench flag: `--kill-npc-at-tick
+5:captain_reva:"drowned in the harbor storm"`.
+
+| Metric | Result |
+|---|---|
+| captain_reva dispatched T1-T5 | 5 (pre-death, normal burst) |
+| captain_reva dispatched T6-T15 | **0** (complete exclusion) |
+| Death queued at end of T5 | ✓ |
+| Death dispatched at start of T6 | ✓ |
+| Arc `arc_t5_1776297577` trimmed | `[finn, captain_reva, old_bones]` → `[finn, old_bones]` |
+| Arc beat advanced post-death | T→BEAT 1→2→3 on trimmed cast |
+| Quest `lighthouse_mystery` | aborted, reason: giver_deceased |
+| Mean tick time (entire run) | 4.62s (within noise of pre-death 4.91s) |
+| State persistence | `state.json` holds full deceased record |
+
+The arc trimming case (not the resolution case) was the more
+interesting path to watch — the arc started at beat `seed` with
+3 NPCs, lost the harbor master mid-seed, and continued running
+on the remaining 2 dock NPCs. The beat counter reset to 0 after
+the trim, and the arc earned enough touches on finn + old_bones
+to advance from seed → escalate → confront over ticks 6–15. This
+is the "cast evolves" feel — story threads survive character
+deaths gracefully.
+
+### What Phase 2a confirmed
+
+- Game-authoritative death flow is clean. REST queue → lifecycle
+  drain → dispatch → propagation works with zero bench issues.
+- Deceased NPCs are strictly removed from every rotation surface
+  (focus selection, snapshot, burst rotation).
+- Arc transitions compose correctly with burst rotation and the
+  zone layer — the integration bench was a 3-layer stress test
+  (death + zone + burst) and all three cooperated.
+- Quest handling is the cleanest-possible: transfer OR abort, no
+  half-states, fully logged in the dispatch record.
+- Postgen deceased-reference detection + repair lives in the
+  same file as wrong-identity/wrong-addressee repairs and
+  follows the same pattern. Zero regressions in the existing
+  postgen test suite.
+
+### What Phase 2a deferred
+
+- **Director-autonomous death** (Phase 2c). Game client still
+  owns mortality authority. The plan allows Phase 2c to emit
+  death actions from the Director without gating — any NPC can
+  die — but the stress bench will be the arbiter of whether
+  that stays stable over long sessions.
+- **Events section reserve cap** (still open from the 2026-04-14
+  fact-consumption bench). Phase 2a didn't touch it.
+- **Succession beyond quests** (inheritor inherits goals /
+  knowledge). Current plan: quests only, other fields stay with
+  the original character. Revisit if the stress bench shows
+  weird emergent behaviour.
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+
+# Phase 2a integration bench — kill reva mid-session
+python bench_story_director.py --ticks 15 --reset --model qwen_3b \
+    --world port_blackwater_zoned --active-zones dock_district \
+    --actions-per-tick 3 --narration-mode terse \
+    --kill-npc-at-tick "5:captain_reva:drowned in the harbor storm" \
+    --log logs/pb_death_captain_15.json
+```
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked

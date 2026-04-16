@@ -822,6 +822,64 @@ class ArcPlanner:
             if npc_id in arc.focus_npcs:
                 arc.touches_since_last_advance += 1
 
+    def on_cast_death(self, npc_id: str, current_tick: int) -> dict:
+        """
+        React to an NPC death by transitioning any arcs whose cast
+        includes the deceased NPC. Three cases:
+
+        1. Arc is past the ``confront`` beat (current_beat >= 2):
+           mark resolved. The death IS the resolution.
+        2. Arc is at seed or escalate, and the deceased NPC was the
+           SOLE cast member: collapse to aftermath-only with status
+           "resolved" and a note in the theme.
+        3. Arc is at seed or escalate with multiple cast members:
+           drop the deceased NPC from the cast list, keep the arc
+           active, and reset touch counter to trigger a new beat's
+           worth of non-dead-npc touches before advancing.
+
+        Returns a summary dict so the Director can surface the
+        transition in the death dispatch result.
+        """
+        affected: list[dict] = []
+        for arc in list(self.active_arcs()):
+            if npc_id not in arc.focus_npcs:
+                continue
+            original_cast = list(arc.focus_npcs)
+            arc.focus_npcs = [n for n in arc.focus_npcs if n != npc_id]
+            if arc.current_beat >= 2 or not arc.focus_npcs:
+                # Either already past confront OR deceased was sole
+                # cast — arc resolves now.
+                arc.status = "resolved"
+                arc.last_advanced_at_tick = current_tick
+                if arc.id in self.active_arc_ids:
+                    self.active_arc_ids.remove(arc.id)
+                affected.append({
+                    "arc_id": arc.id,
+                    "transition": "resolved_by_death",
+                    "original_cast": original_cast,
+                })
+                logger.info(
+                    f"ArcPlanner resolved {arc.id} after death of {npc_id}"
+                )
+            else:
+                # Active arc with remaining cast — drop the deceased
+                # and reset the touch counter so we re-earn the next
+                # beat advance with the smaller cast.
+                arc.touches_since_last_advance = 0
+                affected.append({
+                    "arc_id": arc.id,
+                    "transition": "cast_trimmed",
+                    "original_cast": original_cast,
+                    "new_cast": list(arc.focus_npcs),
+                })
+                logger.info(
+                    f"ArcPlanner trimmed {npc_id} from {arc.id} cast "
+                    f"(remaining: {arc.focus_npcs})"
+                )
+        if affected:
+            self.save()
+        return {"arcs_affected": affected}
+
     def advance_if_beat_met(self, current_tick: int) -> int:
         """
         Iterate active arcs and advance each one that has met its
@@ -1080,6 +1138,15 @@ class StoryDirector:
         # Tick counter used to pace out-of-zone focus picks (one in
         # _OUT_OF_ZONE_RATE picks go to the out-of-zone pool).
         self._zone_escape_counter: int = 0
+        # Lifecycle state (Phase 2a). ``_deceased_npcs`` is keyed by
+        # npc_id and stores the full death record (death_tick,
+        # death_cause, inheritor, affected arcs, quests cleaned). It's
+        # persisted in state.json so game restarts honor deaths.
+        # ``_pending_death_requests`` is a FIFO queue: REST calls to
+        # /story/npc_death push here, and the next lifecycle tick
+        # drains the queue and actually dispatches each death.
+        self._deceased_npcs: dict[str, dict] = {}
+        self._pending_death_requests: list[dict] = []
         # Burst rotation state: the NPC currently held as the first-slot
         # focus across consecutive ticks, plus the remaining number of
         # ticks (AFTER the one that locked it in) the burst will keep
@@ -1254,6 +1321,17 @@ class StoryDirector:
             raw_escape = state.get("zone_escape_counter", 0)
             if isinstance(raw_escape, (int, float)):
                 self._zone_escape_counter = max(0, int(raw_escape))
+            raw_deceased = state.get("deceased_npcs", {})
+            if isinstance(raw_deceased, dict):
+                self._deceased_npcs = {
+                    str(k): v for k, v in raw_deceased.items()
+                    if isinstance(v, dict)
+                }
+            raw_pending_deaths = state.get("pending_death_requests", [])
+            if isinstance(raw_pending_deaths, list):
+                self._pending_death_requests = [
+                    r for r in raw_pending_deaths if isinstance(r, dict)
+                ]
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
@@ -1277,6 +1355,8 @@ class StoryDirector:
             "burst_remaining": self._burst_remaining,
             "active_zones": sorted(self._active_zones),
             "zone_escape_counter": self._zone_escape_counter,
+            "deceased_npcs": self._deceased_npcs,
+            "pending_death_requests": self._pending_death_requests,
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
@@ -1324,6 +1404,12 @@ class StoryDirector:
                 f"{actions_per_tick} -> 1"
             )
             actions_per_tick = 1
+
+        # Phase 0: lifecycle maintenance. Drain any pending deaths
+        # (and later, births) before the architect plans the beat.
+        # Deaths mutate the profile set, so running this before the
+        # plan ensures the architect picks from the post-death cast.
+        lifecycle_actions = self._lifecycle_tick()
 
         # Default max_tokens depends on narration mode. Prose
         # outputs run 40-50 words (~60-80 tokens) and occasionally
@@ -1945,6 +2031,186 @@ class StoryDirector:
             "npc_zones": npc_zones,
         }
 
+    # ── Lifecycle management (Phase 2a+) ────────────────────────
+
+    def queue_death_request(self, npc_id: str, cause: str = "",
+                             transfers_quests_to: Optional[str] = None) -> dict:
+        """
+        Game-authoritative death reporting. Appends a death request
+        to the lifecycle queue; the next ``tick()`` drains the queue
+        via ``_lifecycle_tick`` and actually dispatches the deaths.
+
+        Queueing rather than dispatching immediately means deaths
+        and story beats interleave predictably: every death is
+        observable in the bench trace as a lifecycle action between
+        ticks rather than as a mutation mid-tick.
+        """
+        if not npc_id or not isinstance(npc_id, str):
+            return {"ok": False, "reason": "missing npc_id"}
+        npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+        if npc is None:
+            return {"ok": False, "reason": f"unknown npc '{npc_id}'"}
+        if getattr(npc, "status", "alive") != "alive":
+            return {
+                "ok": False,
+                "reason": f"npc '{npc_id}' is not alive (status={getattr(npc, 'status', '?')})",
+            }
+        request = {
+            "npc_id": npc_id,
+            "cause": cause or "unspecified",
+            "transfers_quests_to": transfers_quests_to,
+            "queued_at_tick": self.tick_count,
+        }
+        self._pending_death_requests.append(request)
+        self._save_state()
+        return {"ok": True, "queued": request}
+
+    def get_graveyard(self) -> dict:
+        """
+        Return the full death history for audit / bench visibility.
+        Contains every NPC the Director has ever marked deceased in
+        this session, keyed by npc_id.
+        """
+        return {
+            "deceased": self._deceased_npcs,
+            "pending": list(self._pending_death_requests),
+        }
+
+    def _lifecycle_tick(self) -> list[dict]:
+        """
+        Run at the start of every tick() call, before the architect
+        plan. Drains pending death requests and dispatches each one
+        in FIFO order. Phase 2b will add pending birth handling and
+        autonomous population management here.
+
+        Returns the list of lifecycle actions that ran (death
+        records, birth records, etc.) for bench trace visibility.
+        At most one death and one birth fire per tick so the core
+        story-beat cadence isn't overwhelmed.
+        """
+        actions: list[dict] = []
+        # Drain at most one death per tick. Extra requests stay
+        # queued for subsequent ticks.
+        if self._pending_death_requests:
+            request = self._pending_death_requests.pop(0)
+            result = self._dispatch_npc_death(
+                npc_id=request["npc_id"],
+                cause=request.get("cause", "unspecified"),
+                transfers_quests_to=request.get("transfers_quests_to"),
+            )
+            actions.append({"kind": "npc_death", "result": result})
+        return actions
+
+    def _dispatch_npc_death(self, npc_id: str, cause: str,
+                             transfers_quests_to: Optional[str]) -> dict:
+        """
+        Actually mark an NPC as deceased and propagate the death
+        through arcs, quests, FactLedger, and burst rotation.
+
+        Invariant: never touches an NPC that's already deceased
+        (queue layer validates) and never mutates the profile's
+        immutable fields.
+        """
+        npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+        if npc is None:
+            return {"ok": False, "reason": f"unknown npc '{npc_id}'"}
+        if getattr(npc, "status", "alive") != "alive":
+            return {"ok": False, "reason": f"npc '{npc_id}' already dead"}
+
+        death_tick = self.tick_count + 1
+        npc.status = "deceased"
+        npc.death_tick = death_tick
+        npc.death_cause = cause
+        if transfers_quests_to:
+            npc.inheritor = transfers_quests_to
+
+        # Arc cleanup: transition any arcs whose cast includes this NPC
+        arc_result = self.arc_planner.on_cast_death(
+            npc_id=npc_id, current_tick=death_tick
+        )
+
+        # Quest cleanup: abort or transfer every open quest.
+        quest_records: list[dict] = []
+        for q in list(getattr(npc, "quests", [])):
+            if q.status not in ("available", "active"):
+                continue
+            if transfers_quests_to:
+                target = self.engine.pie.npc_knowledge.profiles.get(
+                    transfers_quests_to
+                )
+                if target is not None:
+                    target.quests.append(q)
+                    quest_records.append({
+                        "quest_id": q.id,
+                        "transition": "transferred",
+                        "to": transfers_quests_to,
+                    })
+                    continue
+            # No inheritor or inheritor not found → mark aborted
+            q.status = "aborted"
+            quest_records.append({
+                "quest_id": q.id,
+                "transition": "aborted",
+                "reason": "giver_deceased",
+            })
+
+        # FactLedger entry so gossip can carry the news across ticks.
+        if cause:
+            ledger_text = (
+                f"{npc.identity.get('name', npc_id)} is dead — {cause}"
+            )
+        else:
+            ledger_text = (
+                f"{npc.identity.get('name', npc_id)} has died"
+            )
+        try:
+            self.ledger.add(
+                text=ledger_text,
+                npc_id=npc_id,
+                kind="death",
+                tick=death_tick,
+            )
+        except Exception as e:
+            logger.warning(f"ledger add for death of {npc_id} failed: {e}")
+
+        # Break burst rotation if the deceased NPC was holding slot 0.
+        if self._burst_focus_npc == npc_id:
+            self._burst_focus_npc = None
+            self._burst_remaining = 0
+
+        # Record in _deceased_npcs for persistence + snapshot.
+        record = {
+            "npc_id": npc_id,
+            "name": npc.identity.get("name", npc_id),
+            "role": npc.identity.get("role", ""),
+            "zone": getattr(npc, "current_zone", "global"),
+            "death_tick": death_tick,
+            "death_cause": cause,
+            "inheritor": transfers_quests_to,
+            "arcs_affected": arc_result.get("arcs_affected", []),
+            "quests_cleaned": quest_records,
+        }
+        self._deceased_npcs[npc_id] = record
+
+        logger.info(
+            f"StoryDirector: NPC '{npc_id}' deceased at T{death_tick} "
+            f"cause='{cause}' arcs_affected={len(arc_result.get('arcs_affected', []))} "
+            f"quests_cleaned={len(quest_records)}"
+        )
+        return {"ok": True, "record": record}
+
+    def _alive_npcs(self) -> dict:
+        """
+        Return a dict of npc_id -> NPCKnowledge for every currently-
+        alive NPC. Used by focus selection and the snapshot builder
+        to filter out deceased NPCs from the pool.
+        """
+        return {
+            npc_id: npc
+            for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items()
+            if getattr(npc, "status", "alive") == "alive"
+        }
+
     # ── World snapshot ──────────────────────────────────────────
 
     # Big-world tunables. The snapshot grows linearly with cast size on
@@ -2063,7 +2329,14 @@ class StoryDirector:
         world_name = self.engine.config.world_name or "Ashenvale"
         lines.append(f"World: {world_name}")
 
-        all_npc_ids = list(pie.npc_knowledge.profiles.keys())
+        # Only ALIVE NPCs reach the live roster. Deceased NPCs appear
+        # in a separate "RECENTLY DEPARTED" section below when any
+        # active arc cast references them, so the Director can write
+        # aftermath beats without treating the dead as still walking.
+        all_npc_ids = [
+            npc_id for npc_id, npc in pie.npc_knowledge.profiles.items()
+            if getattr(npc, "status", "alive") == "alive"
+        ]
         cast_total = len(all_npc_ids)
         if cast_total > self._SNAPSHOT_BOUND_THRESHOLD:
             selected = self._select_snapshot_npcs(all_npc_ids, planned_focus_ids)
@@ -2129,6 +2402,36 @@ class StoryDirector:
                     recent_events.append(e.description)
         if recent_events:
             lines.append("Recent organic events: " + " | ".join(recent_events[-5:]))
+
+        # RECENTLY DEPARTED — surface any NPCs who died in the last
+        # 10 ticks so the Director can write aftermath beats and
+        # continuing-character narration that references the dead
+        # without pretending they're still around. Only listed if
+        # the deceased NPC is in an active arc's cast OR died very
+        # recently; avoids dumping the entire graveyard every tick.
+        departed_lines: list[str] = []
+        recent_tick_floor = self.tick_count - 10
+        arc_cast_ids: set[str] = set()
+        for arc in self.arc_planner.active_arcs():
+            arc_cast_ids.update(arc.focus_npcs or [])
+        for npc_id, record in self._deceased_npcs.items():
+            dt = record.get("death_tick", 0)
+            in_arc = npc_id in arc_cast_ids
+            if in_arc or dt >= recent_tick_floor:
+                name = record.get("name", npc_id)
+                role = record.get("role", "")
+                cause = record.get("death_cause", "")
+                line = f"{name}"
+                if role:
+                    line += f" ({role})"
+                if cause:
+                    line += f" — {cause}"
+                line += f" [T{dt}]"
+                departed_lines.append(line)
+        if departed_lines:
+            lines.append("RECENTLY DEPARTED:")
+            for line in departed_lines[:5]:
+                lines.append("  - " + line)
 
         # Director's own past actions — explicit DO NOT REPEAT list.
         already_done = self._format_already_done()
@@ -2325,7 +2628,12 @@ class StoryDirector:
         rules in the prompt — still fixate on a single target or abuse
         ``"all"``. We take the choice out of the model's hands.
         """
-        profiles = list(self.engine.pie.npc_knowledge.profiles.keys())
+        # Filter out deceased NPCs at the source — they're permanently
+        # out of the rotation pool. Deceased NPCs still appear in the
+        # FactLedger and gossip system, but the Director doesn't
+        # generate new story beats for them.
+        alive = self._alive_npcs()
+        profiles = list(alive.keys())
         if not profiles:
             return None
 

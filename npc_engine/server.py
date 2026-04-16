@@ -221,6 +221,11 @@ def create_app():
         npc_id: str
         zone: str
 
+    class NPCDeathRequest(BaseModel):
+        npc_id: str
+        cause: Optional[str] = ""
+        transfers_quests_to: Optional[str] = None
+
     @app.post("/quests/accept")
     async def quest_accept(req: QuestAcceptRequest):
         """Player accepts a quest. Updates tracker and NPC state."""
@@ -355,6 +360,38 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_zone_state()
+
+    @app.post("/story/npc_death")
+    async def story_npc_death(req: NPCDeathRequest):
+        """Queue a death dispatch for the given NPC. The next tick's
+        lifecycle phase will actually mark the NPC deceased, propagate
+        the death through active arcs, abort or transfer open quests
+        (per transfers_quests_to), and emit a FactLedger entry for
+        gossip propagation. Game-authoritative path — the Director
+        never emits deaths on its own unless lifecycle autonomous
+        mode is enabled (Phase 2c)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.queue_death_request(
+            req.npc_id,
+            cause=req.cause or "",
+            transfers_quests_to=req.transfers_quests_to,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/story/graveyard")
+    async def story_graveyard():
+        """Return the full death history for this session. Each entry
+        contains the death_tick, death_cause, inheritor, affected
+        arcs, and cleaned quests. Also lists any death requests still
+        pending in the queue (not yet processed by a lifecycle tick)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_graveyard()
 
     @app.get("/health")
     async def health():

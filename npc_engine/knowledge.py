@@ -122,6 +122,16 @@ class NPCKnowledge:
         self.home_zone: str = "global"
         self.current_zone: str = "global"
         self.mobile: bool = False
+        # Lifecycle fields for Phase 2 of the Story Director zone +
+        # lifecycle work. Every NPC starts alive; deaths flip `status`
+        # to "deceased" and stamp the other fields. Fully persisted
+        # back into the profile YAML so a game restart honors deaths.
+        # `inheritor` optionally points to a successor NPC that
+        # receives any open quests when this NPC dies.
+        self.status: str = "alive"
+        self.death_tick: Optional[int] = None
+        self.death_cause: Optional[str] = None
+        self.inheritor: Optional[str] = None
 
         if self.profile_path.exists():
             self._load()
@@ -140,6 +150,19 @@ class NPCKnowledge:
         self.home_zone = str(data.get("zone", "global"))
         self.current_zone = self.home_zone
         self.mobile = bool(data.get("mobile", False))
+        # Lifecycle fields. Default "alive" so profiles without a
+        # status key keep working. A deceased NPC profile looks like:
+        #   status: deceased
+        #   death_tick: 42
+        #   death_cause: "bandit ambush on the north road"
+        #   inheritor: kael_apprentice_pip    # optional
+        self.status = str(data.get("status", "alive"))
+        dt = data.get("death_tick")
+        self.death_tick = int(dt) if isinstance(dt, (int, float)) else None
+        dc = data.get("death_cause")
+        self.death_cause = str(dc) if dc else None
+        ih = data.get("inheritor")
+        self.inheritor = str(ih) if ih else None
 
         for q in data.get("active_quests", []):
             self.quests.append(Quest(
