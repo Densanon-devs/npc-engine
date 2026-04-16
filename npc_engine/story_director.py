@@ -428,11 +428,41 @@ class FactLedger:
                 warning["contradiction"] = True
         return warning
 
-    def add(self, text: str, npc_id: str, kind: str, tick: int) -> Optional[dict]:
+    def add(
+        self,
+        text: str,
+        npc_id: str,
+        kind: str,
+        tick: int,
+        *,
+        source_ledger_entries: Optional[list[int]] = None,
+        suggested_by: Optional[str] = None,
+    ) -> Optional[dict]:
         """
         Add a new entry to the ledger and return a similarity warning if
         any prior entry exceeds the threshold. Returns None when no
         warning fires (or when embeddings are unavailable).
+
+        Provenance markers (Phase 12 universal pattern, 2026-04-15):
+
+        - ``source_ledger_entries``: indices of prior ledger entries this
+          one was derived from (e.g., an arc-beat fact shaped by two
+          earlier events). Empty/None for origin facts. Lets downstream
+          tooling reconstruct the causal chain without re-embedding
+          every pair.
+        - ``suggested_by``: identifier of the subsystem that produced
+          this injection — typically the Director sub-action name
+          ("arc_advance", "quest_injection", "event_drop",
+          "player_reaction"). Empty/None for pre-Phase-12 entries in
+          the loaded ledger. Lets contradiction review and FINDINGS
+          post-mortems filter "which part of the Director produced
+          this?" without heuristic text matching.
+
+        Both fields are optional. Callers that don't pass them produce
+        entries identical to pre-Phase-12 behavior. Entries loaded from
+        an older ``fact_ledger.json`` that predates the fields simply
+        lack the keys — consumers should ``dict.get(...)`` rather than
+        ``[...]`` when reading them.
         """
         if not text or not isinstance(text, str):
             return None
@@ -456,13 +486,18 @@ class FactLedger:
                 if nli.get("is_contradiction"):
                     warning["contradiction"] = True
 
-        self.entries.append({
+        entry: dict = {
             "text": text[:400],
             "embedding": embedding.tolist(),
             "npc_id": npc_id,
             "kind": kind,
             "tick": tick,
-        })
+        }
+        if source_ledger_entries:
+            entry["source_ledger_entries"] = list(source_ledger_entries)
+        if suggested_by:
+            entry["suggested_by"] = suggested_by
+        self.entries.append(entry)
         # Bound memory — keep last 200 entries (largest a typical session reaches)
         if len(self.entries) > 200:
             self.entries = self.entries[-200:]
