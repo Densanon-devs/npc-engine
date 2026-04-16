@@ -226,6 +226,10 @@ def create_app():
         cause: Optional[str] = ""
         transfers_quests_to: Optional[str] = None
 
+    class NPCBirthRequest(BaseModel):
+        zone: str
+        role: Optional[str] = None
+
     @app.post("/quests/accept")
     async def quest_accept(req: QuestAcceptRequest):
         """Player accepts a quest. Updates tracker and NPC state."""
@@ -392,6 +396,33 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_graveyard()
+
+    @app.post("/story/npc_birth_request")
+    async def story_npc_birth_request(req: NPCBirthRequest):
+        """Queue a birth request for the specified zone. The next
+        tick's lifecycle phase generates a template NPC profile, writes
+        it to disk, and registers it at runtime. The game client can
+        optionally specify a role from the zone's role_pool; if
+        omitted, a random role is selected."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.queue_birth_request(
+            req.zone, role=req.role,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/story/population")
+    async def story_population():
+        """Return per-zone alive counts vs. targets. Useful for game
+        UI 'world breathing' indicators or debug dashboards that track
+        population stability over time."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_population_state()
 
     @app.get("/health")
     async def health():

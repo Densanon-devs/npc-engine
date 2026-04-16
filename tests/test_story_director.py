@@ -176,6 +176,21 @@ class _StubEngine:
         })
         return {"accepted": quest_id, "given_by": given_by}
 
+    def add_profile(self, profile_path: str,
+                     social_connections: list = None) -> dict:
+        """Stub: load a YAML file and register the NPC in profiles."""
+        from npc_engine.knowledge import NPCKnowledge
+        p = Path(profile_path)
+        if not p.exists():
+            return {"ok": False, "reason": f"file not found: {p}"}
+        npc_id = p.stem
+        if npc_id in self.pie.npc_knowledge.profiles:
+            return {"ok": False, "reason": f"already exists: {npc_id}"}
+        npc = NPCKnowledge(str(p))
+        self.pie.npc_knowledge.profiles[npc_id] = npc
+        self.calls.append(("add_profile", npc_id))
+        return {"ok": True, "npc_id": npc_id, "profile_path": str(p)}
+
 
 _DEFAULT_STUB_PROFILES = (
     ("kael", "blacksmith"),
@@ -1342,6 +1357,191 @@ def test_postgen_repair_deceased_reference_adds_late_prefix():
     assert "the late Kael (plague)" in out2
     assert out2.count("the late Kael") == 1
     print("  [PASS] postgen_repair_deceased_reference_adds_late_prefix")
+
+
+# ── Lifecycle: birth pipeline tests (Phase 2b) ─────────────────
+
+def test_birth_dispatch_creates_profile_and_registers():
+    """_dispatch_npc_birth must write a YAML file to the world's
+    npc_profiles dir and call engine.add_profile to register the
+    new NPC at runtime. The new NPC should appear in
+    engine.pie.npc_knowledge.profiles afterward."""
+    import tempfile, shutil
+    restore = _isolate_state_file("birth_dispatch")
+    # Create a temp world dir so profile files go somewhere safe.
+    tmp_world = Path(tempfile.mkdtemp(prefix="test_birth_"))
+    (tmp_world / "npc_profiles").mkdir()
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        # Point the engine's world_dir at the temp dir so the birth
+        # dispatch writes profiles there (not into the real data/).
+        engine.config = SimpleNamespace(
+            world_name="TestWorld", world_dir=str(tmp_world),
+        )
+        director = StoryDirector(engine)
+        director._zone_config = {
+            "dock_district": {
+                "target_population": 5,
+                "min_population": 3,
+                "role_pool": ["merchant", "guard"],
+                "lore_hook": "test dock",
+            },
+        }
+        request = {"zone": "dock_district", "role": "merchant", "reason": "test"}
+        result = director._dispatch_npc_birth(request)
+        assert result["ok"] is True, result
+        npc_id = result["record"]["npc_id"]
+        assert npc_id in engine.pie.npc_knowledge.profiles, (
+            f"new NPC {npc_id} not found in profiles"
+        )
+        # Profile file exists on disk
+        profile_path = Path(result["record"]["profile_path"])
+        assert profile_path.exists(), f"profile file not written: {profile_path}"
+        # Birth history recorded
+        assert len(director._birth_history) == 1
+        assert director._birth_history[0]["npc_id"] == npc_id
+    finally:
+        restore()
+        shutil.rmtree(tmp_world, ignore_errors=True)
+    print("  [PASS] birth_dispatch_creates_profile_and_registers")
+
+
+def test_population_gap_triggers_birth_on_lifecycle_tick():
+    """When a zone is below min_population, the lifecycle tick
+    should auto-generate a birth to fill the gap without the game
+    client requesting it explicitly."""
+    import tempfile, shutil
+    restore = _isolate_state_file("birth_pop_gap")
+    tmp_world = Path(tempfile.mkdtemp(prefix="test_pop_"))
+    (tmp_world / "npc_profiles").mkdir()
+    try:
+        # Start with 2 dock NPCs — below the min of 3
+        two_dock = (
+            ("finn", "dock_worker", "dock_district"),
+            ("old_bones", "tavern_owner", "dock_district"),
+        )
+        engine = _make_stub_engine(
+            profile_specs=two_dock,
+            responses=[
+                '{"action": "event", "target": "finn", "event": "x"}',
+            ],
+        )
+        engine.config = SimpleNamespace(
+            world_name="TestWorld", world_dir=str(tmp_world),
+        )
+        director = StoryDirector(engine)
+        director._zone_config = {
+            "dock_district": {
+                "target_population": 4,
+                "min_population": 3,
+                "role_pool": ["merchant", "guard"],
+                "lore_hook": "test dock",
+            },
+        }
+        pre_count = len(engine.pie.npc_knowledge.profiles)
+        # tick() calls _lifecycle_tick which should detect the gap
+        # and fire a birth before the architect plan runs.
+        director.tick()
+        post_count = len(engine.pie.npc_knowledge.profiles)
+        assert post_count == pre_count + 1, (
+            f"expected 1 birth, got {post_count - pre_count}"
+        )
+    finally:
+        restore()
+        shutil.rmtree(tmp_world, ignore_errors=True)
+    print("  [PASS] population_gap_triggers_birth_on_lifecycle_tick")
+
+
+def test_population_at_target_no_birth():
+    """When every zone is at or above min_population, the lifecycle
+    tick must NOT auto-generate a birth."""
+    restore = _isolate_state_file("birth_no_gap")
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        director = StoryDirector(engine)
+        # 4 dock NPCs (reva, finn, old_bones, varro) vs min=3 → no gap
+        director._zone_config = {
+            "dock_district": {
+                "target_population": 5,
+                "min_population": 3,
+                "role_pool": ["merchant"],
+                "lore_hook": "test",
+            },
+        }
+        gap = director._find_population_gap()
+        assert gap is None, f"expected no gap, got {gap}"
+    finally:
+        restore()
+    print("  [PASS] population_at_target_no_birth")
+
+
+def test_queue_birth_request_queues_and_drains():
+    """An explicit birth request via queue_birth_request must queue
+    immediately and drain on the next lifecycle tick, taking
+    priority over auto-gap fills."""
+    import tempfile, shutil
+    restore = _isolate_state_file("birth_queue")
+    tmp_world = Path(tempfile.mkdtemp(prefix="test_bq_"))
+    (tmp_world / "npc_profiles").mkdir()
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_ZONED_PROFILES,
+            responses=[
+                '{"action": "event", "target": "finn", "event": "x"}',
+            ],
+        )
+        engine.config = SimpleNamespace(
+            world_name="TestWorld", world_dir=str(tmp_world),
+        )
+        director = StoryDirector(engine)
+        result = director.queue_birth_request(
+            zone="lighthouse_bluffs", role="keeper",
+        )
+        assert result["ok"] is True
+        assert len(director._pending_birth_requests) == 1
+        # tick() drains it
+        director.tick()
+        assert len(director._pending_birth_requests) == 0
+        assert len(director._birth_history) == 1
+        assert director._birth_history[0]["zone"] == "lighthouse_bluffs"
+    finally:
+        restore()
+        shutil.rmtree(tmp_world, ignore_errors=True)
+    print("  [PASS] queue_birth_request_queues_and_drains")
+
+
+def test_birth_name_avoids_collision_with_existing_npcs():
+    """The name generator should never produce a name that collides
+    with an existing NPC. Over multiple births, all names must be
+    unique."""
+    import tempfile, shutil
+    restore = _isolate_state_file("birth_names")
+    tmp_world = Path(tempfile.mkdtemp(prefix="test_bn_"))
+    (tmp_world / "npc_profiles").mkdir()
+    try:
+        engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
+        engine.config = SimpleNamespace(
+            world_name="TestWorld", world_dir=str(tmp_world),
+        )
+        director = StoryDirector(engine)
+        director._zone_config = {
+            "dock_district": {
+                "role_pool": ["worker"],
+                "lore_hook": "test",
+            },
+        }
+        names = set()
+        for _ in range(10):
+            request = {"zone": "dock_district", "role": "worker", "reason": "test"}
+            result = director._dispatch_npc_birth(request)
+            assert result["ok"] is True, result
+            name = result["record"]["name"]
+            assert name not in names, f"duplicate name: {name}"
+            names.add(name)
+    finally:
+        restore()
+        shutil.rmtree(tmp_world, ignore_errors=True)
+    print("  [PASS] birth_name_avoids_collision_with_existing_npcs")
 
 
 def test_pending_player_target_bypasses_zone_filter():
@@ -3976,6 +4176,13 @@ def main():
     test_recently_departed_section_in_snapshot()
     test_postgen_detect_deceased_reference_catches_living_action()
     test_postgen_repair_deceased_reference_adds_late_prefix()
+
+    print("\nStory Director — lifecycle: birth pipeline (Phase 2b)")
+    test_birth_dispatch_creates_profile_and_registers()
+    test_population_gap_triggers_birth_on_lifecycle_tick()
+    test_population_at_target_no_birth()
+    test_queue_birth_request_queues_and_drains()
+    test_birth_name_avoids_collision_with_existing_npcs()
 
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()

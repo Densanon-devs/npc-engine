@@ -69,6 +69,26 @@ class SocialGraph:
         logger.info(f"Social graph loaded: {len(self.connections)} connections, "
                     f"{len(self._adjacency)} NPCs")
 
+    def add_connection(self, conn_data: dict) -> NPCConnection:
+        """
+        Add a connection at runtime (e.g. for Director-generated NPCs).
+        ``conn_data`` matches the world.yaml connection schema:
+        ``{"from": "...", "to": "...", "relationship": "...",
+           "closeness": 0.3, "gossip_filter": "all"}``.
+        Returns the new NPCConnection.
+        """
+        conn = NPCConnection(
+            from_id=conn_data.get("from", ""),
+            to_id=conn_data.get("to", ""),
+            relationship=conn_data.get("relationship", "acquaintance"),
+            closeness=conn_data.get("closeness", 0.3),
+            gossip_filter=conn_data.get("gossip_filter", "all"),
+        )
+        if conn.from_id and conn.to_id:
+            self.connections.append(conn)
+            self._adjacency[conn.from_id].append(conn)
+        return conn
+
     def get_connections(self, npc_id: str) -> list[NPCConnection]:
         """Get all outgoing connections from an NPC."""
         return self._adjacency.get(npc_id, [])

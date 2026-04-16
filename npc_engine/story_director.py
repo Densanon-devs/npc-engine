@@ -1147,6 +1147,11 @@ class StoryDirector:
         # drains the queue and actually dispatches each death.
         self._deceased_npcs: dict[str, dict] = {}
         self._pending_death_requests: list[dict] = []
+        # Phase 2b birth pipeline state.
+        self._pending_birth_requests: list[dict] = []
+        self._birth_history: list[dict] = []
+        # Zone config loaded from zones.yaml (if present).
+        self._zone_config: dict = {}  # zone_name -> {target_population, min_population, role_pool, lore_hook, ...}
         # Burst rotation state: the NPC currently held as the first-slot
         # focus across consecutive ticks, plus the remaining number of
         # ticks (AFTER the one that locked it in) the burst will keep
@@ -1190,6 +1195,7 @@ class StoryDirector:
         self.ledger = FactLedger(self._ledger_file)
         self.arc_planner = ArcPlanner(self._arcs_file)
         self._load_assets()
+        self._load_zone_config()
         self._load_state()
         self._snapshot_original_bios()
 
@@ -1293,6 +1299,37 @@ class StoryDirector:
         self.narration_mode = mode
         self._reload_examples()
 
+    def _load_zone_config(self) -> None:
+        """
+        Load zone configuration from ``zones.yaml`` in the world
+        directory (if present). Each zone entry declares
+        ``target_population``, ``min_population``, ``role_pool``,
+        ``lore_hook``, ``adjacent_to`` — these fields drive the
+        Phase 2b birth pipeline's population management and prompt
+        context. Worlds without a ``zones.yaml`` get an empty
+        ``_zone_config`` dict and no lifecycle population checks
+        ever fire — strictly backward-compatible.
+        """
+        world_dir_str = getattr(
+            getattr(self.engine, "config", None), "world_dir", None,
+        )
+        if not world_dir_str:
+            return
+        zones_path = Path(world_dir_str) / "zones.yaml"
+        if not zones_path.exists():
+            return
+        try:
+            data = yaml.safe_load(zones_path.read_text(encoding="utf-8")) or {}
+            raw_zones = data.get("zones", {})
+            if isinstance(raw_zones, dict):
+                self._zone_config = raw_zones
+                logger.info(
+                    f"Story Director loaded zone config: "
+                    f"{len(self._zone_config)} zones from {zones_path}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load zones.yaml: {e}")
+
     def _load_state(self) -> None:
         if not self._state_file.exists():
             return
@@ -1332,6 +1369,16 @@ class StoryDirector:
                 self._pending_death_requests = [
                     r for r in raw_pending_deaths if isinstance(r, dict)
                 ]
+            raw_pending_births = state.get("pending_birth_requests", [])
+            if isinstance(raw_pending_births, list):
+                self._pending_birth_requests = [
+                    r for r in raw_pending_births if isinstance(r, dict)
+                ]
+            raw_birth_history = state.get("birth_history", [])
+            if isinstance(raw_birth_history, list):
+                self._birth_history = [
+                    r for r in raw_birth_history if isinstance(r, dict)
+                ]
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
@@ -1357,6 +1404,8 @@ class StoryDirector:
             "zone_escape_counter": self._zone_escape_counter,
             "deceased_npcs": self._deceased_npcs,
             "pending_death_requests": self._pending_death_requests,
+            "pending_birth_requests": self._pending_birth_requests,
+            "birth_history": self._birth_history,
             "kind_rotation_index": self._kind_rotation_index,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
@@ -2080,8 +2129,8 @@ class StoryDirector:
         """
         Run at the start of every tick() call, before the architect
         plan. Drains pending death requests and dispatches each one
-        in FIFO order. Phase 2b will add pending birth handling and
-        autonomous population management here.
+        in FIFO order, then checks for pending births (explicit
+        requests + population gap fills).
 
         Returns the list of lifecycle actions that ran (death
         records, birth records, etc.) for bench trace visibility.
@@ -2099,7 +2148,262 @@ class StoryDirector:
                 transfers_quests_to=request.get("transfers_quests_to"),
             )
             actions.append({"kind": "npc_death", "result": result})
+
+        # Drain at most one birth per tick (explicit request first,
+        # then population gap fill if nothing explicit is queued).
+        if self._pending_birth_requests:
+            request = self._pending_birth_requests.pop(0)
+            result = self._dispatch_npc_birth(request)
+            actions.append({"kind": "npc_birth", "result": result})
+        elif self._zone_config:
+            # Automatic population gap fill — check if any zone is
+            # below its min_population and queue a birth request.
+            gap = self._find_population_gap()
+            if gap:
+                result = self._dispatch_npc_birth(gap)
+                actions.append({"kind": "npc_birth_auto", "result": result})
+
         return actions
+
+    def _find_population_gap(self) -> Optional[dict]:
+        """
+        Scan zone configs for any zone below its ``min_population``.
+        Returns a birth request dict for the most depleted zone, or
+        None if every zone is at or above its floor. Only considers
+        alive NPCs in each zone — deceased NPCs don't count toward
+        the population floor.
+        """
+        alive = self._alive_npcs()
+        worst_gap = 0
+        worst_zone = None
+        for zone_name, cfg in self._zone_config.items():
+            if not isinstance(cfg, dict):
+                continue
+            min_pop = cfg.get("min_population", 0)
+            if min_pop <= 0:
+                continue
+            alive_in_zone = sum(
+                1 for npc in alive.values()
+                if getattr(npc, "current_zone", "global") == zone_name
+            )
+            gap = min_pop - alive_in_zone
+            if gap > worst_gap:
+                worst_gap = gap
+                worst_zone = zone_name
+        if worst_zone is None:
+            return None
+        role_pool = self._zone_config[worst_zone].get("role_pool", [])
+        import random
+        role = random.choice(role_pool) if role_pool else "wanderer"
+        return {
+            "zone": worst_zone,
+            "role": role,
+            "reason": f"population_below_minimum (gap={worst_gap})",
+        }
+
+    def queue_birth_request(self, zone: str, role: Optional[str] = None,
+                             reason: str = "game_requested") -> dict:
+        """
+        Game-authoritative birth request. The next lifecycle tick
+        dispatches a template-based NPC generation into the specified
+        zone. Returns immediately with the queued request.
+        """
+        if not zone or not isinstance(zone, str):
+            return {"ok": False, "reason": "missing zone"}
+        request = {
+            "zone": zone,
+            "role": role or "wanderer",
+            "reason": reason,
+            "queued_at_tick": self.tick_count,
+        }
+        self._pending_birth_requests.append(request)
+        self._save_state()
+        return {"ok": True, "queued": request}
+
+    def _dispatch_npc_birth(self, request: dict) -> dict:
+        """
+        Generate a new NPC profile from a template, write it to the
+        world's ``npc_profiles/`` directory, and register it at
+        runtime via ``engine.add_profile()``.
+
+        Phase 2b ships with **template-based generation** — Python
+        scaffolds the YAML structure, picks a name from a small
+        procedural pool, and fills in minimal narrative fields. A
+        future enhancement wires in LLM-based generation for richer
+        character flavor, but the template path is sufficient for
+        population management and stress testing.
+        """
+        import time as _time
+        import random
+
+        zone = request.get("zone", "global")
+        role = request.get("role", "wanderer")
+        reason = request.get("reason", "")
+
+        # Generate a unique id + name
+        tick_stamp = self.tick_count + 1
+        # Name pool — small but distinct enough for 20-30 births
+        _FIRST_NAMES = [
+            "Aldric", "Bryn", "Cael", "Dara", "Elara", "Finn", "Greta",
+            "Halvar", "Iona", "Jareth", "Kira", "Lysander", "Maren",
+            "Nils", "Orin", "Petra", "Quinn", "Rowan", "Sable", "Thane",
+            "Ula", "Voss", "Wren", "Xander", "Yara", "Zane",
+        ]
+        _SURNAMES = [
+            "Ashford", "Blackthorn", "Crestfall", "Dunmoor", "Elderwood",
+            "Frosthold", "Grimshaw", "Holloway", "Ironside", "Juniper",
+            "Kettleworth", "Larkspur", "Mossfield", "Nightwhisper",
+            "Oakenshield", "Pendrake", "Ravenscar", "Stoneacre",
+            "Thornbury", "Underhill", "Valewind", "Wolfsbane",
+        ]
+        # Avoid name collisions with existing NPCs
+        existing_names = {
+            npc.identity.get("name", "").lower()
+            for npc in self.engine.pie.npc_knowledge.profiles.values()
+        }
+        for _ in range(50):
+            first = random.choice(_FIRST_NAMES)
+            surname = random.choice(_SURNAMES)
+            full_name = f"{first} {surname}"
+            if full_name.lower() not in existing_names:
+                break
+        else:
+            full_name = f"Stranger T{tick_stamp}"
+
+        npc_id = f"gen_t{tick_stamp}_{full_name.lower().replace(' ', '_')}"
+
+        # Zone lore hook for personality seeding
+        zone_cfg = self._zone_config.get(zone, {})
+        lore_hook = zone_cfg.get("lore_hook", "a settlement")
+
+        # Build the profile YAML
+        profile_yaml = {
+            "identity": {
+                "name": full_name,
+                "role": role.replace("_", " ").title(),
+                "location": f"Somewhere in the {zone.replace('_', ' ')}",
+                "personality": f"A {role.replace('_', ' ')} from the {zone.replace('_', ' ')}.",
+                "speech_style": "Speaks plainly.",
+            },
+            "zone": zone,
+            "mobile": False,
+            "status": "alive",
+            "generated": True,
+            "generated_at_tick": tick_stamp,
+            "world_facts": [
+                f"Lives in the {zone.replace('_', ' ')} area",
+            ],
+            "personal_knowledge": [
+                f"Arrived recently looking for work as a {role.replace('_', ' ')}",
+            ],
+            "active_quests": [],
+            "recent_events": [],
+            "capabilities": {
+                "scratchpad": {"enabled": True, "max_entries": 6},
+                "trust": {
+                    "enabled": True,
+                    "initial_level": 20,
+                    "thresholds": {"wary": 0, "neutral": 25, "friendly": 50, "trusted": 75},
+                },
+                "emotional_state": {
+                    "enabled": True,
+                    "baseline_mood": "neutral",
+                    "volatility": 0.4,
+                    "decay_rate": 0.2,
+                },
+                "goals": {
+                    "enabled": True,
+                    "active_goals": [{
+                        "id": f"settle_in_{zone}",
+                        "description": f"Find a place to settle in the {zone.replace('_', ' ')}",
+                        "priority": 6,
+                        "keywords": [zone.replace("_", " "), "work", "settle"],
+                    }],
+                },
+                "gossip": {"enabled": True, "max_rumors": 3, "interests": ["all"]},
+            },
+        }
+
+        # Write to the world's npc_profiles directory
+        world_dir_str = getattr(
+            getattr(self.engine, "config", None), "world_dir", None,
+        )
+        if not world_dir_str:
+            return {"ok": False, "reason": "no world_dir configured"}
+        profiles_dir = Path(world_dir_str) / "npc_profiles"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = profiles_dir / f"{npc_id}.yaml"
+        try:
+            profile_path.write_text(
+                yaml.dump(profile_yaml, default_flow_style=False, allow_unicode=True),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            return {"ok": False, "reason": f"failed to write profile: {e}"}
+
+        # Register the new NPC at runtime
+        add_result = self.engine.add_profile(
+            str(profile_path),
+            social_connections=[],  # template births start with no connections
+        )
+        if not add_result.get("ok"):
+            return {"ok": False, "reason": f"add_profile failed: {add_result.get('reason')}"}
+
+        # Emit a FactLedger entry so existing NPCs can gossip about
+        # the newcomer.
+        ledger_text = (
+            f"A new {role.replace('_', ' ')} named {full_name} "
+            f"has arrived in the {zone.replace('_', ' ')}"
+        )
+        try:
+            self.ledger.add(
+                text=ledger_text, npc_id=npc_id,
+                kind="birth", tick=tick_stamp,
+            )
+        except Exception as e:
+            logger.warning(f"ledger add for birth of {npc_id} failed: {e}")
+
+        record = {
+            "npc_id": npc_id,
+            "name": full_name,
+            "role": role,
+            "zone": zone,
+            "birth_tick": tick_stamp,
+            "reason": reason,
+            "profile_path": str(profile_path),
+        }
+        self._birth_history.append(record)
+        logger.info(
+            f"StoryDirector: NPC '{npc_id}' born at T{tick_stamp} "
+            f"zone={zone} role={role} reason={reason}"
+        )
+        return {"ok": True, "record": record}
+
+    def get_population_state(self) -> dict:
+        """
+        Per-zone alive count + target + min for debug / game UI.
+        """
+        alive = self._alive_npcs()
+        zones: dict[str, dict] = {}
+        for zone_name, cfg in self._zone_config.items():
+            if not isinstance(cfg, dict):
+                continue
+            alive_in_zone = sum(
+                1 for npc in alive.values()
+                if getattr(npc, "current_zone", "global") == zone_name
+            )
+            zones[zone_name] = {
+                "alive": alive_in_zone,
+                "target": cfg.get("target_population", 0),
+                "min": cfg.get("min_population", 0),
+                "gap": max(0, cfg.get("min_population", 0) - alive_in_zone),
+            }
+        return {
+            "total_alive": len(alive),
+            "total_deceased": len(self._deceased_npcs),
+            "total_born": len(self._birth_history),
+            "zones": zones,
+        }
 
     def _dispatch_npc_death(self, npc_id: str, cause: str,
                              transfers_quests_to: Optional[str]) -> dict:

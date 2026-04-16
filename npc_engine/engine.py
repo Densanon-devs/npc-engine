@@ -466,6 +466,55 @@ class NPCEngine:
     def active_npc(self) -> str:
         return self.pie.config.npc.active_profile or ""
 
+    def add_profile(self, profile_path: str,
+                     social_connections: list[dict] = None) -> dict:
+        """
+        Register a new NPC at runtime — loads a profile YAML into
+        PIE's knowledge manager and optionally seeds social graph
+        edges. Used by the Phase 2b birth pipeline to inject
+        Director-generated NPCs into the live world without
+        restarting the engine.
+
+        ``social_connections`` is a list of dicts matching the
+        ``world.yaml`` connection schema:
+          [{"from": npc_id, "to": "existing_npc",
+            "relationship": "acquaintance", "closeness": 0.3,
+            "gossip_filter": "all"}, ...]
+        Bidirectional edges should be listed explicitly.
+
+        Returns ``{"ok": True, "npc_id": ..., "profile_path": ...}``
+        on success, ``{"ok": False, "reason": "..."}`` on failure.
+        """
+        from npc_engine.knowledge import NPCKnowledge
+        path = Path(profile_path)
+        if not path.exists():
+            return {"ok": False, "reason": f"profile file not found: {path}"}
+        npc_id = path.stem
+        if npc_id in self.pie.npc_knowledge.profiles:
+            return {
+                "ok": False,
+                "reason": f"npc '{npc_id}' already exists in profiles",
+            }
+        try:
+            npc = NPCKnowledge(str(path))
+        except Exception as e:
+            return {"ok": False, "reason": f"failed to load profile: {e}"}
+        self.pie.npc_knowledge.profiles[npc_id] = npc
+        logger.info(
+            f"NPCEngine: added profile '{npc_id}' at runtime "
+            f"(zone={getattr(npc, 'current_zone', 'global')})"
+        )
+        # Seed social graph edges if provided
+        if social_connections and self.social_graph:
+            for conn in social_connections:
+                try:
+                    self.social_graph.add_connection(conn)
+                except Exception as e:
+                    logger.warning(
+                        f"add_profile: social edge failed: {conn} -> {e}"
+                    )
+        return {"ok": True, "npc_id": npc_id, "profile_path": str(path)}
+
     def shutdown(self) -> None:
         """Clean shutdown."""
         try:
