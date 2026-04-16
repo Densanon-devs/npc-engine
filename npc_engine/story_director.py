@@ -172,6 +172,15 @@ _MAX_SELF_REP_RETRIES_PER_TICK = 1
 # constant never fires, existing bench numbers unchanged.
 _OUT_OF_ZONE_RATE = 7
 
+# Autonomous lifecycle caps. When autonomous mode is enabled, the
+# Director can propose deaths and births on its own. These caps
+# prevent runaway mortality/natality over a session. Both count
+# from the start of the session (process boot or state reset) and
+# are NOT persisted — a restart resets the counters, which is the
+# desired behavior for long-running servers.
+_MAX_AUTONOMOUS_DEATHS_PER_SESSION = 3
+_MAX_AUTONOMOUS_BIRTHS_PER_SESSION = 10
+
 # Small-cast action budget cap. On worlds with at most
 # ``_SMALL_CAST_THRESHOLD`` NPCs, the Director forces
 # ``actions_per_tick = 1`` regardless of what the caller requested.
@@ -1150,6 +1159,13 @@ class StoryDirector:
         # Phase 2b birth pipeline state.
         self._pending_birth_requests: list[dict] = []
         self._birth_history: list[dict] = []
+        # Autonomous lifecycle (Phase 2c). When enabled, the Director
+        # can propose NPC deaths (rare, arc-driven) and births
+        # (population-driven, already built in Phase 2b) without game
+        # client input. Off by default — game-authoritative is safer.
+        self._autonomous_lifecycle: bool = False
+        self._autonomous_deaths_this_session: int = 0
+        self._autonomous_births_this_session: int = 0
         # Zone config loaded from zones.yaml (if present).
         self._zone_config: dict = {}  # zone_name -> {target_population, min_population, role_pool, lore_hook, ...}
         # Burst rotation state: the NPC currently held as the first-slot
@@ -2149,6 +2165,21 @@ class StoryDirector:
             )
             actions.append({"kind": "npc_death", "result": result})
 
+        # Autonomous death proposal — fires AFTER explicit deaths
+        # drain, so a game-client death and a Director-proposed
+        # death can't stack in the same tick.
+        if (self._autonomous_lifecycle
+                and not self._pending_death_requests
+                and not any(a.get("kind") == "npc_death" for a in actions)):
+            death_proposal = self._propose_autonomous_death()
+            if death_proposal:
+                result = self._dispatch_npc_death(
+                    npc_id=death_proposal["npc_id"],
+                    cause=death_proposal.get("cause", "autonomous"),
+                    transfers_quests_to=death_proposal.get("transfers_quests_to"),
+                )
+                actions.append({"kind": "npc_death_auto", "result": result})
+
         # Drain at most one birth per tick (explicit request first,
         # then population gap fill if nothing explicit is queued).
         if self._pending_birth_requests:
@@ -2160,8 +2191,12 @@ class StoryDirector:
             # below its min_population and queue a birth request.
             gap = self._find_population_gap()
             if gap:
-                result = self._dispatch_npc_birth(gap)
-                actions.append({"kind": "npc_birth_auto", "result": result})
+                if (not self._autonomous_lifecycle
+                        or self._autonomous_births_this_session < _MAX_AUTONOMOUS_BIRTHS_PER_SESSION):
+                    result = self._dispatch_npc_birth(gap)
+                    if self._autonomous_lifecycle:
+                        self._autonomous_births_this_session += 1
+                    actions.append({"kind": "npc_birth_auto", "result": result})
 
         return actions
 
@@ -2378,6 +2413,63 @@ class StoryDirector:
             f"zone={zone} role={role} reason={reason}"
         )
         return {"ok": True, "record": record}
+
+    def set_autonomous_lifecycle(self, enabled: bool) -> dict:
+        """
+        Toggle autonomous lifecycle mode. When enabled, the Director
+        can propose NPC deaths (arc-driven) and births
+        (population-driven) without game client input. Off by
+        default. Returns the new state for confirmation.
+        """
+        prev = self._autonomous_lifecycle
+        self._autonomous_lifecycle = bool(enabled)
+        if prev != self._autonomous_lifecycle:
+            logger.info(
+                f"Story Director autonomous lifecycle: {prev} -> "
+                f"{self._autonomous_lifecycle}"
+            )
+        return {
+            "ok": True,
+            "autonomous": self._autonomous_lifecycle,
+            "deaths_this_session": self._autonomous_deaths_this_session,
+            "births_this_session": self._autonomous_births_this_session,
+        }
+
+    def _propose_autonomous_death(self) -> Optional[dict]:
+        """
+        When autonomous lifecycle is on, propose killing an NPC that
+        would narratively resolve an active arc at or past the
+        ``confront`` beat. Returns a death request dict if a suitable
+        candidate is found, None otherwise.
+
+        Bounded by ``_MAX_AUTONOMOUS_DEATHS_PER_SESSION`` so the
+        Director can't depopulate the world in a single run. Jordan's
+        design rule: the Director can kill ANYONE — no gating on
+        zone, cast importance, or player proximity. The stress bench
+        is the arbiter of whether this stays stable.
+        """
+        if not self._autonomous_lifecycle:
+            return None
+        if self._autonomous_deaths_this_session >= _MAX_AUTONOMOUS_DEATHS_PER_SESSION:
+            return None
+        alive = self._alive_npcs()
+        for arc in self.arc_planner.active_arcs():
+            if arc.current_beat < 2:
+                continue  # only confront or later
+            # Find a cast member who's alive and could die narratively
+            for npc_id in arc.focus_npcs:
+                if npc_id in alive:
+                    self._autonomous_deaths_this_session += 1
+                    logger.info(
+                        f"Autonomous death proposed: {npc_id} "
+                        f"(arc {arc.id} at beat {arc.current_beat_label})"
+                    )
+                    return {
+                        "npc_id": npc_id,
+                        "cause": f"narrative resolution of arc '{arc.theme[:60]}'",
+                        "transfers_quests_to": None,
+                    }
+        return None
 
     def get_population_state(self) -> dict:
         """

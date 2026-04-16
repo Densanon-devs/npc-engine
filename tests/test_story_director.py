@@ -1544,6 +1544,102 @@ def test_birth_name_avoids_collision_with_existing_npcs():
     print("  [PASS] birth_name_avoids_collision_with_existing_npcs")
 
 
+# ── Autonomous lifecycle tests (Phase 2c) ──────────────────────
+
+def test_autonomous_off_no_director_deaths():
+    """When autonomous lifecycle is off (default), the Director must
+    never propose deaths on its own, even if arcs are at confront."""
+    engine, director, restore = _seed_zoned_director("auto_off")
+    try:
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="test_arc", theme="Final showdown",
+            focus_npcs=["reva"], beat_goals=["s", "e", "confront", "resolve"],
+            current_beat=2, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("test_arc")
+        # autonomous is OFF (default)
+        assert director._autonomous_lifecycle is False
+        proposal = director._propose_autonomous_death()
+        assert proposal is None
+    finally:
+        restore()
+    print("  [PASS] autonomous_off_no_director_deaths")
+
+
+def test_autonomous_on_proposes_death_at_confront():
+    """When autonomous lifecycle is ON and an arc is at confront,
+    the Director should propose killing a cast member to resolve
+    the arc narratively."""
+    engine, director, restore = _seed_zoned_director("auto_on_death")
+    try:
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="arc_kill", theme="Reva's reckoning",
+            focus_npcs=["reva", "finn"],
+            beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=2, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("arc_kill")
+        director.set_autonomous_lifecycle(True)
+        proposal = director._propose_autonomous_death()
+        assert proposal is not None, "expected a death proposal"
+        assert proposal["npc_id"] in ["reva", "finn"]
+        assert "narrative resolution" in proposal["cause"].lower()
+    finally:
+        restore()
+    print("  [PASS] autonomous_on_proposes_death_at_confront")
+
+
+def test_autonomous_death_capped_by_session_limit():
+    """The Director cannot exceed _MAX_AUTONOMOUS_DEATHS_PER_SESSION
+    deaths in a single session, even if arcs keep hitting confront."""
+    import npc_engine.story_director as sd_mod
+    engine, director, restore = _seed_zoned_director("auto_cap")
+    try:
+        director.set_autonomous_lifecycle(True)
+        # Exhaust the cap
+        director._autonomous_deaths_this_session = sd_mod._MAX_AUTONOMOUS_DEATHS_PER_SESSION
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="arc_capped", theme="Another showdown",
+            focus_npcs=["reva"],
+            beat_goals=["s", "e", "confront", "resolve"],
+            current_beat=2, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("arc_capped")
+        proposal = director._propose_autonomous_death()
+        assert proposal is None, "should be capped"
+    finally:
+        restore()
+    print("  [PASS] autonomous_death_capped_by_session_limit")
+
+
+def test_autonomous_skips_death_when_no_arc_at_confront():
+    """When autonomous is ON but no arc is at confront beat, the
+    Director should NOT propose any death."""
+    engine, director, restore = _seed_zoned_director("auto_no_confront")
+    try:
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="arc_early", theme="Just started",
+            focus_npcs=["reva"],
+            beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=0, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("arc_early")
+        director.set_autonomous_lifecycle(True)
+        proposal = director._propose_autonomous_death()
+        assert proposal is None
+    finally:
+        restore()
+    print("  [PASS] autonomous_skips_death_when_no_arc_at_confront")
+
+
 def test_pending_player_target_bypasses_zone_filter():
     """When the player has an outstanding action targeting an
     out-of-zone NPC (e.g. sent a letter ahead), that NPC must still
@@ -4183,6 +4279,12 @@ def main():
     test_population_at_target_no_birth()
     test_queue_birth_request_queues_and_drains()
     test_birth_name_avoids_collision_with_existing_npcs()
+
+    print("\nStory Director — autonomous lifecycle (Phase 2c)")
+    test_autonomous_off_no_director_deaths()
+    test_autonomous_on_proposes_death_at_confront()
+    test_autonomous_death_capped_by_session_limit()
+    test_autonomous_skips_death_when_no_arc_at_confront()
 
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()

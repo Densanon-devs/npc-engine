@@ -362,6 +362,11 @@ def main():
                              "world-wide mode (current behaviour). Only "
                              "meaningful for worlds with NPCs that have "
                              "zone: fields in their profile YAML.")
+    parser.add_argument("--lifecycle-autonomous", action="store_true",
+                        help="Enable autonomous lifecycle mode: the "
+                             "Director can propose NPC deaths (arc-driven) "
+                             "and births (population-driven) without game "
+                             "client input. Off by default.")
     parser.add_argument("--kill-npc-at-tick", action="append", default=None,
                         help="Scripted death for Phase 2a lifecycle testing. "
                              "Format: 'tick:npc_id[:cause]'. May be passed "
@@ -392,6 +397,9 @@ def main():
         zone_list = [z.strip() for z in args.active_zones.split(",") if z.strip()]
         engine.story_director.set_active_zones(zone_list)
         print(f"Active zones: {zone_list}")
+    if args.lifecycle_autonomous:
+        engine.story_director.set_autonomous_lifecycle(True)
+        print("Autonomous lifecycle: ON")
     print(f"Lore file: {engine.story_director._lore_file}")
     print(f"Examples:  {engine.story_director._examples_file} "
           f"({len(engine.story_director._examples)} entries)")
