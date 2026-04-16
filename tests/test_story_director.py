@@ -1226,6 +1226,213 @@ def test_prerequisite_gating_locks_until_satisfied():
     print("  [PASS] prerequisite_gating_locks_until_satisfied")
 
 
+# ── Main-line tests (Phase 3a-2) ─────────────────────────────────
+
+def _director_with_main_line(tag: str, line_cfg: Optional[dict] = None):
+    """Helper: build a StoryDirector with an in-memory quest_lines
+    config. Caller restore()s the state file at the end."""
+    restore = _isolate_state_file(tag)
+    engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+    director = StoryDirector(engine)
+    if line_cfg is None:
+        line_cfg = {
+            "main_test_line": {
+                "type": "main",
+                "title": "Test Main Line",
+                "beats": [
+                    {"quest_id": "beat1", "giver": "kael"},
+                    {"quest_id": "beat2", "giver": "bess",
+                     "requires": ["beat1"]},
+                ],
+                "protected_givers": ["kael", "bess"],
+                "reward_track": ["Kael's gift", "Bess's token"],
+            }
+        }
+    director._quest_lines_config = line_cfg
+    for line_id in line_cfg:
+        director._quest_line_state.setdefault(line_id, {
+            "dispatched_beats": [],
+            "completed_quests": [],
+            "rewards_earned": [],
+            "line_status": "active",
+        })
+    return engine, director, restore
+
+
+def test_main_line_npc_prioritized_in_snapshot():
+    """With a main-line config, main-line givers appear early in the
+    bounded snapshot NPC selection — just after planned focus."""
+    engine, director, restore = _director_with_main_line("phase3a_snapshot_prio")
+    try:
+        # Fill the cast past the snapshot bound threshold so the
+        # bounded path fires. Use the largest stub cast (7) +
+        # padding NPCs.
+        for i in range(30):
+            nid = f"pad_{i}"
+            engine.pie.npc_knowledge.profiles[nid] = _StubNPC(nid, "padder")
+        all_ids = list(engine.pie.npc_knowledge.profiles.keys())
+        # Pretend the architect planned focus = noah (not a main-line
+        # giver) — main-line cast (kael, bess) should still land in
+        # the selected set just after noah.
+        selected = director._select_snapshot_npcs(all_ids, planned_focus_ids=["noah"])
+        assert "noah" in selected, selected
+        assert "kael" in selected, selected
+        assert "bess" in selected, selected
+        # Planned focus comes first; main-line right after.
+        assert selected[0] == "noah", selected
+        assert selected.index("kael") < 3, selected
+        assert selected.index("bess") < 3, selected
+        # Any pad NPCs that made it into the cap must come AFTER
+        # the main-line cast.
+        pad_indices = [i for i, pid in enumerate(selected) if pid.startswith("pad_")]
+        for pad_idx in pad_indices:
+            assert pad_idx > max(selected.index("kael"), selected.index("bess")), (
+                pad_idx, selected,
+            )
+    finally:
+        restore()
+    print("  [PASS] main_line_npc_prioritized_in_snapshot")
+
+
+def test_main_line_focus_weight_preferred():
+    """Over many focus picks on a cast that includes main-line and
+    non-main-line NPCs, the main-line cast gets ~FACTOR:1 more picks
+    than the non-main-line pool. Tolerant check — we just need the
+    ratio to be clearly above 1."""
+    import npc_engine.story_director as sd_mod
+    engine, director, restore = _director_with_main_line("phase3a_focus_weight")
+    try:
+        counts: dict[str, int] = {}
+        for _ in range(150):
+            focus = director._pick_focus_npc()
+            if focus is None:
+                break
+            counts[focus] = counts.get(focus, 0) + 1
+            # Bump the architect-planned-tick trail so rotation moves on
+            director._npc_last_planned_tick[focus] = director.tick_count + 1
+            director.tick_count += 1
+        main_line = counts.get("kael", 0) + counts.get("bess", 0)
+        non_main = sum(v for k, v in counts.items() if k not in ("kael", "bess"))
+        assert main_line > 0 and non_main > 0, counts
+        # FACTOR=2 → expect ~2:1 ratio. Allow wide variance; just
+        # require at least 1.3:1 to avoid flaking.
+        ratio = main_line / non_main
+        assert ratio >= 1.3, (ratio, counts)
+    finally:
+        restore()
+    print("  [PASS] main_line_focus_weight_preferred")
+
+
+def test_protected_giver_excluded_from_autonomous_death():
+    """_propose_autonomous_death must skip NPCs in any active line's
+    protected_givers. With kael + bess protected and both the only
+    active-arc cast members, the proposal returns None."""
+    engine, director, restore = _director_with_main_line("phase3a_protect")
+    try:
+        director._autonomous_lifecycle = True
+        # Stage an arc at confront beat with only protected NPCs.
+        from npc_engine.story_director import NarrativeArc
+        arc = NarrativeArc(
+            id="arc_prot", theme="protected arc",
+            focus_npcs=["kael", "bess"],
+            beat_goals=["seed", "escalate", "confront", "resolve"],
+            current_beat=2, status="active", started_at_tick=1,
+        )
+        director.arc_planner.arcs.append(arc)
+        director.arc_planner.active_arc_ids.append("arc_prot")
+        proposal = director._propose_autonomous_death()
+        assert proposal is None, proposal
+        assert director._autonomous_deaths_this_session == 0
+        # Now add a non-protected NPC to the arc → proposal fires on them.
+        arc.focus_npcs.append("noah")
+        proposal2 = director._propose_autonomous_death()
+        assert proposal2 is not None, proposal2
+        assert proposal2["npc_id"] == "noah", proposal2
+    finally:
+        restore()
+    print("  [PASS] protected_giver_excluded_from_autonomous_death")
+
+
+def test_protected_giver_killable_by_game_client():
+    """Explicit queue_death_request bypasses main-line protection —
+    the guard only applies to autonomous proposals. The game is
+    always authoritative."""
+    engine, director, restore = _director_with_main_line("phase3a_gameclient_kill")
+    try:
+        result = director.queue_death_request("kael", cause="game client")
+        assert result["ok"] is True, result
+        # Drain lifecycle to apply the queued death.
+        director._lifecycle_tick()
+        kael = engine.pie.npc_knowledge.get("kael")
+        assert getattr(kael, "status", "alive") == "deceased", kael.status
+    finally:
+        restore()
+    print("  [PASS] protected_giver_killable_by_game_client")
+
+
+def test_quest_line_reward_track_persists():
+    """On quest completion via record_player_action(quest_completed=...),
+    the main-line reward_track entry for that beat appends to
+    _quest_line_state[line].rewards_earned. Also exercises the
+    completed_quests list + line_status transition to 'completed'
+    when every beat is done."""
+    engine, director, restore = _director_with_main_line("phase3a_rewards")
+    try:
+        kael = engine.pie.npc_knowledge.get("kael")
+        bess = engine.pie.npc_knowledge.get("bess")
+        # Pre-create line quests on their givers with the main-line
+        # fields set so _find_quest_by_id can locate them.
+        kael.add_quest(Quest(id="beat1", name="Beat 1", description="b1",
+                              quest_line="main_test_line", quest_line_beat=0))
+        bess.add_quest(Quest(id="beat2", name="Beat 2", description="b2",
+                              quest_line="main_test_line", quest_line_beat=1))
+        director.record_player_action("finished beat1",
+                                        target="kael", quest_completed="beat1")
+        st = director._quest_line_state["main_test_line"]
+        assert "beat1" in st["completed_quests"], st
+        assert "Kael's gift" in st["rewards_earned"], st
+        assert st["line_status"] == "active", st
+        director.record_player_action("finished beat2",
+                                        target="bess", quest_completed="beat2")
+        st = director._quest_line_state["main_test_line"]
+        assert st["rewards_earned"] == ["Kael's gift", "Bess's token"], st
+        assert st["line_status"] == "completed", st
+    finally:
+        restore()
+    print("  [PASS] quest_line_reward_track_persists")
+
+
+def test_main_line_bypasses_per_npc_quest_cap():
+    """End-to-end: _architect_plan passes bypass_per_npc_cap=True to
+    _pick_action_kind for main-line givers, so even a main-line NPC
+    who'd otherwise be blocked by the Phase 4b unaccepted-cap can
+    still have quest picked as its action kind."""
+    import npc_engine.story_director as sd_mod
+    engine, director, restore = _director_with_main_line("phase3a_bypass_4b")
+    try:
+        # Tighten 4b cap so the gate fires on a single unoffered quest.
+        director.set_quest_pacing(max_unoffered=1, cooldown_ticks=5)
+        # kael already has one unoffered quest on the board.
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(id="beat1", name="Beat 1", description="b1",
+                              quest_line="main_test_line", quest_line_beat=0,
+                              status="available"))
+        director._last_quest_dispatched_per_npc["kael"] = 5
+        director.tick_count = 7
+
+        # Without bypass, quest is blocked.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") != "quest"
+
+        # Plan() uses bypass for main-line focus.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        bypassed = director._pick_action_kind("kael", bypass_per_npc_cap=True)
+        assert bypassed == "quest", bypassed
+    finally:
+        restore()
+    print("  [PASS] main_line_bypasses_per_npc_quest_cap")
+
+
 # ── GPU coordination tests (Phase 4c) ────────────────────────────
 
 def test_pause_state_blocks_ticks():
@@ -5020,6 +5227,14 @@ def main():
     test_empty_quest_lines_config_preserves_existing_behavior()
     test_intent_loads_from_yaml()
     test_prerequisite_gating_locks_until_satisfied()
+
+    print("\nStory Director — main-line mechanics tests (Phase 3a-2)")
+    test_main_line_npc_prioritized_in_snapshot()
+    test_main_line_focus_weight_preferred()
+    test_protected_giver_excluded_from_autonomous_death()
+    test_protected_giver_killable_by_game_client()
+    test_quest_line_reward_track_persists()
+    test_main_line_bypasses_per_npc_quest_cap()
 
     print("\nStory Director — GPU coordination tests (Phase 4c)")
     test_pause_state_blocks_ticks()

@@ -334,6 +334,14 @@ _NEXT_TICK_HINT_CONFRONT = 60
 # confront=2, resolve=3). ``>= 2`` covers confront + resolve.
 _ARC_CONFRONT_BEAT_INDEX = 2
 
+# ── Phase 3a main-line weighting ────────────────────────────────
+# Focus-selection preference for main-line givers. FACTOR=2 gives a
+# 2:1 preference: out of every (FACTOR + 1) focus picks, FACTOR of
+# them go to main-line NPCs (when any are in the pool) and 1 goes
+# to a non-main-line NPC. Empty main-line cast = this layer is a
+# no-op, focus picks are identical to the pre-3a rotation.
+_MAIN_LINE_WEIGHT_FACTOR = 2
+
 
 # Only consider self-repetition against recent same-NPC entries.
 # Older matches are stale and may legitimately be echoed; cross-NPC
@@ -1394,6 +1402,10 @@ class StoryDirector:
         # reward-track items. Keyed by line_id. Persisted in
         # state.json so a game restart keeps the main-line progress.
         self._quest_line_state: dict[str, dict] = {}
+        # Counter used by _pick_focus_npc's Phase 3a main-line
+        # weighting (modulo _MAIN_LINE_WEIGHT_FACTOR+1). Persisted so
+        # the 2:1 ratio is preserved across restarts.
+        self._main_line_focus_counter: int = 0
         # Refused-quest decay timers: {(npc_id, quest_id): unlock_tick}.
         # Scanned every lifecycle tick — when tick_count >= unlock_tick
         # the quest flips status back to 'available' and a subtle
@@ -1715,6 +1727,9 @@ class StoryDirector:
             raw_budget = state.get("tick_budget_seconds")
             if isinstance(raw_budget, (int, float)):
                 self._tick_budget_seconds = float(raw_budget)
+            raw_ml_counter = state.get("main_line_focus_counter", 0)
+            if isinstance(raw_ml_counter, (int, float)):
+                self._main_line_focus_counter = max(0, int(raw_ml_counter))
             raw_line_state = state.get("quest_line_state", {}) or {}
             if isinstance(raw_line_state, dict):
                 for line_id, st in raw_line_state.items():
@@ -1776,6 +1791,7 @@ class StoryDirector:
             "paused_at_tick": self._paused_at_tick,
             "tick_budget_seconds": self._tick_budget_seconds,
             "quest_line_state": self._quest_line_state,
+            "main_line_focus_counter": self._main_line_focus_counter,
             # dict with tuple keys doesn't JSON-serialize; flatten to
             # a list of [npc_id, quest_id, unlock_tick] triples.
             "refused_quest_timers": [
@@ -2309,7 +2325,13 @@ class StoryDirector:
             if focus is None:
                 break
             excluded.add(focus)
-            kind = self._pick_action_kind(focus)
+            # Phase 3a — main-line givers bypass the per-NPC quest
+            # pacing gate (unoffered cap + cooldown). Authored
+            # main-line progression beats priority over organic
+            # pacing; a scheduled main-line beat on a giver who
+            # already has two side quests should still land.
+            bypass = focus is not None and self._is_main_line_npc(focus)
+            kind = self._pick_action_kind(focus, bypass_per_npc_cap=bypass)
             plan.append((focus, kind))
         return plan
 
@@ -2427,6 +2449,12 @@ class StoryDirector:
                 record["quest_completed"] = str(quest_completed)
                 if isinstance(result, dict) and "error" in result:
                     record["quest_completed_error"] = result["error"]
+                # Phase 3a — reward-track accumulation on main-line
+                # beat completion. No-op for quests with no quest_line
+                # or worlds with no reward_track configured.
+                reward_record = self._record_main_line_reward(str(quest_completed))
+                if reward_record is not None:
+                    record["main_line_reward"] = reward_record
             except Exception as e:
                 logger.warning(f"complete_quest failed for {quest_completed}: {e}")
                 record["quest_completed_error"] = str(e)
@@ -3116,11 +3144,24 @@ class StoryDirector:
         if self._autonomous_deaths_this_session >= _MAX_AUTONOMOUS_DEATHS_PER_SESSION:
             return None
         alive = self._alive_npcs()
+        # Phase 3a — main-line protected givers. The Director must not
+        # autonomously kill an NPC whose loss would break an authored
+        # main-line. Explicit /story/npc_death from the game client
+        # still kills these; this guard only applies to Director-
+        # proposed deaths.
+        protected = self._protected_givers()
         for arc in self.arc_planner.active_arcs():
             if arc.current_beat < 2:
                 continue  # only confront or later
-            # Find a cast member who's alive and could die narratively
+            # Find a cast member who's alive, not main-line-protected,
+            # and could die narratively
             for npc_id in arc.focus_npcs:
+                if npc_id in protected:
+                    logger.debug(
+                        f"Autonomous death skipped: {npc_id} is a "
+                        f"protected main-line giver"
+                    )
+                    continue
                 if npc_id in alive:
                     self._autonomous_deaths_this_session += 1
                     logger.info(
@@ -3319,6 +3360,13 @@ class StoryDirector:
 
         # 1. Planned focus first
         for npc_id in planned_focus_ids or []:
+            _add(npc_id)
+
+        # 1b. Phase 3a — main-line cast priority. Just below planned
+        # focus so a dispatched beat on another main-line giver never
+        # gets pushed off-camera; still below the architect's own
+        # picks so one-off quests still receive their focus frame.
+        for npc_id in self._main_line_cast():
             _add(npc_id)
 
         # 2. Active-zone NPCs (zone priority tier). World-wide mode
@@ -3623,6 +3671,53 @@ class StoryDirector:
         line. Cheap enough to call per focus pick."""
         return npc_id in self._main_line_cast()
 
+    def _find_quest_by_id(self, quest_id: str):
+        """Return the first Quest dataclass with the given id across
+        every NPC's quest list, or None. Used by refusal and reward
+        plumbing — both paths get a ``quest_id`` from the player and
+        need the full dataclass to read Phase 3a fields."""
+        for npc in self.engine.pie.npc_knowledge.profiles.values():
+            for q in getattr(npc, "quests", []):
+                if q.id == quest_id:
+                    return q
+        return None
+
+    def _record_main_line_reward(self, quest_id: str) -> Optional[dict]:
+        """On quest completion, append the matching entry from the
+        line's ``reward_track`` to ``_quest_line_state[line].rewards_earned``.
+        Returns the record dict (or None if the quest isn't on a
+        main-line or the reward track is missing this beat)."""
+        q = self._find_quest_by_id(quest_id)
+        if q is None or not q.quest_line:
+            return None
+        line_cfg = self._quest_lines_config.get(q.quest_line)
+        if not isinstance(line_cfg, dict):
+            return None
+        reward_track = line_cfg.get("reward_track") or []
+        if not isinstance(reward_track, list):
+            return None
+        beat_idx = int(q.quest_line_beat or 0)
+        if not (0 <= beat_idx < len(reward_track)):
+            return None
+        reward = reward_track[beat_idx]
+        st = self._quest_line_state.setdefault(q.quest_line, {
+            "dispatched_beats": [],
+            "completed_quests": [],
+            "rewards_earned": [],
+            "line_status": "active",
+        })
+        st["completed_quests"].append(quest_id)
+        st["rewards_earned"].append(reward)
+        # Mark the line completed if every beat is done.
+        total_beats = len(line_cfg.get("beats") or [])
+        if total_beats > 0 and len(st["completed_quests"]) >= total_beats:
+            st["line_status"] = "completed"
+        return {
+            "quest_line": q.quest_line,
+            "beat_index": beat_idx,
+            "reward": reward,
+        }
+
     def _effective_max_unoffered_quests(self) -> int:
         """Runtime override wins; otherwise the module-level default."""
         if self._max_unoffered_quests_override is not None:
@@ -3913,6 +4008,32 @@ class StoryDirector:
                 return None
         else:
             pool = available
+
+        # Layer 2b: Phase 3a main-line weighting. When any active
+        # main-line cast has members still present in the pool, apply
+        # a 2:1 preference (tunable via _MAIN_LINE_WEIGHT_FACTOR):
+        # FACTOR of every FACTOR+1 picks come from main-line, 1 goes
+        # to the non-main-line pool so the rest of the cast still
+        # breathes. Empty main-line cast = no-op. Applied AFTER zone
+        # filtering so main-line givers must also satisfy the zone
+        # contract (zone hard filter in _pick_action_kind still
+        # prevents out-of-zone quest offers from main-line givers).
+        main_line_ids = self._main_line_cast()
+        if main_line_ids and _MAIN_LINE_WEIGHT_FACTOR > 0:
+            ml_pool = [nid for nid in pool if nid in main_line_ids]
+            non_ml_pool = [nid for nid in pool if nid not in main_line_ids]
+            if ml_pool and non_ml_pool:
+                self._main_line_focus_counter += 1
+                divisor = _MAIN_LINE_WEIGHT_FACTOR + 1
+                # Non-main pick fires once every 'divisor' calls;
+                # main-line pick fires the other FACTOR out of divisor.
+                prefer_non_main = (
+                    self._main_line_focus_counter % divisor == 0
+                )
+                pool = non_ml_pool if prefer_non_main else ml_pool
+            elif ml_pool:
+                pool = ml_pool
+            # else: no main-line in pool, fall through to Layer 3 as-is
 
         # Layer 3: least-recently-touched rotation within the chosen
         # pool. Read from the architect's PLANNED focus dict, not
