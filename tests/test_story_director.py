@@ -775,6 +775,132 @@ def test_small_cast_single_action_passthrough():
     print("  [PASS] small_cast_single_action_passthrough")
 
 
+# ── Player activity tests (Phase 4a) ─────────────────────────────
+
+def test_activity_default_is_unknown_and_ticks_normally():
+    """Backward compatibility: a director that never sets an activity
+    behaves exactly like the pre-Phase-4a Director — normal ticks, no
+    paused flag, quest allowed in rotation."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("activity_default_unknown")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "market opens"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        assert director._player_activity == sd_mod.PlayerActivity.UNKNOWN.value
+        result = director.tick(actions_per_tick=1)
+        assert "action" in result, result
+        assert result.get("paused") is not True, result
+        assert director.tick_count == 1, director.tick_count
+    finally:
+        restore()
+    print("  [PASS] activity_default_is_unknown_and_ticks_normally")
+
+
+def test_activity_in_combat_returns_paused_noop():
+    """in_combat / in_menu / idle short-circuit tick() to a paused
+    noop WITHOUT calling the LLM. Also confirms the returned dict
+    carries `paused: True` and a next-tick hint, and that tick_count
+    still advances so calling code doesn't stall its counters."""
+    import npc_engine.story_director as sd_mod
+    for activity in ("in_combat", "in_menu", "idle"):
+        restore = _isolate_state_file(f"activity_paused_{activity}")
+        try:
+            engine = _make_stub_engine(
+                profile_specs=_LARGE_STUB_PROFILES,
+                responses=['{"action": "event", "target": "kael", "event": "x"}'],
+            )
+            director = StoryDirector(engine)
+            director.set_player_activity(activity)
+            result = director.tick(actions_per_tick=3)
+            assert result.get("paused") is True, (activity, result)
+            assert result["action"]["action"] == "noop", (activity, result)
+            assert activity in result["action"]["reason"], (activity, result)
+            assert "next_tick_recommended_in_seconds" in result, (activity, result)
+            assert director.tick_count == 1, (activity, director.tick_count)
+            # LLM must NOT have been called on a paused tick.
+            assert engine.pie.base_model.prompts == [], (
+                activity, engine.pie.base_model.prompts,
+            )
+        finally:
+            restore()
+    print("  [PASS] activity_in_combat_returns_paused_noop")
+
+
+def test_activity_in_menu_returns_paused_noop():
+    """Single-action mode on a paused activity still returns the
+    legacy flat shape (no sub_actions key) so backward-compat
+    clients parsing `{action, dispatch, raw_response}` don't need
+    to handle a new branch."""
+    restore = _isolate_state_file("activity_menu_singleaction")
+    try:
+        engine = _make_stub_engine(
+            responses=['{"action": "event", "target": "kael", "event": "x"}'],
+        )
+        director = StoryDirector(engine)
+        director.set_player_activity("in_menu")
+        result = director.tick(actions_per_tick=1)
+        assert result.get("paused") is True, result
+        assert "sub_actions" not in result, result
+        assert result["dispatch"]["ok"] is True, result
+        assert result["dispatch"]["kind"] == "noop", result
+    finally:
+        restore()
+    print("  [PASS] activity_in_menu_returns_paused_noop")
+
+
+def test_activity_in_dungeon_prefers_events_over_quests():
+    """in_dungeon / in_dialogue / wandering drop 'quest' from the
+    kind rotation. The Director still runs a normal tick, but
+    _pick_action_kind never returns 'quest' while that activity
+    is set."""
+    import npc_engine.story_director as sd_mod
+    for activity in ("in_dungeon", "in_dialogue", "wandering"):
+        restore = _isolate_state_file(f"activity_no_quest_{activity}")
+        try:
+            engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+            director = StoryDirector(engine)
+            director.set_player_activity(activity)
+            # Ask for every kind across the rotation length; 'quest'
+            # should be dropped every time, replaced by event or fact.
+            kinds = [
+                director._pick_action_kind("kael")
+                for _ in range(len(sd_mod._ACTION_KIND_ROTATION) * 4)
+            ]
+            assert "quest" not in kinds, (activity, kinds)
+            assert set(kinds).issubset({"event", "fact"}), (activity, kinds)
+        finally:
+            restore()
+    print("  [PASS] activity_in_dungeon_prefers_events_over_quests")
+
+
+def test_activity_persists_in_state_json():
+    """A restart of the Director against the same state file honors
+    the activity the game client last set — a server restart mid-
+    combat should not suddenly un-pause the world."""
+    restore = _isolate_state_file("activity_persist")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.set_player_activity("in_dungeon")
+        assert director._player_activity == "in_dungeon"
+        # Second instance reads the same state file.
+        engine2 = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director2 = StoryDirector(engine2)
+        assert director2._player_activity == "in_dungeon", director2._player_activity
+        # set_player_activity rejects bad values.
+        rejected = director2.set_player_activity("flying")
+        assert rejected["ok"] is False, rejected
+        assert director2._player_activity == "in_dungeon", director2._player_activity
+    finally:
+        restore()
+    print("  [PASS] activity_persists_in_state_json")
+
+
 # ── Zone layer tests (Phase 1) ───────────────────────────────────
 
 _ZONED_PROFILES = (
@@ -4378,6 +4504,13 @@ def main():
     test_large_cast_honors_requested_actions_per_tick()
     test_small_cast_cap_threshold_boundary()
     test_small_cast_single_action_passthrough()
+
+    print("\nStory Director — player activity tests (Phase 4a)")
+    test_activity_default_is_unknown_and_ticks_normally()
+    test_activity_in_combat_returns_paused_noop()
+    test_activity_in_menu_returns_paused_noop()
+    test_activity_in_dungeon_prefers_events_over_quests()
+    test_activity_persists_in_state_json()
 
     print("\nStory Director — zone layer tests (Phase 1)")
     test_empty_active_zones_preserves_world_wide_mode()

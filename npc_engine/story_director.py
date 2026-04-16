@@ -22,6 +22,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -204,6 +205,66 @@ _SMALL_CAST_THRESHOLD = 4
 # where the rotation fix jumped latency 5.48s → 13.20s/tick on cold
 # misses.
 _BURST_ROTATION_DEPTH = 4
+
+# ── Player activity context (Phase 4a) ──────────────────────────
+# The game tells the Director what the player is doing via
+# ``POST /story/activity``. The Director self-pauses during combat,
+# menus, and idle; runs single-action ticks during dialogue and
+# wandering; and drops 'quest' from rotation when the player can't
+# meaningfully accept a new one (dungeon, dialogue, wandering).
+#
+# Stored on the instance as a plain string (``self._player_activity``)
+# to match ``narration_mode``; the enum is the canonical set of values.
+
+
+class PlayerActivity(str, Enum):
+    IN_TOWN = "in_town"
+    IN_DIALOGUE = "in_dialogue"
+    IN_DUNGEON = "in_dungeon"
+    IN_COMBAT = "in_combat"
+    IN_MENU = "in_menu"
+    WANDERING = "wandering"
+    TRAVELING = "traveling"
+    IDLE = "idle"
+    UNKNOWN = "unknown"
+
+
+_PLAYER_ACTIVITY_VALUES: frozenset[str] = frozenset(m.value for m in PlayerActivity)
+
+# Activities that short-circuit tick() to a paused noop — the
+# Director has nothing useful to say while the player is in a menu,
+# in combat, or idle, and every generated beat would be wasted GPU
+# before the player can react to it.
+_PAUSED_ACTIVITIES: frozenset[str] = frozenset({
+    PlayerActivity.IN_COMBAT.value,
+    PlayerActivity.IN_MENU.value,
+    PlayerActivity.IDLE.value,
+})
+
+# Activities that force actions_per_tick=1 regardless of the caller's
+# request. Dialogue fires mid-conversation (one beat is all the player
+# can absorb before the next turn) and wandering is low-cadence filler.
+_SINGLE_ACTION_ACTIVITIES: frozenset[str] = frozenset({
+    PlayerActivity.IN_DIALOGUE.value,
+    PlayerActivity.WANDERING.value,
+})
+
+# Activities where 'quest' is dropped from the kind rotation. A quest
+# offer during dialogue, a dungeon run, or wilderness wander can't be
+# meaningfully accepted — the giver isn't present or the context is
+# wrong — so we prefer event/fact instead.
+_NO_QUEST_ACTIVITIES: frozenset[str] = frozenset({
+    PlayerActivity.IN_DIALOGUE.value,
+    PlayerActivity.IN_DUNGEON.value,
+    PlayerActivity.WANDERING.value,
+})
+
+# Suggested delay (seconds) to tell the game client to wait before
+# calling tick() again when paused. Small — the game might transition
+# out of combat/menu quickly and a polling client should come back
+# soon to pick up the first non-paused tick.
+_PAUSED_NEXT_TICK_HINT_SECONDS = 10
+
 
 # Only consider self-repetition against recent same-NPC entries.
 # Older matches are stale and may legitimately be echoed; cross-NPC
@@ -1210,6 +1271,15 @@ class StoryDirector:
         # the cache-reuse pattern intact across restarts.
         self._burst_focus_npc: Optional[str] = None
         self._burst_remaining: int = 0
+        # Phase 4a — player activity context. Game client owns the
+        # authority via POST /story/activity; the Director reads it in
+        # tick() to short-circuit paused modes, force single-action
+        # ticks, and drop 'quest' from rotation when the player can't
+        # meaningfully accept one. "unknown" is the backward-compat
+        # default — a caller that never sets an activity sees the same
+        # behaviour as before the activity layer existed.
+        self._player_activity: str = PlayerActivity.UNKNOWN.value
+        self._activity_set_at_tick: int = 0
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1431,6 +1501,12 @@ class StoryDirector:
                     r for r in raw_birth_history if isinstance(r, dict)
                 ]
             self._kind_rotation_index = state.get("kind_rotation_index", 0)
+            raw_activity = state.get("player_activity")
+            if isinstance(raw_activity, str) and raw_activity in _PLAYER_ACTIVITY_VALUES:
+                self._player_activity = raw_activity
+            raw_activity_tick = state.get("activity_set_at_tick", 0)
+            if isinstance(raw_activity_tick, (int, float)):
+                self._activity_set_at_tick = max(0, int(raw_activity_tick))
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1458,6 +1534,8 @@ class StoryDirector:
             "pending_birth_requests": self._pending_birth_requests,
             "birth_history": self._birth_history,
             "kind_rotation_index": self._kind_rotation_index,
+            "player_activity": self._player_activity,
+            "activity_set_at_tick": self._activity_set_at_tick,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -1487,6 +1565,44 @@ class StoryDirector:
         a timer without guarding every field.
         """
         if actions_per_tick < 1:
+            actions_per_tick = 1
+
+        # Phase 4a — paused activities short-circuit the tick. During
+        # combat, menus, and idle the Director has nothing useful to
+        # say; burning a generation for a beat the player can't react
+        # to is pure waste. Return a paused noop that still increments
+        # tick_count so calling code advances uniformly whether paused
+        # or not, and hand the client a small next-tick hint in case
+        # it's polling. State is NOT saved here — the paused path is
+        # hit many times in a row and each write would add I/O churn
+        # with no new information to record.
+        if self._player_activity in _PAUSED_ACTIVITIES:
+            self.tick_count += 1
+            self.last_tick_at = datetime.now(timezone.utc).isoformat()
+            paused_reason = f"paused: {self._player_activity}"
+            result = {
+                "tick": self.tick_count,
+                "action": {"action": "noop", "reason": paused_reason},
+                "dispatch": {"ok": True, "kind": "noop"},
+                "raw_response": "",
+                "paused": True,
+                "next_tick_recommended_in_seconds": _PAUSED_NEXT_TICK_HINT_SECONDS,
+            }
+            if actions_per_tick > 1:
+                result["sub_actions"] = []
+            return result
+
+        # Phase 4a — dialogue and wandering force single-action ticks.
+        # Dialogue fires mid-conversation (one Director beat per turn
+        # is all the player can absorb); wandering is low-cadence
+        # filler and multi-action would pile content no one will
+        # read. Applied before the small-cast cap so the logs below
+        # describe the final value.
+        if self._player_activity in _SINGLE_ACTION_ACTIVITIES and actions_per_tick > 1:
+            logger.info(
+                f"Story Director: activity={self._player_activity}, "
+                f"capping actions_per_tick {actions_per_tick} -> 1"
+            )
             actions_per_tick = 1
 
         # Small-cast cap: on worlds with at most _SMALL_CAST_THRESHOLD
@@ -1950,6 +2066,8 @@ class StoryDirector:
             "recent_decisions": self.recent_decisions,
             "recent_player_actions": self.recent_player_actions,
             "kind_rotation_index": self._kind_rotation_index,
+            "player_activity": self._player_activity,
+            "activity_set_at_tick": self._activity_set_at_tick,
             "lore_loaded": bool(self._lore_text),
             "example_count": len(self._examples),
             "ledger": self.ledger.stats(),
@@ -2115,6 +2233,53 @@ class StoryDirector:
             "npc_id": npc_id,
             "previous_zone": old_zone,
             "current_zone": npc.current_zone,
+        }
+
+    def set_player_activity(self, activity: str) -> dict:
+        """
+        Update the player's current activity. Called by the game
+        client on every meaningful state transition (entering a town,
+        opening a menu, starting a fight, etc.) so the Director can
+        self-pause or adjust cadence.
+
+        Validates against ``PlayerActivity``. Unknown strings are
+        rejected rather than silently coerced — a typo in the game
+        integration should surface loudly in the REST response.
+        """
+        if not isinstance(activity, str):
+            return {"ok": False, "reason": "activity must be a string"}
+        activity = activity.strip()
+        if activity not in _PLAYER_ACTIVITY_VALUES:
+            return {
+                "ok": False,
+                "reason": (
+                    f"unknown activity '{activity}'; must be one of "
+                    f"{sorted(_PLAYER_ACTIVITY_VALUES)}"
+                ),
+            }
+        if activity != self._player_activity:
+            logger.info(
+                f"Story Director activity: {self._player_activity} -> {activity} "
+                f"(at tick {self.tick_count})"
+            )
+        self._player_activity = activity
+        self._activity_set_at_tick = self.tick_count
+        self._save_state()
+        return {
+            "ok": True,
+            "activity": self._player_activity,
+            "activity_set_at_tick": self._activity_set_at_tick,
+        }
+
+    def get_player_activity(self) -> dict:
+        """
+        Return the current player activity and the tick at which it
+        was last set. Used by the REST debug endpoint and by bench
+        harnesses that need to verify activity-aware behavior.
+        """
+        return {
+            "activity": self._player_activity,
+            "activity_set_at_tick": self._activity_set_at_tick,
         }
 
     def get_zone_state(self) -> dict:
@@ -2986,6 +3151,17 @@ class StoryDirector:
                     f"focus NPC '{focus_npc}' (active_zones={sorted(self._active_zones)})"
                 )
                 allowed.discard("quest")
+
+        # Phase 4a — activity hard filter for quests. A quest offered
+        # during dialogue, a dungeon run, or while wandering can't be
+        # meaningfully accepted (giver absent or context wrong). Drop
+        # the kind so rotation picks event or fact instead.
+        if self._player_activity in _NO_QUEST_ACTIVITIES and "quest" in allowed:
+            logger.debug(
+                f"Activity hard filter: dropping 'quest' "
+                f"(activity={self._player_activity})"
+            )
+            allowed.discard("quest")
 
         start = self._kind_rotation_index % len(_ACTION_KIND_ROTATION)
         for offset in range(len(_ACTION_KIND_ROTATION)):

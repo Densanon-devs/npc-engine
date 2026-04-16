@@ -375,6 +375,15 @@ def main():
                              "world-wide mode (current behaviour). Only "
                              "meaningful for worlds with NPCs that have "
                              "zone: fields in their profile YAML.")
+    parser.add_argument("--player-activity", type=str, default=None,
+                        help="Static player activity for the whole run "
+                             "(Phase 4a). One of: in_town, in_dialogue, "
+                             "in_dungeon, in_combat, in_menu, wandering, "
+                             "traveling, idle, unknown. in_combat/in_menu/"
+                             "idle pause every tick; in_dialogue/wandering "
+                             "force actions_per_tick=1; in_dungeon drops "
+                             "'quest' from the kind rotation. Omitted = "
+                             "unknown (backward-compatible default).")
     parser.add_argument("--lifecycle-autonomous", action="store_true",
                         help="Enable autonomous lifecycle mode: the "
                              "Director can propose NPC deaths (arc-driven) "
@@ -418,6 +427,13 @@ def main():
         zone_list = [z.strip() for z in args.active_zones.split(",") if z.strip()]
         engine.story_director.set_active_zones(zone_list)
         print(f"Active zones: {zone_list}")
+    if args.player_activity:
+        activity_result = engine.story_director.set_player_activity(args.player_activity)
+        if not activity_result.get("ok"):
+            raise SystemExit(
+                f"--player-activity rejected: {activity_result.get('reason')}"
+            )
+        print(f"Player activity: {args.player_activity}")
     if args.lifecycle_autonomous:
         engine.story_director.set_autonomous_lifecycle(True)
         print("Autonomous lifecycle: ON")
