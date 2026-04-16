@@ -3671,6 +3671,39 @@ class StoryDirector:
         line. Cheap enough to call per focus pick."""
         return npc_id in self._main_line_cast()
 
+    def _build_intent_guidance_block(self, focus_npc: str) -> Optional[str]:
+        """Phase 3a — ``GIVER CONTEXT`` + ``INTENT GUIDANCE`` prompt
+        block. GIVER CONTEXT lines come from whatever bio material
+        the stub/profile exposes (personality + top goal). INTENT
+        GUIDANCE always renders so the LLM emits the tags regardless
+        of how bare the stub is."""
+        npc = self.engine.pie.npc_knowledge.get(focus_npc)
+        if npc is None:
+            return None
+        identity = getattr(npc, "identity", None) or {}
+        personality = str(identity.get("personality", "") or "").strip()
+        goals = self._peek_npc_goals(focus_npc) or []
+        top_goal_desc = ""
+        if goals:
+            top_goal_desc = str(goals[0].get("description", "") or "").strip()
+
+        lines: list[str] = []
+        if personality or top_goal_desc:
+            lines.append("=== GIVER CONTEXT ===")
+            if personality:
+                lines.append(f"{focus_npc}'s personality: {personality[:180]}")
+            if top_goal_desc:
+                lines.append(f"{focus_npc}'s top goal: {top_goal_desc[:160]}")
+            lines.append("")
+        lines.extend([
+            "INTENT GUIDANCE (include in the quest JSON):",
+            "- Good-aligned (priests, honest craftsfolk) → intent: good or neutral",
+            "- Gray characters (smugglers, fences, opportunists) → intent: gray",
+            "- Harmful (assassins, thieves, zealots) → intent: dark or cruel",
+            "Also include moral_weight (0.0 = harmless chore, 1.0 = cruel/morally heavy).",
+        ])
+        return "\n".join(lines)
+
     def _find_quest_by_id(self, quest_id: str):
         """Return the first Quest dataclass with the given id across
         every NPC's quest list, or None. Used by refusal and reward
@@ -3681,6 +3714,127 @@ class StoryDirector:
                 if q.id == quest_id:
                     return q
         return None
+
+    def process_refusal(self, quest_id: str, npc_id: str,
+                         reason: Optional[str] = None) -> dict:
+        """
+        Phase 3a — apply the mechanics of a player-refused quest:
+        flip status to 'refused', apply a moral-weight-scaled trust
+        hit on the giver, emit a FactLedger entry, surface a
+        "previously refused" context line on the giver's personal
+        knowledge (future dialogue reads it), and schedule a
+        re-eligibility timer if the quest is in decay mode.
+
+        Returns a descriptive dict the REST layer passes back.
+        """
+        if not isinstance(quest_id, str) or not quest_id:
+            return {"ok": False, "reason": "missing quest_id"}
+        if not isinstance(npc_id, str) or not npc_id:
+            return {"ok": False, "reason": "missing npc_id"}
+        npc = self.engine.pie.npc_knowledge.get(npc_id)
+        if npc is None:
+            return {"ok": False, "reason": f"unknown npc '{npc_id}'"}
+        quest = None
+        for q in getattr(npc, "quests", []):
+            if q.id == quest_id:
+                quest = q
+                break
+        if quest is None:
+            return {"ok": False, "reason": f"unknown quest '{quest_id}' on '{npc_id}'"}
+
+        quest.status = "refused"
+
+        # Trust delta: explicit override beats the moral-weight
+        # formula. moral_weight=0 default → trust_delta=0 (no penalty).
+        trust_delta = quest.refusal_trust_delta
+        if trust_delta == 0 and quest.moral_weight:
+            trust_delta = int(quest.moral_weight * -15)
+        if trust_delta:
+            try:
+                self.engine.adjust_trust(
+                    npc_id, int(trust_delta),
+                    reason=f"player refused '{quest.name}'",
+                )
+            except Exception as e:
+                logger.warning(f"adjust_trust failed on refusal: {e}")
+
+        # FactLedger entry — the refusal is a world-fact the Director
+        # can draw on later (gossip propagation, future beats).
+        giver_name = npc.identity.get("name", npc_id)
+        try:
+            self.ledger.add(
+                text=f"The player refused {giver_name}'s quest '{quest.name}'.",
+                npc_id=npc_id,
+                kind="refusal",
+                tick=self.tick_count + 1,
+                suggested_by="quest_refusal",
+            )
+        except Exception as e:
+            logger.warning(f"ledger add for refusal failed: {e}")
+
+        # Surface a dialogue-context line on the giver so future NPC
+        # dialogue reads it via NPCKnowledge.build_context. Routed
+        # through engine.add_knowledge so the dynamic-lane
+        # reserve-min (set in densanon-core) keeps the profile
+        # static lore intact.
+        try:
+            self.engine.add_knowledge(
+                npc_id,
+                f"The player has previously refused my quest '{quest.name}'.",
+                fact_type="personal",
+            )
+        except Exception as e:
+            logger.warning(f"add_knowledge for refusal context failed: {e}")
+
+        # Decay mode schedules a re-eligibility timer. Permanent mode
+        # just stays refused until the game client explicitly reopens.
+        if quest.refusal_mode == "decay" and quest.refusal_decay_ticks > 0:
+            unlock_tick = self.tick_count + 1 + quest.refusal_decay_ticks
+            self._refused_quest_timers[(npc_id, quest_id)] = unlock_tick
+        self._save_state()
+        return {
+            "ok": True,
+            "quest_id": quest_id,
+            "npc_id": npc_id,
+            "trust_delta": int(trust_delta),
+            "refusal_mode": quest.refusal_mode,
+            "unlock_tick": self._refused_quest_timers.get((npc_id, quest_id)),
+            "reason": reason,
+        }
+
+    def set_player_auto_refuse(self, intents: list[str]) -> dict:
+        """Phase 3a — player sets which intents should auto-refuse.
+        Ignored if the dev flag ``director.quest_auto_refuse.enabled``
+        is false AND ``player_configurable`` is false. Returns the
+        persisted set plus flags for client UI."""
+        if not isinstance(intents, (list, tuple, set)):
+            return {"ok": False, "reason": "intents must be a list of strings"}
+        if (not self._quest_auto_refuse_enabled
+                and not self._quest_auto_refuse_player_configurable):
+            return {
+                "ok": False,
+                "reason": "auto-refuse is disabled in this world (director.quest_auto_refuse)",
+            }
+        cleaned = {
+            str(v).strip() for v in intents
+            if isinstance(v, str) and str(v).strip()
+        }
+        self._player_auto_refuse_intents = cleaned
+        self._save_state()
+        return {
+            "ok": True,
+            "intents": sorted(cleaned),
+            "dev_enabled": self._quest_auto_refuse_enabled,
+            "player_configurable": self._quest_auto_refuse_player_configurable,
+        }
+
+    def get_player_auto_refuse(self) -> dict:
+        """Read-only view of the current auto-refuse config + state."""
+        return {
+            "dev_enabled": self._quest_auto_refuse_enabled,
+            "player_configurable": self._quest_auto_refuse_player_configurable,
+            "intents": sorted(self._player_auto_refuse_intents),
+        }
 
     def _record_main_line_reward(self, quest_id: str) -> Optional[dict]:
         """On quest completion, append the matching entry from the
@@ -4535,6 +4689,14 @@ class StoryDirector:
                     f'Your action field MUST be "quest" and npc_id MUST be "{focus_npc}". '
                     f'Give {focus_npc} a new quest appropriate to their role.'
                 )
+                # Phase 3a — inject giver context + intent guidance so
+                # the LLM tags the quest's moral shape. Author-tagged
+                # YAML quests bypass this path entirely (they land via
+                # the profile loader, not _dispatch_quest's LLM input).
+                giver_block = self._build_intent_guidance_block(focus_npc)
+                if giver_block:
+                    focus_lines.append("")
+                    focus_lines.append(giver_block)
             elif action_kind == "fact":
                 focus_lines.append(
                     f'Your action field MUST be "fact" and npc_id MUST be "{focus_npc}". '
@@ -4872,10 +5034,27 @@ class StoryDirector:
 
         npc.add_quest(quest)
 
-        # Announce the new quest only when it's actually offerable.
-        # Locked main-line beats stay silent until their prereq
-        # completes and _unlock_quests_if_prereqs_met surfaces them.
-        if quest.status == "available":
+        # Phase 3a — auto-refuse. If the world's dev flag is on AND
+        # the player has added this quest's intent to their filter,
+        # short-circuit the offer by running the refusal pipeline
+        # immediately instead of announcing it. Only fires for
+        # status=='available' quests (locked beats wait for prereqs).
+        auto_refused = False
+        if (quest.status == "available"
+                and quest.intent
+                and self._quest_auto_refuse_enabled
+                and quest.intent in self._player_auto_refuse_intents):
+            self.process_refusal(
+                quest_id=quest_id, npc_id=npc_id,
+                reason="auto_refused_by_player_filter",
+            )
+            auto_refused = True
+
+        # Announce the new quest only when it's actually offerable
+        # AND not auto-refused. Locked main-line beats stay silent
+        # until their prereq completes; auto-refused quests already
+        # emitted a refusal ledger entry.
+        if quest.status == "available" and not auto_refused:
             self._inject_tagged_event(
                 f"{npc.identity.get('name', npc_id)} has new work to offer: {quest.name}",
                 npc_id=None,
@@ -4903,6 +5082,7 @@ class StoryDirector:
         return {
             "ok": True, "kind": "quest", "npc_id": npc_id,
             "quest_id": quest_id, "status": quest.status,
+            "auto_refused": auto_refused,
         }
 
     def _prereqs_satisfied(self, prereq_ids: list[str]) -> bool:

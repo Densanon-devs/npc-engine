@@ -1433,6 +1433,232 @@ def test_main_line_bypasses_per_npc_quest_cap():
     print("  [PASS] main_line_bypasses_per_npc_quest_cap")
 
 
+# ── Intent + refusal + auto-refuse tests (Phase 3a-3) ────────────
+
+def test_director_generated_quest_includes_intent_tag():
+    """The Director's quest-action prompt carries an INTENT GUIDANCE
+    block that prompts the LLM to emit intent + moral_weight. The
+    block fires only for action_kind='quest'."""
+    restore = _isolate_state_file("phase3a_intent_block")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        quest_prompt = director._build_prompt(
+            snapshot="World: Test",
+            focus_npc="kael",
+            action_kind="quest",
+        )
+        assert "INTENT GUIDANCE" in quest_prompt, quest_prompt
+        assert "moral_weight" in quest_prompt, quest_prompt
+        # The block is NOT on event-kind ticks.
+        event_prompt = director._build_prompt(
+            snapshot="World: Test", focus_npc="kael", action_kind="event",
+        )
+        assert "INTENT GUIDANCE" not in event_prompt, event_prompt
+    finally:
+        restore()
+    print("  [PASS] director_generated_quest_includes_intent_tag")
+
+
+def test_refusal_trust_delta_scales_with_moral_weight():
+    """process_refusal: moral_weight=0.8 → int(0.8 * -15) = -12
+    trust delta; explicit refusal_trust_delta overrides the formula."""
+    restore = _isolate_state_file("phase3a_refusal_trust")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(
+            id="q1", name="Dark Favor", description="d",
+            intent="dark", moral_weight=0.8,
+        ))
+        engine.calls.clear()
+        result = director.process_refusal(quest_id="q1", npc_id="kael")
+        assert result["ok"] is True, result
+        assert result["trust_delta"] == -12, result
+        # adjust_trust was invoked with the computed delta.
+        trust_calls = [c for c in engine.calls if c[0] == "adjust_trust"]
+        assert trust_calls and trust_calls[-1][2] == -12, engine.calls
+        q = kael.quests[0]
+        assert q.status == "refused", q.status
+
+        # Explicit override wins.
+        kael.add_quest(Quest(
+            id="q2", name="Custom", description="d",
+            intent="gray", moral_weight=0.5,
+            refusal_trust_delta=-25,
+        ))
+        engine.calls.clear()
+        r2 = director.process_refusal(quest_id="q2", npc_id="kael")
+        assert r2["trust_delta"] == -25, r2
+    finally:
+        restore()
+    print("  [PASS] refusal_trust_delta_scales_with_moral_weight")
+
+
+def test_refused_quest_surfaces_in_giver_dialogue_context():
+    """After refusal, the giver's dynamic_personal_knowledge gets a
+    'previously refused' line so future NPC dialogue can surface the
+    context (via NPCKnowledge.build_context's dynamic lane)."""
+    restore = _isolate_state_file("phase3a_refusal_context")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(
+            id="q1", name="Lingering Job", description="d",
+            intent="gray", moral_weight=0.3,
+        ))
+        assert kael.dynamic_personal_knowledge == []
+        director.process_refusal(quest_id="q1", npc_id="kael")
+        assert any(
+            "Lingering Job" in line
+            for line in kael.dynamic_personal_knowledge
+        ), kael.dynamic_personal_knowledge
+    finally:
+        restore()
+    print("  [PASS] refused_quest_surfaces_in_giver_dialogue_context")
+
+
+def test_refusal_decay_mode_reopens_quest_after_ticks():
+    """A quest tagged refusal_mode='decay' schedules a re-eligibility
+    timer; the lifecycle sweep reopens it once the window expires."""
+    restore = _isolate_state_file("phase3a_refusal_decay")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(
+            id="q_decay", name="Decay", description="d",
+            intent="gray", moral_weight=0.3,
+            refusal_mode="decay", refusal_decay_ticks=5,
+        ))
+        director.process_refusal(quest_id="q_decay", npc_id="kael")
+        assert ("kael", "q_decay") in director._refused_quest_timers
+        unlock_tick = director._refused_quest_timers[("kael", "q_decay")]
+        # tick_count was 0 at refusal, so unlock_tick should be 0+1+5=6.
+        assert unlock_tick == 6, unlock_tick
+
+        # Before the window expires, lifecycle sweep doesn't reopen.
+        director.tick_count = 4
+        expired = director._expire_refusal_timers()
+        assert expired == [], expired
+        assert kael.quests[0].status == "refused"
+
+        # At the window boundary, quest reopens.
+        director.tick_count = 5  # _expire uses tick_count + 1 == unlock_tick
+        expired = director._expire_refusal_timers()
+        assert len(expired) == 1, expired
+        assert expired[0]["quest_id"] == "q_decay", expired
+        assert kael.quests[0].status == "available"
+        assert ("kael", "q_decay") not in director._refused_quest_timers
+    finally:
+        restore()
+    print("  [PASS] refusal_decay_mode_reopens_quest_after_ticks")
+
+
+def test_refusal_permanent_mode_stays_refused():
+    """Permanent-mode refusals never schedule a timer and never
+    auto-reopen, even after many lifecycle sweeps."""
+    restore = _isolate_state_file("phase3a_refusal_permanent")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(
+            id="q_perm", name="Perm", description="d",
+            intent="dark", moral_weight=0.9,
+            refusal_mode="permanent",
+        ))
+        director.process_refusal(quest_id="q_perm", npc_id="kael")
+        assert director._refused_quest_timers == {}, director._refused_quest_timers
+        # Advance many ticks; the quest stays refused.
+        for i in range(50):
+            director.tick_count = i
+            director._expire_refusal_timers()
+        assert kael.quests[0].status == "refused"
+    finally:
+        restore()
+    print("  [PASS] refusal_permanent_mode_stays_refused")
+
+
+def test_auto_refuse_dev_disabled_ignores_player_filter():
+    """With the dev flag off, a player's auto-refuse intent filter
+    has no effect — quests still land as 'available' regardless of
+    intent."""
+    restore = _isolate_state_file("phase3a_autoref_off")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director._quest_auto_refuse_enabled = False
+        # Player configurability still allows setting the intents,
+        # but the dev flag gates the effect.
+        director._quest_auto_refuse_player_configurable = True
+        director.set_player_auto_refuse(["dark", "cruel"])
+        result = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {
+                "id": "q_evil", "name": "Evil",
+                "description": "d",
+                "intent": "cruel", "moral_weight": 0.95,
+            },
+        })
+        assert result["ok"] is True, result
+        assert result["auto_refused"] is False, result
+        kael = engine.pie.npc_knowledge.get("kael")
+        q = next(q for q in kael.quests if q.id == "q_evil")
+        assert q.status == "available", q.status
+    finally:
+        restore()
+    print("  [PASS] auto_refuse_dev_disabled_ignores_player_filter")
+
+
+def test_auto_refuse_dev_enabled_applies_player_filter():
+    """Dev flag on + matching player intent: the quest auto-refuses
+    at dispatch time — status flips to 'refused', the announce event
+    is suppressed, trust takes a hit, and the refusal ledger entry
+    lands without a player REST call."""
+    restore = _isolate_state_file("phase3a_autoref_on")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director._quest_auto_refuse_enabled = True
+        director._quest_auto_refuse_player_configurable = True
+        director.set_player_auto_refuse(["dark", "cruel"])
+        result = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {
+                "id": "q_cruel", "name": "Cruel Task",
+                "description": "d",
+                "intent": "cruel", "moral_weight": 0.9,
+            },
+        })
+        assert result["ok"] is True, result
+        assert result["auto_refused"] is True, result
+        kael = engine.pie.npc_knowledge.get("kael")
+        q = next(q for q in kael.quests if q.id == "q_cruel")
+        assert q.status == "refused", q.status
+        # Non-matching intent still lands normally.
+        result2 = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "bess",
+            "quest": {
+                "id": "q_good", "name": "Good Task",
+                "description": "d",
+                "intent": "good", "moral_weight": 0.1,
+            },
+        })
+        assert result2["auto_refused"] is False, result2
+        bess = engine.pie.npc_knowledge.get("bess")
+        q = next(q for q in bess.quests if q.id == "q_good")
+        assert q.status == "available", q.status
+    finally:
+        restore()
+    print("  [PASS] auto_refuse_dev_enabled_applies_player_filter")
+
+
 # ── GPU coordination tests (Phase 4c) ────────────────────────────
 
 def test_pause_state_blocks_ticks():
@@ -5235,6 +5461,15 @@ def main():
     test_protected_giver_killable_by_game_client()
     test_quest_line_reward_track_persists()
     test_main_line_bypasses_per_npc_quest_cap()
+
+    print("\nStory Director — intent + refusal tests (Phase 3a-3)")
+    test_director_generated_quest_includes_intent_tag()
+    test_refusal_trust_delta_scales_with_moral_weight()
+    test_refused_quest_surfaces_in_giver_dialogue_context()
+    test_refusal_decay_mode_reopens_quest_after_ticks()
+    test_refusal_permanent_mode_stays_refused()
+    test_auto_refuse_dev_disabled_ignores_player_filter()
+    test_auto_refuse_dev_enabled_applies_player_filter()
 
     print("\nStory Director — GPU coordination tests (Phase 4c)")
     test_pause_state_blocks_ticks()

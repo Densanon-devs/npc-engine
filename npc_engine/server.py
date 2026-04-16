@@ -229,6 +229,14 @@ def create_app():
         # Max LLM seconds per trailing 60s window. Negative clears.
         max_seconds_per_minute: float
 
+    class QuestRefuseRequest(BaseModel):
+        quest_id: str
+        npc_id: str
+        reason: Optional[str] = None
+
+    class PlayerAutoRefuseRequest(BaseModel):
+        intents: list[str]
+
     class NPCZoneRequest(BaseModel):
         npc_id: str
         zone: str
@@ -468,6 +476,45 @@ def create_app():
         if not result.get("ok"):
             raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
         return result
+
+    @app.post("/quests/refuse")
+    async def quest_refuse(req: QuestRefuseRequest):
+        """Phase 3a — player refuses a quest. Applies moral-weight-
+        scaled trust hit, emits a refusal FactLedger entry, surfaces
+        'previously refused' context on the giver, and schedules a
+        decay-mode re-eligibility timer if the quest is tagged for
+        decay. Permanent refusals stay refused until game-client
+        intervention."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.process_refusal(
+            quest_id=req.quest_id, npc_id=req.npc_id, reason=req.reason,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.post("/player/auto_refuse")
+    async def player_auto_refuse(req: PlayerAutoRefuseRequest):
+        """Phase 3a — player sets which quest intents auto-refuse.
+        Requires the world's dev flag (director.quest_auto_refuse.enabled)
+        or player_configurable=true. Empty list clears the filter."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.set_player_auto_refuse(req.intents)
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/player/auto_refuse")
+    async def player_auto_refuse_get():
+        """Current auto-refuse config (dev flag + player intent set)."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_player_auto_refuse()
 
     @app.post("/story/npc_death")
     async def story_npc_death(req: NPCDeathRequest):
