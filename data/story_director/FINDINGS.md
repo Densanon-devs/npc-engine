@@ -4132,6 +4132,294 @@ python bench_story_director.py --ticks 15 --reset --model qwen_3b \
 
 ---
 
+## Phase 2b — birth generation pipeline (2026-04-15)
+
+NPCs can now be generated at runtime to fill depleted zones.
+Phase 2b ships **template-based generation** — Python scaffolds
+a complete profile YAML from a name pool, role template, and
+zone lore_hook, with no LLM call required. This is enough for
+population management and stress testing. LLM-based generation
+for richer character flavor is a future enhancement.
+
+### Dispatch (`_dispatch_npc_birth`)
+
+1. Generate a unique `npc_id` (format `gen_t<tick>_<name_slug>`)
+2. Build a full profile YAML from a template scaffold — identity
+   (name from pool, role from zone config, location seeded from
+   zone name), zone + mobility defaults, `generated: true` tag,
+   minimal personality + 1 world fact + 1 personal knowledge +
+   1 goal + capability defaults (trust/scratchpad/emotional_state/
+   goals/gossip)
+3. Collision-check the name against existing NPCs (50 retries
+   with a 26 × 22 = 572-combo pool)
+4. Write to `data/worlds/<world>/npc_profiles/<npc_id>.yaml`
+5. Call `engine.add_profile(yaml_path, social_connections)` to
+   register at runtime — loads the file into PIE's
+   `npc_knowledge.profiles` dict and optionally seeds social
+   graph edges
+6. Emit a FactLedger entry (`"A new {role} named {name} has
+   arrived in the {zone}"`) so existing NPCs can gossip about
+   the newcomer
+7. Record in `_birth_history` for bench audit
+
+### Zone config + population management
+
+`data/worlds/<world>/zones.yaml` declares per-zone
+`target_population`, `min_population`, `role_pool`, `lore_hook`,
+`adjacent_to`. `_load_zone_config` reads the file at init; empty
+config = no population management (backward compat).
+
+Every `_lifecycle_tick` scans zone configs after the death phase:
+
+```python
+def _find_population_gap(self) -> Optional[dict]:
+    for zone_name, cfg in self._zone_config.items():
+        alive_in_zone = count_alive_in_zone(zone_name)
+        gap = cfg.min_population - alive_in_zone
+        if gap > worst_gap:
+            worst_zone = zone_name
+    return {"zone": worst_zone, "role": random_from_pool, ...}
+```
+
+When a gap exists AND no explicit birth request is queued, one
+birth fires per tick. Stays at 1-per-tick so the story-beat
+cadence isn't overwhelmed even on sudden population collapse.
+
+### REST + bench
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /story/npc_birth_request` | `{"zone": "...", "role": "..."}` — queue explicit birth |
+| `GET /story/population` | per-zone alive / target / min / gap |
+
+Bench: no special flag needed — any run with a `zones.yaml` in
+the world dir triggers auto-population management. Manually
+queue birth in tests via `director.queue_birth_request(zone, role)`.
+
+### Infrastructure added for Phase 2b
+
+- `NPCEngine.add_profile(profile_path, social_connections)` —
+  runtime NPC registration, loads YAML into `npc_knowledge`
+  and optionally seeds social graph edges
+- `SocialGraph.add_connection(conn_data)` — runtime edge
+  insertion matching `world.yaml` schema
+- `_StubEngine.add_profile(...)` in the test harness
+
+### Phase 2b tests
+
+5 new offline unit tests (140 total at Phase 2b completion):
+
+1. `test_birth_dispatch_creates_profile_and_registers` — writes
+   YAML + registers live
+2. `test_population_gap_triggers_birth_on_lifecycle_tick` — auto
+   gap fill fires on first tick after the gap opens
+3. `test_population_at_target_no_birth` — no birth when
+   population is at or above min
+4. `test_queue_birth_request_queues_and_drains` — explicit
+   request drained on next tick
+5. `test_birth_name_avoids_collision_with_existing_npcs` — 10
+   consecutive births, all unique names
+
+---
+
+## Phase 2c — autonomous lifecycle flag (2026-04-15)
+
+The Director can now propose deaths and births on its own when
+autonomous mode is enabled. Off by default — game-authoritative
+remains the safe path. Toggle via
+`set_autonomous_lifecycle(True)` or bench flag
+`--lifecycle-autonomous`.
+
+### Autonomous death proposal
+
+`_propose_autonomous_death` scans active arcs for any at the
+`confront` beat (current_beat >= 2). If found, proposes killing
+an alive cast member to resolve the arc narratively. Jordan's
+design rule: **the Director can kill anyone** — no gating on
+zone, cast importance, or player proximity. The stress bench
+is the arbiter.
+
+Bounded by `_MAX_AUTONOMOUS_DEATHS_PER_SESSION = 3` to prevent
+runaway mortality. Counter resets on process restart (not
+persisted) so long-running servers naturally rate-limit over
+session boundaries.
+
+### 50-tick autonomous lifecycle stress test
+
+`logs/stress_pb_zoned_50.json` — PB zoned, dock_district active,
+autonomous lifecycle ON, 50 ticks × 3 actions, terse mode.
+
+**Lifecycle events:**
+
+| Tick | Event |
+|---|---|
+| T9  | **DEATH** finn (autonomous — arc confront resolution) |
+| T14 | **DEATH** old_bones (autonomous — arc confront) |
+| T14 | **BIRTH** `gen_t14_bryn_oakenshield` (dock_worker, population gap fill) |
+| T19 | **DEATH** varro (autonomous — arc confront, caps at 3) |
+| T19 | **BIRTH** `gen_t19_nils_larkspur` (fence, population gap fill) |
+
+**End state:** 5 alive (captain_reva, bryn, nils in dock;
+thessa, brom at lighthouse). Population self-balanced within
+1 tick of each death.
+
+**Stability:**
+- Mean tick: 5.29s (flat across 50 ticks)
+- RSS peak: 3456 MB (growth +491 MB, no drift)
+- FactLedger warnings: 125/50, 0 contradictions
+- 8 arcs proposed, 7 resolved (3 by autonomous death, 4
+  naturally), 1 active at end
+
+**Generated NPCs participate fully.** bryn got 34 dispatches
+in 36 ticks of existence; nils got 24 in 31 ticks. The
+Director treats template-generated NPCs identically to
+originals — burst rotation, zone locality, arc proposal all
+work on them.
+
+The emergent lifecycle feel is exactly what the plan targeted:
+deaths create dramatic arc resolutions, births fill vacancies
+within 1 tick, and the story keeps generating new threads as
+old ones close. All three layers (zone locality, death
+propagation, birth population management) compose cleanly
+without coordination code.
+
+### Autonomous lifecycle tests
+
+4 new offline unit tests (144 total):
+
+- `test_autonomous_off_no_director_deaths` — the default-safe
+  invariant
+- `test_autonomous_on_proposes_death_at_confront`
+- `test_autonomous_death_capped_by_session_limit`
+- `test_autonomous_skips_death_when_no_arc_at_confront`
+
+### Reproduction
+
+```bash
+cd D:/LLCWork/npc-engine
+python bench_story_director.py --ticks 50 --reset --model qwen_3b \
+    --world port_blackwater_zoned --active-zones dock_district \
+    --actions-per-tick 3 --narration-mode terse \
+    --lifecycle-autonomous \
+    --log logs/stress_pb_zoned_50.json
+```
+
+---
+
+## Player-initiated death — integration test (2026-04-15)
+
+Proof that when a player kills an NPC (as opposed to the
+Director autonomously killing them or the world triggering a
+death), the lifecycle machinery handles it identically through
+the game-authoritative path. No special code path exists for
+player-kills; the system is cause-agnostic.
+
+### Game client two-step
+
+```python
+# 1. Record the player's action with trust delta
+POST /story/player_action
+  {
+    "text": "Player stabbed Old Bones in the Drowned Rat tavern",
+    "target": "old_bones",
+    "trust_delta": -80           # tanks Old Bones' own trust pre-death
+  }
+
+# 2. Queue the death with a player-specific cause
+POST /story/npc_death
+  {
+    "npc_id": "old_bones",
+    "cause": "stabbed by the player in the Drowned Rat tavern",
+    "transfers_quests_to": null   # or a successor if the game has one
+  }
+```
+
+The next `tick()` drains the death via `_lifecycle_tick`. From
+the Director's perspective, this is identical to any other
+death — the `cause` string is narrative context that flows into
+the death record, the FactLedger entry, the snapshot
+"RECENTLY DEPARTED" section, and the postgen deceased-reference
+repair context.
+
+### Integration bench — `logs/pb_player_kill_clean_15.json`
+
+15 ticks, PB zoned, dock_district active, player kills
+`old_bones` at T6 with `trust_delta=-80`.
+
+| Check | Result |
+|---|---|
+| old_bones dispatched T1-T6 | 4 (natural rotation) |
+| old_bones dispatched T7-T15 | **0** (complete exclusion) |
+| Death cause preserved | "stabbed by the player in the Drowned Rat tavern" |
+| Player action persisted | `target=old_bones trust=-80 text="Player killed old_bones: stabbed..."` |
+| Arc trimmed | `arc_t5`: `[finn, reva, old_bones]` → `[finn, reva]` |
+| Quests aborted | **2**: `find_informant_bones` (profile-declared) AND `shoals_singing` (Director-generated mid-session) |
+| Profile files on disk post-reset | 6 (clean baseline) |
+
+The "2 quests aborted" is a notable signal: the Director had
+dynamically assigned an additional quest to old_bones during
+T1-T6, and the lifecycle cleanup correctly aborts BOTH static
+(YAML-declared) and dynamic (Director-generated) quest state
+with the same `giver_deceased` reason. No asymmetry between
+authored content and generated content at the cleanup layer.
+
+### Player-kill test
+
+`test_player_killed_npc_full_propagation` exercises 7
+post-conditions in a single offline test:
+
+1. status flipped to deceased
+2. cause string contains "player"
+3. open quest aborted with giver_deceased
+4. player action trail carries the murder record
+5. focus excludes the deceased NPC for 10 subsequent picks
+6. snapshot RECENTLY DEPARTED section names the killer
+7. rotation continues on remaining NPCs post-death
+
+### Bench flag
+
+`--player-kill-at-tick TICK:NPC_ID[:CAUSE[:TRUST_DELTA]]`
+(repeatable) scripts the full two-step for integration tests.
+Default cause `"killed by the player"`, default trust_delta -60.
+
+### Hygiene fix — bench reset now cleans generated profiles
+
+Prior benches inherited Director-generated NPCs from earlier
+sessions because `--reset` cleared `state.json` / ledger /
+arcs but not the `gen_t<tick>_*.yaml` profile files the birth
+pipeline writes. The first player-kill run showed 8 NPCs in
+the cast (6 original + 2 leftover from the 50-tick stress).
+`bench_story_director.boot_engine` now also deletes
+`gen_t*.yaml` from `npc_profiles/` when `--reset` fires. In a
+real game these files persist (the alive-world feature); bench
+runs want a clean baseline.
+
+### What Phase 2a+2b+2c confirmed about player-initiated death
+
+- **No special code path is needed** — player-kills flow
+  through the same queue + dispatch as any other death.
+- The `cause` string is preserved end-to-end and threads into
+  every narrative surface (FactLedger, snapshot, postgen).
+- Quest cleanup covers both static and dynamic quests
+  symmetrically.
+- Trust deltas via `record_player_action` compose cleanly with
+  the death dispatch — the game client's two REST calls
+  produce exactly the right state.
+
+### What's still game-side (not Director's job)
+
+- **Witness trust propagation toward the player.** Game
+  decides who witnessed the kill and calls `/npc/trust` with
+  negative deltas for those NPCs. The Director doesn't
+  auto-ripple a "player is a murderer" reputation.
+  `ReputationRipple` exists for NPC-to-NPC trust; a
+  player-reputation ripple would be a future enhancement.
+- Combat resolution, guard response, etc.
+- The player's accepted-quest tracker on the game side needs
+  to mirror the Director's `giver_deceased` abort.
+
+---
+
 ## What works
 
 - **Long-range plot continuity.** In the final session, the player asked
