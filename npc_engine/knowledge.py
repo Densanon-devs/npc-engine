@@ -30,9 +30,30 @@ class Quest:
     id: str
     name: str
     description: str
-    status: str = "available"  # available, active, completed, failed
+    status: str = "available"  # available, active, completed, failed, locked, refused
     reward: str = ""
     objectives: list[str] = field(default_factory=list)
+    # ── Phase 3a additions (all optional, backward-compat) ──
+    # Main-line membership. ``quest_line`` is the quest_lines.yaml key;
+    # ``quest_line_beat`` is the 0-based index within that line's beats.
+    quest_line: Optional[str] = None
+    quest_line_beat: int = 0
+    # Quest ids that must be status='completed' before this quest can
+    # flip from 'locked' to 'available'. Empty = immediately available.
+    prerequisite_quests: list[str] = field(default_factory=list)
+    # Moral shape of the quest. ``intent`` is one of
+    # good/neutral/gray/dark/cruel; ``moral_weight`` is 0.0-1.0
+    # (darker = higher). ``refusal_trust_delta`` overrides the
+    # auto-computed trust drop on refusal (0 = use
+    # int(moral_weight * -15)).
+    intent: Optional[str] = None
+    moral_weight: float = 0.0
+    refusal_trust_delta: int = 0
+    # Refusal behavior. ``permanent`` = stays refused forever;
+    # ``decay`` = lifecycle tick reopens the quest after
+    # ``refusal_decay_ticks`` elapse.
+    refusal_mode: str = "permanent"
+    refusal_decay_ticks: int = 0
 
     def to_prompt(self) -> str:
         return (f"{self.name}: {self.description} "
@@ -46,6 +67,14 @@ class Quest:
         return {
             "id": self.id, "name": self.name, "description": self.description,
             "status": self.status, "reward": self.reward, "objectives": self.objectives,
+            "quest_line": self.quest_line,
+            "quest_line_beat": self.quest_line_beat,
+            "prerequisite_quests": list(self.prerequisite_quests),
+            "intent": self.intent,
+            "moral_weight": self.moral_weight,
+            "refusal_trust_delta": self.refusal_trust_delta,
+            "refusal_mode": self.refusal_mode,
+            "refusal_decay_ticks": self.refusal_decay_ticks,
         }
 
 
@@ -169,6 +198,16 @@ class NPCKnowledge:
                 id=q["id"], name=q["name"], description=q["description"],
                 status=q.get("status", "available"), reward=q.get("reward", ""),
                 objectives=q.get("objectives", []),
+                # Phase 3a — all optional; missing keys fall through to
+                # the dataclass defaults.
+                quest_line=q.get("quest_line"),
+                quest_line_beat=int(q.get("quest_line_beat", 0) or 0),
+                prerequisite_quests=list(q.get("prerequisite_quests", []) or []),
+                intent=q.get("intent"),
+                moral_weight=float(q.get("moral_weight", 0.0) or 0.0),
+                refusal_trust_delta=int(q.get("refusal_trust_delta", 0) or 0),
+                refusal_mode=str(q.get("refusal_mode", "permanent") or "permanent"),
+                refusal_decay_ticks=int(q.get("refusal_decay_ticks", 0) or 0),
             ))
 
         for e in data.get("recent_events", []):

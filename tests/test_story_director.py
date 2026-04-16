@@ -1065,6 +1065,167 @@ def test_main_line_bypasses_per_npc_cap():
     print("  [PASS] main_line_bypasses_per_npc_cap")
 
 
+# ── Quest-lines tests (Phase 3a-1) ───────────────────────────────
+
+def test_quest_without_quest_line_is_standalone_backward_compat():
+    """A Director-dispatched quest with no quest_line/intent/prereq
+    fields lands exactly like pre-3a: status=available, no line
+    state recorded, the standard "has new work to offer" event
+    fires. Confirms Phase 3a is strictly additive."""
+    restore = _isolate_state_file("phase3a_standalone_quest")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        assert director._quest_lines_config == {}, director._quest_lines_config
+        assert director._main_line_cast() == set()
+        assert director._protected_givers() == set()
+
+        result = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {"id": "qplain", "name": "Plain", "description": "d"},
+        })
+        assert result["ok"] is True, result
+        assert result["status"] == "available", result
+        kael = engine.pie.npc_knowledge.get("kael")
+        q = next(q for q in kael.quests if q.id == "qplain")
+        assert q.quest_line is None
+        assert q.intent is None
+        assert q.moral_weight == 0.0
+        assert q.prerequisite_quests == []
+        assert q.refusal_mode == "permanent"
+    finally:
+        restore()
+    print("  [PASS] quest_without_quest_line_is_standalone_backward_compat")
+
+
+def test_empty_quest_lines_config_preserves_existing_behavior():
+    """A Director booted against a world with no quest_lines.yaml has
+    empty main-line state, empty cast/protected sets, and no
+    line-state side-effects on dispatched quests — the pre-3a
+    contract."""
+    restore = _isolate_state_file("phase3a_empty_qlines")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        assert director._quest_lines_config == {}
+        assert director._active_quest_lines() == {}
+        assert director._main_line_cast() == set()
+        assert director._protected_givers() == set()
+        # Dispatching a non-line quest doesn't mutate _quest_line_state.
+        director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {"id": "qnoline", "name": "No Line", "description": "d"},
+        })
+        assert director._quest_line_state == {}
+    finally:
+        restore()
+    print("  [PASS] empty_quest_lines_config_preserves_existing_behavior")
+
+
+def test_intent_loads_from_yaml():
+    """Profile YAML authors can pre-tag quests with Phase 3a fields
+    (intent, moral_weight, quest_line, prereqs, refusal_mode). The
+    knowledge.py YAML loader surfaces them on the Quest dataclass so
+    the Director sees them at dispatch time."""
+    import tempfile, yaml as _yaml
+    from npc_engine.knowledge import NPCKnowledge
+    yaml_body = {
+        "identity": {"name": "TestGiver", "role": "test"},
+        "world_facts": [],
+        "personal_knowledge": [],
+        "active_quests": [{
+            "id": "q_dark",
+            "name": "A Dark Favor",
+            "description": "Do something cruel.",
+            "intent": "cruel",
+            "moral_weight": 0.9,
+            "prerequisite_quests": ["prereq_a", "prereq_b"],
+            "quest_line": "main_dark_lighthouse",
+            "quest_line_beat": 2,
+            "refusal_mode": "decay",
+            "refusal_decay_ticks": 25,
+            "refusal_trust_delta": -20,
+        }],
+    }
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml",
+                                       delete=False, encoding="utf-8")
+    try:
+        tmp.write(_yaml.safe_dump(yaml_body))
+        tmp.close()
+        npc = NPCKnowledge(tmp.name)
+        assert len(npc.quests) == 1, npc.quests
+        q = npc.quests[0]
+        assert q.intent == "cruel", q.intent
+        assert q.moral_weight == 0.9, q.moral_weight
+        assert q.prerequisite_quests == ["prereq_a", "prereq_b"], q.prerequisite_quests
+        assert q.quest_line == "main_dark_lighthouse", q.quest_line
+        assert q.quest_line_beat == 2, q.quest_line_beat
+        assert q.refusal_mode == "decay", q.refusal_mode
+        assert q.refusal_decay_ticks == 25, q.refusal_decay_ticks
+        assert q.refusal_trust_delta == -20, q.refusal_trust_delta
+        # Round-trips through to_dict.
+        d = q.to_dict()
+        assert d["intent"] == "cruel"
+        assert d["quest_line"] == "main_dark_lighthouse"
+        assert d["prerequisite_quests"] == ["prereq_a", "prereq_b"]
+    finally:
+        try:
+            import os as _os
+            _os.unlink(tmp.name)
+        except Exception:
+            pass
+    print("  [PASS] intent_loads_from_yaml")
+
+
+def test_prerequisite_gating_locks_until_satisfied():
+    """A dispatched quest with unmet prerequisites starts as
+    status='locked'. Once every prereq is marked 'completed' on some
+    NPC, the next lifecycle sweep flips the quest to 'available' and
+    emits a surface event."""
+    restore = _isolate_state_file("phase3a_prereq_lock")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        # Seed the prereq on bess as NOT completed.
+        bess = engine.pie.npc_knowledge.get("bess")
+        bess.add_quest(Quest(
+            id="prereq_a", name="Prereq A", description="first",
+            status="available",
+        ))
+
+        # Dispatch a gated quest on kael.
+        result = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {
+                "id": "q_gated", "name": "Gated", "description": "second",
+                "prerequisite_quests": ["prereq_a"],
+            },
+        })
+        assert result["ok"] is True, result
+        assert result["status"] == "locked", result
+        kael = engine.pie.npc_knowledge.get("kael")
+        q = next(q for q in kael.quests if q.id == "q_gated")
+        assert q.status == "locked"
+
+        # Still locked while prereq is not complete.
+        unlocked = director._unlock_quests_if_prereqs_met()
+        assert unlocked == [], unlocked
+        assert q.status == "locked"
+
+        # Complete the prereq on bess → unlock sweep flips q to 'available'.
+        bess.quests[0].status = "completed"
+        unlocked = director._unlock_quests_if_prereqs_met()
+        assert len(unlocked) == 1, unlocked
+        assert unlocked[0]["quest_id"] == "q_gated", unlocked
+        assert q.status == "available"
+    finally:
+        restore()
+    print("  [PASS] prerequisite_gating_locks_until_satisfied")
+
+
 # ── GPU coordination tests (Phase 4c) ────────────────────────────
 
 def test_pause_state_blocks_ticks():
@@ -4853,6 +5014,12 @@ def main():
     test_quest_cooldown_skips_quest_within_window()
     test_cooldown_resets_after_ticks_elapse()
     test_main_line_bypasses_per_npc_cap()
+
+    print("\nStory Director — quest-lines tests (Phase 3a-1)")
+    test_quest_without_quest_line_is_standalone_backward_compat()
+    test_empty_quest_lines_config_preserves_existing_behavior()
+    test_intent_loads_from_yaml()
+    test_prerequisite_gating_locks_until_satisfied()
 
     print("\nStory Director — GPU coordination tests (Phase 4c)")
     test_pause_state_blocks_ticks()

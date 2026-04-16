@@ -1382,6 +1382,31 @@ class StoryDirector:
         # effectively resets the cap, which is the right behavior
         # (a fresh process should start with full capacity).
         self._tick_time_log: list[tuple[float, float]] = []
+        # Phase 3a — quest-lines. ``_quest_lines_config`` mirrors the
+        # ``quest_lines:`` dict from the world's ``quest_lines.yaml``:
+        # {line_id: {type, title, beats, protected_givers,
+        # reward_track, ...}}. Empty dict = no main-lines, every
+        # existing test and bench sees the same behaviour as before
+        # 3a.
+        self._quest_lines_config: dict = {}
+        # Runtime state per line: tracks which beats have been
+        # dispatched, which quests are completed, and the accumulated
+        # reward-track items. Keyed by line_id. Persisted in
+        # state.json so a game restart keeps the main-line progress.
+        self._quest_line_state: dict[str, dict] = {}
+        # Refused-quest decay timers: {(npc_id, quest_id): unlock_tick}.
+        # Scanned every lifecycle tick — when tick_count >= unlock_tick
+        # the quest flips status back to 'available' and a subtle
+        # re-open ledger entry is emitted.
+        self._refused_quest_timers: dict[tuple[str, str], int] = {}
+        # Auto-refuse (Phase 3a). Two-layer:
+        #   Dev layer (config.yaml: director.quest_auto_refuse.enabled)
+        #   Player layer (set via /player/auto_refuse REST)
+        # The dev flag defaults to False so the feature stays off until
+        # explicitly enabled by a game integration.
+        self._quest_auto_refuse_enabled: bool = False
+        self._quest_auto_refuse_player_configurable: bool = True
+        self._player_auto_refuse_intents: set[str] = set()
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1419,6 +1444,7 @@ class StoryDirector:
         self.arc_planner = ArcPlanner(self._arcs_file)
         self._load_assets()
         self._load_zone_config()
+        self._load_quest_lines()
         self._load_state()
         self._snapshot_original_bios()
 
@@ -1553,6 +1579,65 @@ class StoryDirector:
         except Exception as e:
             logger.warning(f"Failed to load zones.yaml: {e}")
 
+    def _load_quest_lines(self) -> None:
+        """
+        Phase 3a — load ``quest_lines.yaml`` from the world directory
+        if present. The file declares one or more main/side lines:
+
+            quest_lines:
+              main_dark_lighthouse:
+                type: main
+                title: "The Dark Lighthouse"
+                beats:
+                  - {quest_id: lighthouse_mystery, giver: captain_reva}
+                  - {quest_id: witness_account,    giver: thessa,
+                     requires: [lighthouse_mystery]}
+                protected_givers: [captain_reva, thessa]
+                reward_track: ["Harbor Master's seal", ...]
+
+        ``_quest_line_state`` picks up any existing state from
+        ``state.json`` in ``_load_state`` — this loader only wires
+        the static config. Worlds without the file run with empty
+        main-line state and the old behaviour.
+        """
+        world_dir_str = getattr(
+            getattr(self.engine, "config", None), "world_dir", None,
+        )
+        if not world_dir_str:
+            return
+        qlines_path = Path(world_dir_str) / "quest_lines.yaml"
+        if not qlines_path.exists():
+            return
+        try:
+            data = yaml.safe_load(qlines_path.read_text(encoding="utf-8")) or {}
+            raw = data.get("quest_lines", {})
+            if isinstance(raw, dict):
+                self._quest_lines_config = raw
+                logger.info(
+                    f"Story Director loaded quest_lines: "
+                    f"{len(self._quest_lines_config)} lines from {qlines_path}"
+                )
+                # Seed _quest_line_state skeletons for lines we've
+                # never seen before, so code that reads state doesn't
+                # need to check for missing keys.
+                for line_id in self._quest_lines_config.keys():
+                    self._quest_line_state.setdefault(line_id, {
+                        "dispatched_beats": [],
+                        "completed_quests": [],
+                        "rewards_earned": [],
+                        "line_status": "active",
+                    })
+            # Dev-layer auto-refuse config — optional.
+            director_block = data.get("director") or {}
+            auto_cfg = director_block.get("quest_auto_refuse") or {}
+            if isinstance(auto_cfg, dict):
+                self._quest_auto_refuse_enabled = bool(auto_cfg.get("enabled", False))
+                self._quest_auto_refuse_player_configurable = bool(
+                    auto_cfg.get("player_configurable", True)
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load quest_lines.yaml: {e}")
+
     def _load_state(self) -> None:
         if not self._state_file.exists():
             return
@@ -1630,6 +1715,31 @@ class StoryDirector:
             raw_budget = state.get("tick_budget_seconds")
             if isinstance(raw_budget, (int, float)):
                 self._tick_budget_seconds = float(raw_budget)
+            raw_line_state = state.get("quest_line_state", {}) or {}
+            if isinstance(raw_line_state, dict):
+                for line_id, st in raw_line_state.items():
+                    if not isinstance(st, dict):
+                        continue
+                    self._quest_line_state[str(line_id)] = {
+                        "dispatched_beats": list(st.get("dispatched_beats", [])),
+                        "completed_quests": list(st.get("completed_quests", [])),
+                        "rewards_earned": list(st.get("rewards_earned", [])),
+                        "line_status": str(st.get("line_status", "active")),
+                    }
+            raw_refuse_timers = state.get("refused_quest_timers", []) or []
+            if isinstance(raw_refuse_timers, list):
+                for entry in raw_refuse_timers:
+                    if (isinstance(entry, (list, tuple))
+                            and len(entry) == 3
+                            and isinstance(entry[0], str)
+                            and isinstance(entry[1], str)
+                            and isinstance(entry[2], (int, float))):
+                        self._refused_quest_timers[(entry[0], entry[1])] = int(entry[2])
+            raw_player_refuse = state.get("player_auto_refuse_intents", []) or []
+            if isinstance(raw_player_refuse, list):
+                self._player_auto_refuse_intents = {
+                    str(v) for v in raw_player_refuse if isinstance(v, str)
+                }
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1665,6 +1775,15 @@ class StoryDirector:
             "paused": self._paused,
             "paused_at_tick": self._paused_at_tick,
             "tick_budget_seconds": self._tick_budget_seconds,
+            "quest_line_state": self._quest_line_state,
+            # dict with tuple keys doesn't JSON-serialize; flatten to
+            # a list of [npc_id, quest_id, unlock_tick] triples.
+            "refused_quest_timers": [
+                [npc_id, quest_id, unlock_tick]
+                for (npc_id, quest_id), unlock_tick
+                in self._refused_quest_timers.items()
+            ],
+            "player_auto_refuse_intents": sorted(self._player_auto_refuse_intents),
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -2696,7 +2815,53 @@ class StoryDirector:
                         self._autonomous_births_this_session += 1
                     actions.append({"kind": "npc_birth_auto", "result": result})
 
+        # Phase 3a — unlock quests whose prerequisites are now
+        # satisfied. Runs every lifecycle tick so a quest completed
+        # via REST shows up as offerable on the next Director beat.
+        unlocked = self._unlock_quests_if_prereqs_met()
+        if unlocked:
+            actions.append({"kind": "quests_unlocked", "unlocked": unlocked})
+
+        # Phase 3a — expire decay-mode refusal timers. When a refusal
+        # was recorded with refusal_mode='decay' and the unlock tick
+        # has arrived, flip the quest back to 'available' and emit a
+        # subtle re-open ledger entry.
+        expired = self._expire_refusal_timers()
+        if expired:
+            actions.append({"kind": "refusals_expired", "expired": expired})
+
         return actions
+
+    def _expire_refusal_timers(self) -> list[dict]:
+        """Walk ``_refused_quest_timers`` and reopen every quest whose
+        unlock tick has arrived. Returns one record per reopened
+        quest for lifecycle-tick reporting."""
+        if not self._refused_quest_timers:
+            return []
+        expired: list[dict] = []
+        still_pending: dict[tuple[str, str], int] = {}
+        for (npc_id, quest_id), unlock_tick in self._refused_quest_timers.items():
+            if self.tick_count + 1 < unlock_tick:
+                still_pending[(npc_id, quest_id)] = unlock_tick
+                continue
+            npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+            if npc is None:
+                continue
+            for q in getattr(npc, "quests", []):
+                if q.id == quest_id and q.status == "refused":
+                    q.status = "available"
+                    giver_name = npc.identity.get("name", npc_id)
+                    self._inject_tagged_event(
+                        f"{giver_name}'s offer is open again: {q.name}",
+                        npc_id=None,
+                    )
+                    expired.append({
+                        "quest_id": quest_id, "npc_id": npc_id,
+                        "reopened_at_tick": self.tick_count + 1,
+                    })
+                    break
+        self._refused_quest_timers = still_pending
+        return expired
 
     def _find_population_gap(self) -> Optional[dict]:
         """
@@ -3412,6 +3577,51 @@ class StoryDirector:
                 picks.append(ex)
 
         return picks[:max_picks]
+
+    # ── Phase 3a — main-line helpers ────────────────────────────
+
+    def _active_quest_lines(self) -> dict[str, dict]:
+        """Return {line_id: config} for every line whose runtime
+        state is 'active' (i.e. not completed or abandoned). Lines
+        with no runtime record yet are treated as active."""
+        out: dict[str, dict] = {}
+        for line_id, cfg in self._quest_lines_config.items():
+            if not isinstance(cfg, dict):
+                continue
+            st = self._quest_line_state.get(line_id)
+            if st is None or st.get("line_status", "active") == "active":
+                out[line_id] = cfg
+        return out
+
+    def _main_line_cast(self) -> set[str]:
+        """NPC ids that appear as a ``giver`` in any beat of any
+        active main-type line. Used by focus weighting, snapshot
+        priority, and the prompt preference block."""
+        cast: set[str] = set()
+        for cfg in self._active_quest_lines().values():
+            if cfg.get("type") != "main":
+                continue
+            for beat in cfg.get("beats", []) or []:
+                if isinstance(beat, dict) and isinstance(beat.get("giver"), str):
+                    cast.add(beat["giver"])
+        return cast
+
+    def _protected_givers(self) -> set[str]:
+        """NPC ids the game has flagged as untouchable for
+        autonomous death (per-line ``protected_givers``). The union
+        across every active line, main or side. Explicit
+        /story/npc_death from the game client still kills these."""
+        protected: set[str] = set()
+        for cfg in self._active_quest_lines().values():
+            for nid in cfg.get("protected_givers", []) or []:
+                if isinstance(nid, str):
+                    protected.add(nid)
+        return protected
+
+    def _is_main_line_npc(self, npc_id: str) -> bool:
+        """True iff ``npc_id`` is a giver on any active main-type
+        line. Cheap enough to call per focus pick."""
+        return npc_id in self._main_line_cast()
 
     def _effective_max_unoffered_quests(self) -> int:
         """Runtime override wins; otherwise the module-level default."""
@@ -4507,6 +4717,12 @@ class StoryDirector:
         if isinstance(objectives, str):
             objectives = [objectives]
 
+        # Phase 3a — pull the optional main-line / intent / refusal
+        # fields off the LLM's quest dict. Author-tagged YAML paths
+        # (NPC profile active_quests) already use the Phase 3a loader
+        # and don't route through here. Missing keys fall through to
+        # the Quest dataclass defaults.
+        prereqs = list(quest_data.get("prerequisite_quests", []) or [])
         quest = Quest(
             id=quest_id,
             name=str(quest_data.get("name") or quest_id),
@@ -4514,14 +4730,48 @@ class StoryDirector:
             status="available",
             reward=str(quest_data.get("reward") or ""),
             objectives=[str(o) for o in objectives],
+            quest_line=quest_data.get("quest_line"),
+            quest_line_beat=int(quest_data.get("quest_line_beat", 0) or 0),
+            prerequisite_quests=prereqs,
+            intent=quest_data.get("intent"),
+            moral_weight=float(quest_data.get("moral_weight", 0.0) or 0.0),
+            refusal_trust_delta=int(quest_data.get("refusal_trust_delta", 0) or 0),
+            refusal_mode=str(quest_data.get("refusal_mode", "permanent") or "permanent"),
+            refusal_decay_ticks=int(quest_data.get("refusal_decay_ticks", 0) or 0),
         )
+
+        # Phase 3a — sequential gating. If prerequisites are declared
+        # and any of them are not yet completed anywhere in the cast,
+        # the quest starts in 'locked' status. The game client never
+        # shows locked quests as offers; a later lifecycle scan (or
+        # explicit completion of the last prereq) flips them back to
+        # 'available' via _unlock_quests_if_prereqs_met.
+        if prereqs and not self._prereqs_satisfied(prereqs):
+            quest.status = "locked"
+
         npc.add_quest(quest)
-        # Announce the new quest as a tagged Director event so it propagates
-        # to other NPCs but does not re-enter the Director's own snapshot.
-        self._inject_tagged_event(
-            f"{npc.identity.get('name', npc_id)} has new work to offer: {quest.name}",
-            npc_id=None,
-        )
+
+        # Announce the new quest only when it's actually offerable.
+        # Locked main-line beats stay silent until their prereq
+        # completes and _unlock_quests_if_prereqs_met surfaces them.
+        if quest.status == "available":
+            self._inject_tagged_event(
+                f"{npc.identity.get('name', npc_id)} has new work to offer: {quest.name}",
+                npc_id=None,
+            )
+
+        # Phase 3a — record dispatched beat on the line state so the
+        # integration bench can verify beat ordering.
+        if quest.quest_line and quest.quest_line in self._quest_line_state:
+            line_st = self._quest_line_state[quest.quest_line]
+            line_st["dispatched_beats"].append({
+                "quest_id": quest_id,
+                "beat_index": quest.quest_line_beat,
+                "giver": npc_id,
+                "at_tick": self.tick_count + 1,
+                "status": quest.status,
+            })
+
         # Phase 4b — stamp the dispatch tick so _pick_action_kind's
         # cooldown gate sees it on the next rotation. tick_count has
         # not yet been incremented for this tick at dispatch time
@@ -4529,7 +4779,53 @@ class StoryDirector:
         # the next tick number to keep the cooldown accounting
         # consistent with _npc_last_planned_tick.
         self._last_quest_dispatched_per_npc[npc_id] = self.tick_count + 1
-        return {"ok": True, "kind": "quest", "npc_id": npc_id, "quest_id": quest_id}
+        return {
+            "ok": True, "kind": "quest", "npc_id": npc_id,
+            "quest_id": quest_id, "status": quest.status,
+        }
+
+    def _prereqs_satisfied(self, prereq_ids: list[str]) -> bool:
+        """True iff every prereq quest id has status='completed' on
+        some NPC (the player-quest tracker is authoritative, but for
+        Director-generated content we fold in the per-NPC quest
+        status as a fallback for tests/benches that don't wire up the
+        full engine). Unknown ids count as unsatisfied."""
+        if not prereq_ids:
+            return True
+        completed: set[str] = set()
+        player_quests = getattr(self.engine.pie, "player_quests", None)
+        if player_quests is not None:
+            for entry in getattr(player_quests, "completed_quests", []) or []:
+                qid = entry.get("id") if isinstance(entry, dict) else None
+                if isinstance(qid, str):
+                    completed.add(qid)
+        for npc in self.engine.pie.npc_knowledge.profiles.values():
+            for q in getattr(npc, "quests", []):
+                if q.status == "completed":
+                    completed.add(q.id)
+        return all(pid in completed for pid in prereq_ids)
+
+    def _unlock_quests_if_prereqs_met(self) -> list[dict]:
+        """Scan every NPC's quest list; any ``locked`` quest whose
+        prereqs are now completed flips to ``available`` and gets a
+        re-surface event. Returns a list of unlock records for the
+        caller (lifecycle tick) to include in its tick report."""
+        unlocked: list[dict] = []
+        for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items():
+            for q in getattr(npc, "quests", []):
+                if q.status != "locked":
+                    continue
+                if self._prereqs_satisfied(q.prerequisite_quests):
+                    q.status = "available"
+                    self._inject_tagged_event(
+                        f"{npc.identity.get('name', npc_id)} has new work to offer: {q.name}",
+                        npc_id=None,
+                    )
+                    unlocked.append({
+                        "quest_id": q.id, "npc_id": npc_id,
+                        "quest_line": q.quest_line,
+                    })
+        return unlocked
 
     def _dispatch_event(self, action: dict) -> dict:
         event_text = action.get("event") or action.get("description")
