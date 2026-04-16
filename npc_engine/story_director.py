@@ -84,6 +84,24 @@ _ACTION_KIND_ROTATION = ("event", "quest", "fact")
 # skip 'quest' in rotation so a focus NPC doesn't accumulate unfinished work.
 _MAX_QUESTS_PER_NPC = 2
 
+# Phase 4b — per-NPC quest accumulation caps. Distinct from
+# ``_MAX_QUESTS_PER_NPC`` (which bounds TOTAL active+available): these
+# bound how fast *new* unaccepted quests can pile up on the same NPC.
+#
+# ``_MAX_UNOFFERED_QUESTS_PER_NPC`` counts only ``available`` (unaccepted)
+# quests. Two waiting on the board is already enough; a third quest
+# offer feels like noise.
+# ``_NPC_QUEST_COOLDOWN_TICKS`` prevents two quest dispatches on the
+# same NPC from landing back-to-back even when only one is still
+# unaccepted. 10 ticks is roughly 50 real-time minutes at the town
+# cadence — long enough that the player has time to engage the first
+# quest before a second is offered by the same giver.
+#
+# Both are overridable at runtime via ``set_quest_pacing(...)`` so a
+# game can tighten or loosen pacing without a code change.
+_MAX_UNOFFERED_QUESTS_PER_NPC = 2
+_NPC_QUEST_COOLDOWN_TICKS = 10
+
 # ── Narrative arc tuning ────────────────────────────────────────
 # Minimum ledger entries before the planner will try to cluster. Below
 # this, there isn't enough material to find a dense theme.
@@ -1280,6 +1298,19 @@ class StoryDirector:
         # behaviour as before the activity layer existed.
         self._player_activity: str = PlayerActivity.UNKNOWN.value
         self._activity_set_at_tick: int = 0
+        # Phase 4b — per-NPC quest accumulation caps. Keyed by npc_id,
+        # value is the tick number at which that NPC last had a quest
+        # dispatched. _pick_action_kind gates future 'quest' picks on
+        # this dict + the open-quest count. Persisted in state.json so
+        # the cooldown window survives a Director restart. Unbounded in
+        # entry count (capped only by cast size), same shape as
+        # _npc_last_planned_tick.
+        self._last_quest_dispatched_per_npc: dict[str, int] = {}
+        # Runtime override hooks for the two Phase 4b tunables. None =
+        # use the module-level default. Persisted so a runtime tweak
+        # survives a restart.
+        self._max_unoffered_quests_override: Optional[int] = None
+        self._quest_cooldown_ticks_override: Optional[int] = None
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1507,6 +1538,18 @@ class StoryDirector:
             raw_activity_tick = state.get("activity_set_at_tick", 0)
             if isinstance(raw_activity_tick, (int, float)):
                 self._activity_set_at_tick = max(0, int(raw_activity_tick))
+            raw_last_quest = state.get("last_quest_dispatched_per_npc", {}) or {}
+            if isinstance(raw_last_quest, dict):
+                self._last_quest_dispatched_per_npc = {
+                    str(k): int(v) for k, v in raw_last_quest.items()
+                    if isinstance(v, (int, float))
+                }
+            raw_max_unoffered = state.get("max_unoffered_quests_override")
+            if isinstance(raw_max_unoffered, (int, float)):
+                self._max_unoffered_quests_override = max(0, int(raw_max_unoffered))
+            raw_cooldown = state.get("quest_cooldown_ticks_override")
+            if isinstance(raw_cooldown, (int, float)):
+                self._quest_cooldown_ticks_override = max(0, int(raw_cooldown))
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1536,6 +1579,9 @@ class StoryDirector:
             "kind_rotation_index": self._kind_rotation_index,
             "player_activity": self._player_activity,
             "activity_set_at_tick": self._activity_set_at_tick,
+            "last_quest_dispatched_per_npc": self._last_quest_dispatched_per_npc,
+            "max_unoffered_quests_override": self._max_unoffered_quests_override,
+            "quest_cooldown_ticks_override": self._quest_cooldown_ticks_override,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -2280,6 +2326,56 @@ class StoryDirector:
         return {
             "activity": self._player_activity,
             "activity_set_at_tick": self._activity_set_at_tick,
+        }
+
+    def set_quest_pacing(self,
+                          max_unoffered: Optional[int] = None,
+                          cooldown_ticks: Optional[int] = None) -> dict:
+        """
+        Override the Phase 4b per-NPC quest pacing tunables at runtime.
+        Either argument left as ``None`` leaves that field untouched.
+        Pass a negative integer to *clear* an override and fall back to
+        the module-level default.
+
+        Both values must be non-negative (0 is a valid choice — it
+        disables new quest dispatches entirely, useful for cutscenes
+        or tutorial phases). Persisted in ``state.json`` so a restart
+        honors the pacing the game last configured.
+        """
+        if max_unoffered is not None:
+            if not isinstance(max_unoffered, int):
+                return {"ok": False, "reason": "max_unoffered must be an integer"}
+            if max_unoffered < 0:
+                self._max_unoffered_quests_override = None
+            else:
+                self._max_unoffered_quests_override = max_unoffered
+        if cooldown_ticks is not None:
+            if not isinstance(cooldown_ticks, int):
+                return {"ok": False, "reason": "cooldown_ticks must be an integer"}
+            if cooldown_ticks < 0:
+                self._quest_cooldown_ticks_override = None
+            else:
+                self._quest_cooldown_ticks_override = cooldown_ticks
+        self._save_state()
+        return {
+            "ok": True,
+            "max_unoffered": self._effective_max_unoffered_quests(),
+            "cooldown_ticks": self._effective_quest_cooldown_ticks(),
+            "max_unoffered_override": self._max_unoffered_quests_override,
+            "cooldown_ticks_override": self._quest_cooldown_ticks_override,
+        }
+
+    def get_quest_pacing(self) -> dict:
+        """
+        Return the current effective quest pacing values plus the raw
+        overrides (``None`` when the module default is in use).
+        """
+        return {
+            "max_unoffered": self._effective_max_unoffered_quests(),
+            "cooldown_ticks": self._effective_quest_cooldown_ticks(),
+            "max_unoffered_override": self._max_unoffered_quests_override,
+            "cooldown_ticks_override": self._quest_cooldown_ticks_override,
+            "last_quest_dispatched_per_npc": dict(self._last_quest_dispatched_per_npc),
         }
 
     def get_zone_state(self) -> dict:
@@ -3115,12 +3211,31 @@ class StoryDirector:
 
         return picks[:max_picks]
 
-    def _pick_action_kind(self, focus_npc: Optional[str]) -> str:
+    def _effective_max_unoffered_quests(self) -> int:
+        """Runtime override wins; otherwise the module-level default."""
+        if self._max_unoffered_quests_override is not None:
+            return self._max_unoffered_quests_override
+        return _MAX_UNOFFERED_QUESTS_PER_NPC
+
+    def _effective_quest_cooldown_ticks(self) -> int:
+        """Runtime override wins; otherwise the module-level default."""
+        if self._quest_cooldown_ticks_override is not None:
+            return self._quest_cooldown_ticks_override
+        return _NPC_QUEST_COOLDOWN_TICKS
+
+    def _pick_action_kind(self, focus_npc: Optional[str],
+                           bypass_per_npc_cap: bool = False) -> str:
         """
         Python decides the action KIND (event / quest / fact) — round-robin
         so a single kind can't dominate a session. Skips 'quest' when the
         focus NPC already has ``_MAX_QUESTS_PER_NPC`` open quests; the LLM
         would otherwise keep piling work onto the same NPC.
+
+        ``bypass_per_npc_cap`` is the Phase 3a main-line escape hatch:
+        authored main-line beats bypass the Phase 4b unaccepted-cap +
+        cooldown gate (but NOT the hard ``_MAX_QUESTS_PER_NPC`` open-quest
+        limit, which is a sanity check even for authored content).
+        Side-rotation callers leave it False.
 
         Advances ``self._kind_rotation_index`` even when a kind is skipped
         so the rotation stays predictable across ticks.
@@ -3135,6 +3250,39 @@ class StoryDirector:
                 )
                 if open_quests >= _MAX_QUESTS_PER_NPC:
                     allowed.discard("quest")
+
+                # Phase 4b — per-NPC quest accumulation gate. Two
+                # sub-checks, both bypassable for main-line beats:
+                #   1. Unaccepted-cap: too many available quests already
+                #      waiting on this NPC's board.
+                #   2. Cooldown window: a quest dispatch already landed
+                #      on this NPC inside the recent N-tick window.
+                if not bypass_per_npc_cap:
+                    max_unoffered = self._effective_max_unoffered_quests()
+                    if max_unoffered >= 0 and "quest" in allowed:
+                        unoffered = sum(
+                            1 for q in npc.quests if q.status == "available"
+                        )
+                        if unoffered >= max_unoffered:
+                            logger.debug(
+                                f"Phase 4b cap: dropping 'quest' for "
+                                f"'{focus_npc}' (unoffered={unoffered} "
+                                f">= {max_unoffered})"
+                            )
+                            allowed.discard("quest")
+
+                    cooldown = self._effective_quest_cooldown_ticks()
+                    last_dispatch = self._last_quest_dispatched_per_npc.get(focus_npc)
+                    if (cooldown > 0
+                            and last_dispatch is not None
+                            and "quest" in allowed
+                            and self.tick_count - last_dispatch < cooldown):
+                        logger.debug(
+                            f"Phase 4b cooldown: dropping 'quest' for "
+                            f"'{focus_npc}' (last_tick={last_dispatch}, "
+                            f"now={self.tick_count}, window={cooldown})"
+                        )
+                        allowed.discard("quest")
 
         # Zone hard filter for quests: out-of-zone NPCs can seed
         # events and facts (distant rumors propagate via gossip) but
@@ -4115,6 +4263,13 @@ class StoryDirector:
             f"{npc.identity.get('name', npc_id)} has new work to offer: {quest.name}",
             npc_id=None,
         )
+        # Phase 4b — stamp the dispatch tick so _pick_action_kind's
+        # cooldown gate sees it on the next rotation. tick_count has
+        # not yet been incremented for this tick at dispatch time
+        # (_run_single_action runs before tick_count += 1), so we use
+        # the next tick number to keep the cooldown accounting
+        # consistent with _npc_last_planned_tick.
+        self._last_quest_dispatched_per_npc[npc_id] = self.tick_count + 1
         return {"ok": True, "kind": "quest", "npc_id": npc_id, "quest_id": quest_id}
 
     def _dispatch_event(self, action: dict) -> dict:

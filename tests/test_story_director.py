@@ -901,6 +901,170 @@ def test_activity_persists_in_state_json():
     print("  [PASS] activity_persists_in_state_json")
 
 
+# ── Quest pacing tests (Phase 4b) ────────────────────────────────
+
+def test_quest_capped_at_max_unoffered_per_npc():
+    """_pick_action_kind drops 'quest' when the focus NPC already has
+    _MAX_UNOFFERED_QUESTS_PER_NPC quests in 'available' status waiting
+    on the board. 'active' (already accepted) quests don't count
+    toward this cap — they're the player's problem, not a pacing
+    concern."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4b_unoffered_cap")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        # Stack exactly the cap in 'available' status. Below the hard
+        # _MAX_QUESTS_PER_NPC=2 total cap so this test only exercises
+        # the Phase 4b gate.
+        assert sd_mod._MAX_UNOFFERED_QUESTS_PER_NPC <= sd_mod._MAX_QUESTS_PER_NPC
+        for i in range(sd_mod._MAX_UNOFFERED_QUESTS_PER_NPC):
+            kael.add_quest(Quest(id=f"q{i}", name=f"q{i}", description="d"))
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") != "quest"
+
+        # An 'active' quest does NOT count toward the cap — the
+        # Phase 4b gate only counts unaccepted-on-the-board quests.
+        bess = engine.pie.npc_knowledge.get("bess")
+        bess.add_quest(Quest(id="b_active", name="b_active",
+                              description="d", status="active"))
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("bess") == "quest"
+    finally:
+        restore()
+    print("  [PASS] quest_capped_at_max_unoffered_per_npc")
+
+
+def test_quest_cooldown_skips_quest_within_window():
+    """_pick_action_kind drops 'quest' when the focus NPC received a
+    quest dispatch within the cooldown window, even if no unaccepted
+    quests are pending on that NPC."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4b_cooldown_within")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        # Simulate a quest having been dispatched to kael at tick 5,
+        # with the current tick halfway into the cooldown window.
+        cooldown = sd_mod._NPC_QUEST_COOLDOWN_TICKS
+        director._last_quest_dispatched_per_npc["kael"] = 5
+        director.tick_count = 5 + (cooldown // 2)
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") != "quest"
+
+        # Other NPCs are unaffected by kael's cooldown.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("bess") == "quest"
+    finally:
+        restore()
+    print("  [PASS] quest_cooldown_skips_quest_within_window")
+
+
+def test_cooldown_resets_after_ticks_elapse():
+    """Once the cooldown window has elapsed, 'quest' returns to
+    rotation for that NPC. Also confirms the _dispatch_quest path
+    stamps _last_quest_dispatched_per_npc so the cooldown actually
+    fires in practice (not only via direct state manipulation)."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4b_cooldown_elapsed")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        cooldown = sd_mod._NPC_QUEST_COOLDOWN_TICKS
+
+        # Drive _dispatch_quest directly so we exercise the stamp.
+        dispatch_result = director._dispatch_quest({
+            "action": "quest",
+            "npc_id": "kael",
+            "quest": {"id": "qstamp", "name": "stamp me",
+                       "description": "d"},
+        })
+        assert dispatch_result["ok"] is True, dispatch_result
+        stamped = director._last_quest_dispatched_per_npc.get("kael")
+        assert stamped is not None, director._last_quest_dispatched_per_npc
+
+        # Advance just inside the window — still blocked.
+        director.tick_count = stamped + cooldown - 1
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") != "quest"
+
+        # Advance to exactly the window edge — unblocked.
+        director.tick_count = stamped + cooldown
+        # Clear any lingering 'available' quest so the unoffered cap
+        # doesn't also interfere.
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.quests = [q for q in kael.quests if q.id != "qstamp"]
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") == "quest"
+    finally:
+        restore()
+    print("  [PASS] cooldown_resets_after_ticks_elapse")
+
+
+def test_main_line_bypasses_per_npc_cap():
+    """Main-line beats (``bypass_per_npc_cap=True``) skip the Phase 4b
+    unaccepted-cap and cooldown gates. The hard ``_MAX_QUESTS_PER_NPC``
+    open-quest cap still applies — that's a safety net even for
+    authored content, not a pacing knob. Also exercises
+    ``set_quest_pacing`` to confirm runtime overrides apply."""
+    import npc_engine.story_director as sd_mod
+    restore = _isolate_state_file("phase4b_mainline_bypass")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+
+        # Tighten the Phase 4b cap below the hard open-quest cap so
+        # we can observe the 4b gate and its bypass in isolation.
+        assert sd_mod._MAX_QUESTS_PER_NPC >= 2
+        pace = director.set_quest_pacing(max_unoffered=1, cooldown_ticks=5)
+        assert pace["ok"] is True, pace
+        assert pace["max_unoffered"] == 1, pace
+
+        # One available quest on kael (tripped Phase 4b cap of 1, but
+        # still below the hard cap of 2) + an active cooldown.
+        kael.add_quest(Quest(id="q0", name="q0", description="d"))
+        director._last_quest_dispatched_per_npc["kael"] = 5
+        director.tick_count = 7  # 7 - 5 = 2 < cooldown 5
+
+        # Normal caller: blocked by the gate.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael") != "quest"
+
+        # Main-line bypass: skips both sub-checks.
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        bypassed = director._pick_action_kind("kael", bypass_per_npc_cap=True)
+        assert bypassed == "quest", bypassed
+
+        # Hard _MAX_QUESTS_PER_NPC still applies even with bypass —
+        # stack open quests up to the hard cap and verify bypass
+        # still yields non-quest.
+        while sum(1 for q in kael.quests if q.status in ("available", "active")) < sd_mod._MAX_QUESTS_PER_NPC:
+            kael.add_quest(Quest(id=f"fill_{len(kael.quests)}",
+                                  name="fill", description="d"))
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        assert director._pick_action_kind("kael", bypass_per_npc_cap=True) != "quest"
+
+        # Runtime override: shrink max_unoffered to 0 and verify
+        # bess (no quests) is now blocked even without history.
+        result = director.set_quest_pacing(max_unoffered=0, cooldown_ticks=0)
+        assert result["ok"] is True, result
+        assert result["max_unoffered"] == 0, result
+        assert result["cooldown_ticks"] == 0, result
+        director._kind_rotation_index = _ACTION_KIND_ROTATION_INDEX_FOR("quest")
+        # 0 unoffered >= 0 cap, so blocked.
+        assert director._pick_action_kind("bess") != "quest"
+
+        # Clear overrides with a negative value.
+        cleared = director.set_quest_pacing(max_unoffered=-1, cooldown_ticks=-1)
+        assert cleared["max_unoffered_override"] is None, cleared
+        assert cleared["cooldown_ticks_override"] is None, cleared
+    finally:
+        restore()
+    print("  [PASS] main_line_bypasses_per_npc_cap")
+
+
 # ── Zone layer tests (Phase 1) ───────────────────────────────────
 
 _ZONED_PROFILES = (
@@ -4511,6 +4675,12 @@ def main():
     test_activity_in_menu_returns_paused_noop()
     test_activity_in_dungeon_prefers_events_over_quests()
     test_activity_persists_in_state_json()
+
+    print("\nStory Director — quest pacing tests (Phase 4b)")
+    test_quest_capped_at_max_unoffered_per_npc()
+    test_quest_cooldown_skips_quest_within_window()
+    test_cooldown_resets_after_ticks_elapse()
+    test_main_line_bypasses_per_npc_cap()
 
     print("\nStory Director — zone layer tests (Phase 1)")
     test_empty_active_zones_preserves_world_wide_mode()

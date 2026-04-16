@@ -220,6 +220,11 @@ def create_app():
     class PlayerActivityRequest(BaseModel):
         activity: str   # PlayerActivity enum value (see story_director.py)
 
+    class QuestPacingRequest(BaseModel):
+        # Either field null = leave unchanged. Negative = clear override.
+        max_unoffered: Optional[int] = None
+        cooldown_ticks: Optional[int] = None
+
     class NPCZoneRequest(BaseModel):
         npc_id: str
         zone: str
@@ -392,6 +397,32 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_player_activity()
+
+    @app.post("/story/quest_pacing")
+    async def story_quest_pacing_set(req: QuestPacingRequest):
+        """Override the Phase 4b per-NPC quest pacing caps. Pass null
+        for a field to leave it unchanged; pass a negative integer to
+        clear an override and fall back to the module default."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.set_quest_pacing(
+            max_unoffered=req.max_unoffered,
+            cooldown_ticks=req.cooldown_ticks,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/story/quest_pacing")
+    async def story_quest_pacing_get():
+        """Return the effective Phase 4b quest pacing state: the two
+        caps currently in force, raw overrides (null = using module
+        default), and the per-NPC last-dispatch-tick map."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_quest_pacing()
 
     @app.post("/story/npc_death")
     async def story_npc_death(req: NPCDeathRequest):
