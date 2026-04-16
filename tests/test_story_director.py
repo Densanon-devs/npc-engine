@@ -1857,6 +1857,196 @@ def test_trust_merges_max_across_identities_on_recognition():
     print("  [PASS] trust_merges_max_across_identities_on_recognition")
 
 
+# ── Deed attribution tests (Phase 5b) ────────────────────────────
+
+def test_anonymous_action_with_no_witnesses_tags_unknown_figure():
+    """record_player_action with no witnesses, no subject_identity,
+    and no visible_feature → no ledger entry (legacy path). With
+    witnesses but no identity / feature, the tag defaults to
+    ``unknown_figure``."""
+    restore = _isolate_state_file("phase5b_anonymous")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        # Legacy path — no 5a kwargs.
+        pre_entries = len(director.ledger.entries)
+        result = director.record_player_action(
+            "Player bought bread.", target="bess",
+        )
+        assert result["ok"] is True, result
+        # Legacy call doesn't fire the witness+ledger block.
+        assert len(director.ledger.entries) == pre_entries, director.ledger.entries
+        # Now with a witness but no identity/feature → unknown_figure.
+        result2 = director.record_player_action(
+            "Someone slipped into the pantry.", target=None,
+            witness_npcs=["bess"],
+        )
+        assert result2["ok"] is True, result2
+        idx = result2["recorded"]["ledger_index"]
+        entry = director.ledger.entries[idx]
+        assert entry.get("subject_identity") == "unknown_figure", entry
+        assert result2["recorded"]["subject_identity"] == "unknown_figure", result2
+    finally:
+        restore()
+    print("  [PASS] anonymous_action_with_no_witnesses_tags_unknown_figure")
+
+
+def test_visible_feature_auto_recognition_on_first_meeting():
+    """With a feature→identity registered AND the player's current
+    visible_feature matching, the first meeting auto-adds the
+    identity to the NPC's known_as. Both paths (record_player_action
+    witness and explicit introduce_player) surface this."""
+    restore = _isolate_state_file("phase5b_feature_autorec")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.register_visible_feature("dragonslayer_cloak", "the_dragonslayer")
+        director.set_player_visible_feature("dragonslayer_cloak")
+
+        # Witness path — no explicit subject_identity; 5b resolves via feature.
+        director.record_player_action(
+            "Player slew the pirate.", witness_npcs=["tam"],
+        )
+        tam = engine.pie.npc_knowledge.get("tam")
+        assert "the_dragonslayer" in tam.player_knowledge["known_as"], (
+            tam.player_knowledge
+        )
+
+        # Introduce path — identity gets layered in alongside the name.
+        director.introduce_player(to_npc="mara", name="Jordan")
+        mara = engine.pie.npc_knowledge.get("mara")
+        assert "jordan" in mara.player_knowledge["known_as"]
+        assert "the_dragonslayer" in mara.player_knowledge["known_as"], (
+            mara.player_knowledge
+        )
+    finally:
+        restore()
+    print("  [PASS] visible_feature_auto_recognition_on_first_meeting")
+
+
+def test_visible_feature_overrides_explicit_subject_identity():
+    """When the caller DOES pass subject_identity on
+    record_player_action, that wins — feature-based resolution only
+    fires when subject_identity is unspecified. Lets the game force
+    a specific attribution ("a dark figure", "the pale woman") even
+    when the player wears a registered feature."""
+    restore = _isolate_state_file("phase5b_explicit_wins")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.register_visible_feature("cloak", "the_dragonslayer")
+        director.set_player_visible_feature("cloak")
+
+        result = director.record_player_action(
+            "A dark figure lurks.",
+            witness_npcs=["tam"],
+            subject_identity="hooded_figure",
+        )
+        idx = result["recorded"]["ledger_index"]
+        entry = director.ledger.entries[idx]
+        # Explicit identity wins over feature-derived one.
+        assert entry.get("subject_identity") == "hooded_figure", entry
+        tam = engine.pie.npc_knowledge.get("tam")
+        # The feature-derived identity is NOT in known_as because
+        # the explicit one was supplied.
+        assert "hooded_figure" in tam.player_knowledge["known_as"]
+        assert "the_dragonslayer" not in tam.player_knowledge["known_as"], (
+            tam.player_knowledge
+        )
+    finally:
+        restore()
+    print("  [PASS] visible_feature_overrides_explicit_subject_identity")
+
+
+# ── Reputation tests (Phase 5c) ──────────────────────────────────
+
+def test_get_reputation_returns_per_identity_state():
+    """get_player_reputation groups deeds by subject_identity,
+    counts recognized vs aware-but-not-recognized NPCs, and rolls
+    up intent totals across all dispatched quests."""
+    restore = _isolate_state_file("phase5c_reputation")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        # Seed a deed witnessed by kael + bess under "hooded_stranger";
+        # every other NPC hears it (gossip fallback).
+        director.record_player_action(
+            "Set fire to the docks.",
+            witness_npcs=["kael", "bess"],
+            subject_identity="hooded_stranger",
+        )
+        # Introduce player to mara explicitly as "Jordan".
+        director.introduce_player(to_npc="mara", name="Jordan")
+
+        # Seed a quest with intent tag so the intent summary picks it up.
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.add_quest(Quest(
+            id="q_dark", name="Dark Task", description="d",
+            intent="dark", moral_weight=0.8,
+        ))
+        rep = director.get_player_reputation()
+        # hooded_stranger tracks the deed + the witnesses in known_by.
+        hs = rep["known_identities"].get("hooded_stranger")
+        assert hs is not None, rep
+        assert "kael" in hs["known_by"] and "bess" in hs["known_by"], hs
+        assert any("fire" in d for d in hs["deeds"]), hs
+        # jordan is known by mara (introduced directly).
+        j = rep["known_identities"].get("jordan")
+        assert j is not None, rep
+        assert "mara" in j["known_by"], j
+        # Recognition counts.
+        assert rep["total_npcs_who_recognize_you"] >= 3, rep
+        assert rep["summary_by_intent"]["dark"] == 1, rep
+    finally:
+        restore()
+    print("  [PASS] get_reputation_returns_per_identity_state")
+
+
+def test_reputation_hint_appears_in_unrecognized_npc_dialogue():
+    """An unrecognized NPC with any heard_deeds / witnessed_deeds
+    gets a RUMOURS block from build_reputation_hint_for_npc."""
+    restore = _isolate_state_file("phase5c_hint_present")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.record_player_action(
+            "Burned the effigy at the crossroads.",
+            witness_npcs=["kael"],
+            subject_identity="hooded_stranger",
+        )
+        # mara heard it (gossip fallback) but was never introduced.
+        hint = director.build_reputation_hint_for_npc("mara")
+        assert hint is not None, hint
+        assert "RUMOURS" in hint, hint
+        assert "hooded stranger" in hint, hint
+        assert "effigy" in hint, hint
+    finally:
+        restore()
+    print("  [PASS] reputation_hint_appears_in_unrecognized_npc_dialogue")
+
+
+def test_reputation_hint_absent_after_recognition():
+    """Once an NPC is recognized, the hint suppresses — they no
+    longer need to "have heard rumours" about someone they've met."""
+    restore = _isolate_state_file("phase5c_hint_absent")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.record_player_action(
+            "Burned the effigy at the crossroads.",
+            witness_npcs=["kael"],
+            subject_identity="hooded_stranger",
+        )
+        # Before introduction, mara has a hint.
+        assert director.build_reputation_hint_for_npc("mara") is not None
+        # Introduce → recognized flips True → hint gone.
+        director.introduce_player(to_npc="mara", name="Jordan")
+        assert director.build_reputation_hint_for_npc("mara") is None
+    finally:
+        restore()
+    print("  [PASS] reputation_hint_absent_after_recognition")
+
+
 # ── Postgen name-guard tests (Phase 5a-3) ────────────────────────
 
 def test_postgen_rewrites_unauthorized_name_to_stranger():
@@ -2107,7 +2297,7 @@ _ZONED_PROFILES = (
     # (starts in dock_district). Matches the shape of
     # data/worlds/port_blackwater_zoned.
     ("reva",      "harbor_master", "dock_district",    False),
-    ("finn",      "dock_worker",   "dock_district",    False),
+    ("tam",      "dock_worker",   "dock_district",    False),
     ("old_bones", "tavern_owner",  "dock_district",    False),
     ("varro",     "fence",         "dock_district",    True),
     ("thessa",    "hermit",        "lighthouse_bluffs", False),
@@ -2146,7 +2336,7 @@ def test_zone_soft_weighting_prefers_in_zone():
         engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
         director = StoryDirector(engine)
         director.set_active_zones(["dock_district"])
-        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        in_zone_ids = {"reva", "tam", "old_bones", "varro"}
         out_of_zone_ids = {"thessa", "brom"}
         in_count = 0
         out_count = 0
@@ -2188,7 +2378,7 @@ def test_zone_out_of_zone_rate_honored_precisely():
         # should be out of zone. Cross-check against the constant
         # so this test stays in sync if the rate changes.
         rate = sd_mod._OUT_OF_ZONE_RATE
-        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        in_zone_ids = {"reva", "tam", "old_bones", "varro"}
         out_of_zone_ids = {"thessa", "brom"}
         for i in range(1, rate + 1):
             focus = director._pick_focus_npc()
@@ -2351,7 +2541,7 @@ def test_zone_change_breaks_burst_rotation():
         director = StoryDirector(engine)
         director.set_active_zones(["dock_district"])
         # Seed a burst on finn (in dock_district)
-        director._burst_focus_npc = "finn"
+        director._burst_focus_npc = "tam"
         director._burst_remaining = 3
         # Player moves to lighthouse
         director.set_active_zones(["lighthouse_bluffs"])
@@ -2376,7 +2566,7 @@ def test_burst_rotation_locks_to_in_zone():
         engine = _make_stub_engine(profile_specs=_ZONED_PROFILES)
         director = StoryDirector(engine)
         director.set_active_zones(["dock_district"])
-        in_zone_ids = {"reva", "finn", "old_bones", "varro"}
+        in_zone_ids = {"reva", "tam", "old_bones", "varro"}
         # Crank the escape counter so the NEXT pick without zone_lock_in
         # WOULD fire the out-of-zone escape. Burst rotation must still
         # land in-zone.
@@ -2484,14 +2674,14 @@ def test_death_transfers_open_quests_to_inheritor():
             Quest(id="keep_port_safe", name="Keep the Port Safe",
                    description="Protect the harbor from pirates")
         )
-        pre_finn_quests = len(engine.pie.npc_knowledge.profiles["finn"].quests)
+        pre_finn_quests = len(engine.pie.npc_knowledge.profiles["tam"].quests)
         result = director._dispatch_npc_death(
             npc_id="reva", cause="drowned",
-            transfers_quests_to="finn",
+            transfers_quests_to="tam",
         )
         assert result["ok"] is True
         # Finn inherited the quest
-        post_finn_quests = len(engine.pie.npc_knowledge.profiles["finn"].quests)
+        post_finn_quests = len(engine.pie.npc_knowledge.profiles["tam"].quests)
         assert post_finn_quests == pre_finn_quests + 1
         quest_records = result["record"]["quests_cleaned"]
         assert any(
@@ -2567,7 +2757,7 @@ def test_arc_on_cast_death_trims_cast_on_early_arc():
         from npc_engine.story_director import NarrativeArc
         arc = NarrativeArc(
             id="trim_arc", theme="Dock trio",
-            focus_npcs=["reva", "finn", "old_bones"],
+            focus_npcs=["reva", "tam", "old_bones"],
             beat_goals=["seed", "escalate", "confront", "resolve"],
             current_beat=1,  # at escalate, still early
             status="active", started_at_tick=1,
@@ -2580,7 +2770,7 @@ def test_arc_on_cast_death_trims_cast_on_early_arc():
         )
         assert arc.status == "active"
         assert "reva" not in arc.focus_npcs
-        assert set(arc.focus_npcs) == {"finn", "old_bones"}
+        assert set(arc.focus_npcs) == {"tam", "old_bones"}
         # Touch counter resets so we earn the next beat with the
         # smaller cast
         assert arc.touches_since_last_advance == 0
@@ -2625,12 +2815,12 @@ def test_recently_departed_section_in_snapshot():
     try:
         director.tick_count = 5
         director._dispatch_npc_death(
-            npc_id="finn", cause="accident at the docks",
+            npc_id="tam", cause="accident at the docks",
             transfers_quests_to=None,
         )
         snap = director._world_snapshot()
         assert "RECENTLY DEPARTED" in snap, snap
-        assert "finn" in snap.lower() or "Finn" in snap
+        assert "tam" in snap.lower() or "Finn" in snap
         assert "accident at the docks" in snap
         # The live roster should NOT include finn
         assert "- finn (dock_worker)" not in snap
@@ -2742,13 +2932,13 @@ def test_population_gap_triggers_birth_on_lifecycle_tick():
     try:
         # Start with 2 dock NPCs — below the min of 3
         two_dock = (
-            ("finn", "dock_worker", "dock_district"),
+            ("tam", "dock_worker", "dock_district"),
             ("old_bones", "tavern_owner", "dock_district"),
         )
         engine = _make_stub_engine(
             profile_specs=two_dock,
             responses=[
-                '{"action": "event", "target": "finn", "event": "x"}',
+                '{"action": "event", "target": "tam", "event": "x"}',
             ],
         )
         engine.config = SimpleNamespace(
@@ -2812,7 +3002,7 @@ def test_queue_birth_request_queues_and_drains():
         engine = _make_stub_engine(
             profile_specs=_ZONED_PROFILES,
             responses=[
-                '{"action": "event", "target": "finn", "event": "x"}',
+                '{"action": "event", "target": "tam", "event": "x"}',
             ],
         )
         engine.config = SimpleNamespace(
@@ -2902,7 +3092,7 @@ def test_autonomous_on_proposes_death_at_confront():
         from npc_engine.story_director import NarrativeArc
         arc = NarrativeArc(
             id="arc_kill", theme="Reva's reckoning",
-            focus_npcs=["reva", "finn"],
+            focus_npcs=["reva", "tam"],
             beat_goals=["seed", "escalate", "confront", "resolve"],
             current_beat=2, status="active", started_at_tick=1,
         )
@@ -2911,7 +3101,7 @@ def test_autonomous_on_proposes_death_at_confront():
         director.set_autonomous_lifecycle(True)
         proposal = director._propose_autonomous_death()
         assert proposal is not None, "expected a death proposal"
-        assert proposal["npc_id"] in ["reva", "finn"]
+        assert proposal["npc_id"] in ["reva", "tam"]
         assert "narrative resolution" in proposal["cause"].lower()
     finally:
         restore()
@@ -2957,8 +3147,8 @@ def test_player_killed_npc_full_propagation():
             profile_specs=_ZONED_PROFILES,
             responses=[
                 # 5 response slots — one per tick after the death
-                '{"action": "event", "target": "finn", "event": "finn hears news of the murder"}',
-                '{"action": "fact", "npc_id": "finn", "fact": "Old Bones was killed in the tavern last night"}',
+                '{"action": "event", "target": "tam", "event": "finn hears news of the murder"}',
+                '{"action": "fact", "npc_id": "tam", "fact": "Old Bones was killed in the tavern last night"}',
                 '{"action": "event", "target": "varro", "event": "varro looks over his shoulder warily"}',
                 '{"action": "fact", "npc_id": "varro", "fact": "the tavern is closed since Old Bones died"}',
                 '{"action": "event", "target": "captain_reva", "event": "reva investigates the scene"}',
@@ -5753,6 +5943,16 @@ def main():
     print("\nStory Director — postgen name-guard tests (Phase 5a-3)")
     test_postgen_rewrites_unauthorized_name_to_stranger()
     test_postgen_allows_name_use_after_recognition()
+
+    print("\nStory Director — deed attribution tests (Phase 5b)")
+    test_anonymous_action_with_no_witnesses_tags_unknown_figure()
+    test_visible_feature_auto_recognition_on_first_meeting()
+    test_visible_feature_overrides_explicit_subject_identity()
+
+    print("\nStory Director — reputation tests (Phase 5c)")
+    test_get_reputation_returns_per_identity_state()
+    test_reputation_hint_appears_in_unrecognized_npc_dialogue()
+    test_reputation_hint_absent_after_recognition()
 
     print("\nStory Director — GPU coordination tests (Phase 4c)")
     test_pause_state_blocks_ticks()

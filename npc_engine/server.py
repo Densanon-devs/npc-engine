@@ -249,6 +249,10 @@ def create_app():
         voucher_npc: str
         to_npc: str
 
+    class RegisterFeatureRequest(BaseModel):
+        feature: str
+        identity: str
+
     class NPCZoneRequest(BaseModel):
         npc_id: str
         zone: str
@@ -568,6 +572,21 @@ def create_app():
             raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
         return result
 
+    @app.post("/player/register_feature")
+    async def player_register_feature(req: RegisterFeatureRequest):
+        """Phase 5b — map a player-visible feature to an identity so
+        future first-meetings auto-recognize the player under that
+        identity."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.register_visible_feature(
+            feature=req.feature, identity=req.identity,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
     @app.get("/player/identity_state")
     async def player_identity_state():
         """Phase 5a — full view of per-NPC player_knowledge +
@@ -576,6 +595,16 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_player_identity_state()
+
+    @app.get("/player/reputation")
+    async def player_reputation():
+        """Phase 5c — aggregate player reputation across every
+        identity: per-identity known_by + deeds, recognition totals,
+        intent summary."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_player_reputation()
 
     @app.post("/story/npc_death")
     async def story_npc_death(req: NPCDeathRequest):

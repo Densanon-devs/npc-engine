@@ -1441,10 +1441,16 @@ class StoryDirector:
         # forever" invariant Jordan specified.
         self._npc_player_identity_trust: dict[str, dict[str, int]] = {}
         # Last player-reported visible feature. Populated by
-        # /player/visible_feature — Phase 5b will match this against
-        # a feature→identity registry for auto-recognition. Cheap
-        # string-only state, persisted.
+        # /player/visible_feature — matched against the feature
+        # registry below for auto-recognition (5b).
         self._player_visible_feature: Optional[str] = None
+        # Phase 5b — feature → identity registry. Populated via
+        # ``/player/register_feature``. When the player's current
+        # visible feature has a registered identity AND an NPC's
+        # first meeting fires (via record_player_action witnessing),
+        # the identity is auto-added to the NPC's ``known_as`` list
+        # without requiring an explicit /player/introduce call.
+        self._visible_feature_to_identity: dict[str, str] = {}
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1793,6 +1799,12 @@ class StoryDirector:
             raw_feature = state.get("player_visible_feature")
             if isinstance(raw_feature, str) and raw_feature:
                 self._player_visible_feature = raw_feature
+            raw_feature_registry = state.get("visible_feature_to_identity", {}) or {}
+            if isinstance(raw_feature_registry, dict):
+                self._visible_feature_to_identity = {
+                    str(k): str(v) for k, v in raw_feature_registry.items()
+                    if isinstance(v, str)
+                }
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1840,6 +1852,7 @@ class StoryDirector:
             "player_auto_refuse_intents": sorted(self._player_auto_refuse_intents),
             "npc_player_identity_trust": self._npc_player_identity_trust,
             "player_visible_feature": self._player_visible_feature,
+            "visible_feature_to_identity": self._visible_feature_to_identity,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -2479,7 +2492,17 @@ class StoryDirector:
         witnesses = [w for w in (witness_npcs or []) if isinstance(w, str)]
         if visible_feature is not None:
             self.set_player_visible_feature(visible_feature)
+        # Phase 5b — auto-resolve subject_identity from the player's
+        # current visible_feature when the caller didn't supply one
+        # explicitly. Falls back to "unknown_figure" only if both
+        # subject_identity AND any feature match are absent.
         effective_identity = subject_identity
+        if effective_identity is None:
+            feature_key = visible_feature or self._player_visible_feature
+            if feature_key:
+                mapped = self._visible_feature_to_identity.get(feature_key)
+                if mapped:
+                    effective_identity = mapped
         if effective_identity is None and witnesses:
             effective_identity = "unknown_figure"
 
@@ -4024,6 +4047,17 @@ class StoryDirector:
         for t in titles or []:
             if isinstance(t, str) and t.strip():
                 idents.append(self._slugify_identity(t))
+        # Phase 5b — feature-based auto-recognition. If the player
+        # has a visible feature registered to an identity, that
+        # identity joins the NPC's known_as alongside the explicit
+        # name. Lets a named introduction also cement the
+        # reputation-identity ("Jordan, the Dragonslayer").
+        if self._player_visible_feature:
+            mapped = self._visible_feature_to_identity.get(
+                self._player_visible_feature,
+            )
+            if mapped:
+                idents.append(mapped)
         # Merge into known_as (preserve existing order + add new)
         existing = set(pk["known_as"])
         for ident in idents:
@@ -4105,10 +4139,135 @@ class StoryDirector:
             "player_visible_feature": self._player_visible_feature,
         }
 
+    def register_visible_feature(self, feature: str, identity: str) -> dict:
+        """Phase 5b — map a player-visible feature
+        (``"dragonslayer_cloak"``) to an identity (``"the_dragonslayer"``).
+        Used by auto-recognition: the first time an NPC meets the
+        player while they're wearing the feature, that identity is
+        auto-added to the NPC's ``known_as``."""
+        if not isinstance(feature, str) or not feature.strip():
+            return {"ok": False, "reason": "missing feature"}
+        if not isinstance(identity, str) or not identity.strip():
+            return {"ok": False, "reason": "missing identity"}
+        feat = feature.strip()
+        ident = self._slugify_identity(identity)
+        self._visible_feature_to_identity[feat] = ident
+        self._save_state()
+        return {
+            "ok": True, "feature": feat, "identity": ident,
+            "registry_size": len(self._visible_feature_to_identity),
+        }
+
+    def get_player_reputation(self) -> dict:
+        """
+        Phase 5c — aggregate view of the player's standing across
+        every identity the world knows them under. Per-identity
+        roll-up of who-knows-them + what-deeds-they've-done, plus
+        summary counts for the client HUD.
+
+        Deed text comes straight from the FactLedger; reputation
+        queries are read-only (no mutations on the identity-state
+        dict)."""
+        # Gather ledger entries per subject_identity (legacy entries
+        # with no tag get bucketed under "player" for compat).
+        deeds_by_identity: dict[str, list[dict]] = {}
+        intent_summary: dict[str, int] = {
+            "good": 0, "neutral": 0, "gray": 0, "dark": 0, "cruel": 0,
+        }
+        for idx, entry in enumerate(self.ledger.entries):
+            if entry.get("kind") not in ("player_action", "refusal"):
+                continue
+            ident = entry.get("subject_identity") or "player"
+            deeds_by_identity.setdefault(ident, []).append({
+                "ledger_index": idx,
+                "text": entry.get("text", ""),
+                "tick": entry.get("tick"),
+                "kind": entry.get("kind"),
+            })
+
+        # Walk NPCs for known_by per identity + recognition totals.
+        known_by: dict[str, list[str]] = {}
+        recognized_npcs: set[str] = set()
+        heard_without_recognition: set[str] = set()
+        for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items():
+            pk = getattr(npc, "player_knowledge", None) or {}
+            if pk.get("recognized"):
+                recognized_npcs.add(npc_id)
+            for ident in pk.get("known_as", []) or []:
+                known_by.setdefault(ident, []).append(npc_id)
+            if (not pk.get("recognized")) and (
+                pk.get("witnessed_deeds") or pk.get("heard_deeds")
+            ):
+                heard_without_recognition.add(npc_id)
+
+        # Intent summary from quest dispatches with intent tags.
+        for npc in self.engine.pie.npc_knowledge.profiles.values():
+            for q in getattr(npc, "quests", []):
+                if q.intent in intent_summary:
+                    intent_summary[q.intent] += 1
+
+        known_identities: dict[str, dict] = {}
+        for ident in set(list(known_by.keys()) + list(deeds_by_identity.keys())):
+            known_identities[ident] = {
+                "known_by": sorted(known_by.get(ident, [])),
+                "deeds": [d["text"] for d in deeds_by_identity.get(ident, [])],
+            }
+        return {
+            "known_identities": known_identities,
+            "total_npcs_who_recognize_you": len(recognized_npcs),
+            "total_npcs_aware_of_deeds_without_recognition": len(
+                heard_without_recognition
+            ),
+            "summary_by_intent": intent_summary,
+            "player_visible_feature": self._player_visible_feature,
+        }
+
+    def build_reputation_hint_for_npc(self, npc_id: str) -> Optional[str]:
+        """Phase 5c — produce a ``RUMOURS: ...`` dialogue-prompt
+        block for the given NPC. Fires only when the NPC has heard
+        or witnessed deeds but has NOT been introduced — the
+        ``recognized`` flag gates this so introductions don't emit
+        phantom "have you heard of X?" rumours. Returns None when
+        there's nothing meaningful to surface."""
+        npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+        if npc is None:
+            return None
+        pk = getattr(npc, "player_knowledge", None) or {}
+        if pk.get("recognized"):
+            return None
+        heard = pk.get("heard_deeds", []) or []
+        witnessed = pk.get("witnessed_deeds", []) or []
+        all_indices = list(dict.fromkeys(witnessed + heard))  # stable-unique
+        if not all_indices:
+            return None
+        # Group deeds by identity for the prompt summary.
+        by_identity: dict[str, list[str]] = {}
+        for idx in all_indices:
+            if idx < 0 or idx >= len(self.ledger.entries):
+                continue
+            entry = self.ledger.entries[idx]
+            ident = entry.get("subject_identity") or "player"
+            by_identity.setdefault(ident, []).append(entry.get("text", "")[:140])
+        if not by_identity:
+            return None
+        lines = ["=== RUMOURS ==="]
+        for ident, deeds in by_identity.items():
+            lines.append(
+                f"You've heard tales of {ident.replace('_', ' ')} — "
+                + "; ".join(deeds[:3])
+                + "."
+            )
+        lines.append(
+            "Don't assume the player is them, but you may bring up "
+            "the rumour if it fits the moment."
+        )
+        return "\n".join(lines)
+
     def get_player_identity_state(self) -> dict:
         """Debug / client-sync view of per-NPC identity + trust state."""
         return {
             "player_visible_feature": self._player_visible_feature,
+            "visible_feature_to_identity": dict(self._visible_feature_to_identity),
             "npc_player_identity_trust": {
                 npc_id: dict(idmap)
                 for npc_id, idmap in self._npc_player_identity_trust.items()
