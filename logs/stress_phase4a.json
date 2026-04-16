@@ -1,0 +1,129 @@
+{
+  "phase": "4a",
+  "world": "port_blackwater_zoned",
+  "transitions": [
+    {
+      "label": "unknown_default",
+      "elapsed_s": 2.938,
+      "tick": 1,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "event",
+      "next_hint_s": 300,
+      "n_subactions": 0
+    },
+    {
+      "label": "in_combat",
+      "elapsed_s": 0.0,
+      "tick": 2,
+      "paused": true,
+      "paused_reason": "activity:in_combat",
+      "action_kind": "noop",
+      "next_hint_s": 10,
+      "n_subactions": 0,
+      "next_expected": 10
+    },
+    {
+      "label": "in_menu",
+      "elapsed_s": 0.0,
+      "tick": 3,
+      "paused": true,
+      "paused_reason": "activity:in_menu",
+      "action_kind": "noop",
+      "next_hint_s": 30,
+      "n_subactions": 0,
+      "next_expected": 30
+    },
+    {
+      "label": "idle",
+      "elapsed_s": 0.0,
+      "tick": 4,
+      "paused": true,
+      "paused_reason": "activity:idle",
+      "action_kind": "noop",
+      "next_hint_s": 120,
+      "n_subactions": 0,
+      "next_expected": 120
+    },
+    {
+      "label": "in_dungeon_0",
+      "elapsed_s": 1.109,
+      "tick": 5,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 600,
+      "n_subactions": 0
+    },
+    {
+      "label": "in_dungeon_1",
+      "elapsed_s": 0.813,
+      "tick": 6,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 600,
+      "n_subactions": 0
+    },
+    {
+      "label": "in_dungeon_2",
+      "elapsed_s": 3.937,
+      "tick": 7,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 600,
+      "n_subactions": 0
+    },
+    {
+      "label": "in_dungeon_3",
+      "elapsed_s": 1.016,
+      "tick": 8,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 600,
+      "n_subactions": 0
+    },
+    {
+      "label": "in_dialogue",
+      "elapsed_s": 0.828,
+      "tick": 9,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "event",
+      "next_hint_s": 300,
+      "n_subactions": 0,
+      "multi_action_requested": 3
+    },
+    {
+      "label": "wandering",
+      "elapsed_s": 3.125,
+      "tick": 10,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 900,
+      "n_subactions": 0,
+      "multi_action_requested": 2
+    },
+    {
+      "label": "in_town",
+      "elapsed_s": 5.828,
+      "tick": 11,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3
+    }
+  ],
+  "dungeon_kind_counts": {
+    "fact": 4
+  },
+  "final_state": {
+    "tick_count": 11,
+    "player_activity": "in_town",
+    "ledger_entries": 9
+  }
+}

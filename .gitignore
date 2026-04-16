@@ -38,6 +38,14 @@ data/worlds/synthetic_*/
 tick_trace_*.json
 data/worlds/*/player_quests.yaml.bak
 
+# Stress-harness raw console captures — keep the structured JSON
+# reports in logs/*.json, ignore the noisy *.log companions.
+logs/*.log
+
+# Arc embedding sidecars (regenerable from arcs.json on next load)
+data/worlds/*/story/arcs.embeddings.npy
+data/story_director/arcs.embeddings.npy
+
 # Models (too large for git)
 models/
 

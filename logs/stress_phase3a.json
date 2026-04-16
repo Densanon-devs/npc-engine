@@ -1,0 +1,228 @@
+{
+  "phase": "3a",
+  "world": "port_blackwater_zoned",
+  "main_line_cast_initial": [
+    "brom",
+    "captain_reva",
+    "thessa"
+  ],
+  "protected_givers_initial": [
+    "brom",
+    "captain_reva",
+    "thessa"
+  ],
+  "dev_auto_refuse_enabled": true,
+  "ticks": [
+    {
+      "label": "t1",
+      "elapsed_s": 6.453,
+      "tick": 1,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t2",
+      "elapsed_s": 4.687,
+      "tick": 2,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t3",
+      "elapsed_s": 6.532,
+      "tick": 3,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t4",
+      "elapsed_s": 5.046,
+      "tick": 4,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t5",
+      "elapsed_s": 4.938,
+      "tick": 5,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t6",
+      "elapsed_s": 7.406,
+      "tick": 6,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t7",
+      "elapsed_s": 5.344,
+      "tick": 7,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t8",
+      "elapsed_s": 5.969,
+      "tick": 8,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t9",
+      "elapsed_s": 6.672,
+      "tick": 9,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t10",
+      "elapsed_s": 4.531,
+      "tick": 10,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t11",
+      "elapsed_s": 6.297,
+      "tick": 11,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t12",
+      "elapsed_s": 4.718,
+      "tick": 12,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t13",
+      "elapsed_s": 6.938,
+      "tick": 13,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t14",
+      "elapsed_s": 5.687,
+      "tick": 14,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 60,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    },
+    {
+      "label": "t15",
+      "elapsed_s": 8.11,
+      "tick": 15,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 60,
+      "n_subactions": 3,
+      "deaths_this_tick": []
+    }
+  ],
+  "focus_npc_counts": {
+    "brom": 14,
+    "captain_reva": 13,
+    "finn": 4,
+    "thessa": 7,
+    "old_bones": 4,
+    "varro": 3
+  },
+  "main_line_focus": 34,
+  "non_main_line_focus": 11,
+  "ratio_ml_to_non_ml": 3.090909090909091,
+  "deceased_at_end": [],
+  "protected_survived": true,
+  "quest_line_state": {
+    "dispatched_beats": [],
+    "completed_quests": [
+      "stress_main_beat_0"
+    ],
+    "rewards_earned": [
+      "Harbor Master's seal"
+    ],
+    "line_status": "active"
+  },
+  "reva_quest_statuses": [
+    {
+      "id": "lighthouse_mystery",
+      "status": "available",
+      "quest_line": null,
+      "beat": 0
+    },
+    {
+      "id": "stress_main_beat_0",
+      "status": "available",
+      "quest_line": "main_dark_lighthouse",
+      "beat": 0
+    }
+  ],
+  "auto_refuse_dispatch": {
+    "ok": true,
+    "kind": "quest",
+    "npc_id": "old_bones",
+    "quest_id": "stress_cruel",
+    "status": "refused",
+    "auto_refused": true
+  },
+  "auto_refused_quest_status": "refused"
+}

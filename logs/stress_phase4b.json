@@ -1,0 +1,241 @@
+{
+  "phase": "4b",
+  "world": "port_blackwater_zoned",
+  "pacing": {
+    "max_unoffered": 1,
+    "cooldown_ticks": 3,
+    "max_unoffered_override": 1,
+    "cooldown_ticks_override": 3,
+    "last_quest_dispatched_per_npc": {}
+  },
+  "ticks": [
+    {
+      "label": "t1",
+      "elapsed_s": 9.203,
+      "tick": 1,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t2",
+      "elapsed_s": 3.594,
+      "tick": 2,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t3",
+      "elapsed_s": 6.109,
+      "tick": 3,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t4",
+      "elapsed_s": 5.016,
+      "tick": 4,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t5",
+      "elapsed_s": 4.64,
+      "tick": 5,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t6",
+      "elapsed_s": 4.954,
+      "tick": 6,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t7",
+      "elapsed_s": 3.015,
+      "tick": 7,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t8",
+      "elapsed_s": 5.125,
+      "tick": 8,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t9",
+      "elapsed_s": 4.235,
+      "tick": 9,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 300,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t10",
+      "elapsed_s": 4.578,
+      "tick": 10,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 60,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t11",
+      "elapsed_s": 5.953,
+      "tick": 11,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 60,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    },
+    {
+      "label": "t12",
+      "elapsed_s": 7.719,
+      "tick": 12,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": null,
+      "next_hint_s": 60,
+      "n_subactions": 3,
+      "per_npc_open_quests": {
+        "brom": 1,
+        "captain_reva": 1,
+        "finn": 1,
+        "old_bones": 1,
+        "thessa": 1,
+        "varro": 0
+      }
+    }
+  ],
+  "npc_quests_over_time": [],
+  "final_unoffered_per_npc": {
+    "brom": 1,
+    "captain_reva": 1,
+    "finn": 1,
+    "old_bones": 1,
+    "thessa": 1,
+    "varro": 0
+  },
+  "max_unoffered_observed": 1,
+  "cap_respected": true,
+  "last_quest_dispatched_per_npc": {}
+}

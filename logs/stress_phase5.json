@@ -1,0 +1,187 @@
+{
+  "phase": "5",
+  "world": "port_blackwater_zoned",
+  "steps": [
+    {
+      "step": "introduce_reva",
+      "result": {
+        "ok": true,
+        "npc_id": "captain_reva",
+        "known_as": [
+          "jordan",
+          "the_dragonslayer"
+        ],
+        "max_trust": 0,
+        "first_met_tick": 1
+      }
+    },
+    {
+      "step": "introduce_thessa",
+      "result": {
+        "ok": true,
+        "npc_id": "thessa",
+        "known_as": [
+          "jordan",
+          "the_dragonslayer"
+        ],
+        "max_trust": 0,
+        "first_met_tick": 1
+      }
+    },
+    {
+      "step": "vouch_reva_to_old_bones",
+      "result": {
+        "ok": true,
+        "voucher_npc": "captain_reva",
+        "to_npc": "old_bones",
+        "known_as": [
+          "jordan",
+          "the_dragonslayer"
+        ],
+        "max_trust": 0
+      }
+    },
+    {
+      "step": "shady_deed",
+      "result": {
+        "ok": true,
+        "recorded": {
+          "at": "2026-04-16T23:51:12.444954+00:00",
+          "tick_at_time": 0,
+          "text": "Someone stole a loaf from the bakery.",
+          "target": "old_bones",
+          "witness_npcs": [
+            "varro",
+            "finn"
+          ],
+          "subject_identity": "hooded_thief",
+          "witnessed_by": [
+            "finn",
+            "varro"
+          ],
+          "heard_by": [
+            "brom",
+            "captain_reva",
+            "old_bones",
+            "thessa"
+          ],
+          "ledger_index": 0
+        }
+      }
+    },
+    {
+      "step": "live_tick",
+      "result": {
+        "label": "post_action_tick",
+        "elapsed_s": 4.937,
+        "tick": 1,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": null,
+        "next_hint_s": 300,
+        "n_subactions": 3
+      }
+    }
+  ],
+  "reputation": {
+    "known_identities": {
+      "hooded_thief": {
+        "known_by": [
+          "finn",
+          "varro"
+        ],
+        "deeds": [
+          "Someone stole a loaf from the bakery."
+        ]
+      },
+      "the_dragonslayer": {
+        "known_by": [
+          "captain_reva",
+          "old_bones",
+          "thessa"
+        ],
+        "deeds": []
+      },
+      "jordan": {
+        "known_by": [
+          "captain_reva",
+          "old_bones",
+          "thessa"
+        ],
+        "deeds": []
+      }
+    },
+    "total_npcs_who_recognize_you": 5,
+    "total_npcs_aware_of_deeds_without_recognition": 1,
+    "summary_by_intent": {
+      "good": 0,
+      "neutral": 0,
+      "gray": 0,
+      "dark": 0,
+      "cruel": 0
+    },
+    "player_visible_feature": null
+  },
+  "brom_hint_present": true,
+  "reva_hint_suppressed": true,
+  "brom_hint_preview": "=== RUMOURS ===\nYou've heard tales of hooded thief \u2014 Someone stole a loaf from the bakery..\nDon't assume the player is them, but you may bring up the rumour if it fits the moment.",
+  "postgen_brom_repaired": true,
+  "postgen_reva_kept": true,
+  "per_npc_player_knowledge": {
+    "brom": {
+      "met": false,
+      "recognized": false,
+      "known_as": [],
+      "witnessed_n": 0,
+      "heard_n": 1
+    },
+    "captain_reva": {
+      "met": true,
+      "recognized": true,
+      "known_as": [
+        "jordan",
+        "the_dragonslayer"
+      ],
+      "witnessed_n": 0,
+      "heard_n": 1
+    },
+    "finn": {
+      "met": true,
+      "recognized": true,
+      "known_as": [
+        "hooded_thief"
+      ],
+      "witnessed_n": 1,
+      "heard_n": 0
+    },
+    "old_bones": {
+      "met": true,
+      "recognized": true,
+      "known_as": [
+        "jordan",
+        "the_dragonslayer"
+      ],
+      "witnessed_n": 0,
+      "heard_n": 1
+    },
+    "thessa": {
+      "met": true,
+      "recognized": true,
+      "known_as": [
+        "jordan",
+        "the_dragonslayer"
+      ],
+      "witnessed_n": 0,
+      "heard_n": 1
+    },
+    "varro": {
+      "met": true,
+      "recognized": true,
+      "known_as": [
+        "hooded_thief"
+      ],
+      "witnessed_n": 1,
+      "heard_n": 0
+    }
+  }
+}

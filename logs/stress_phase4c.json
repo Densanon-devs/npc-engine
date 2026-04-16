@@ -1,0 +1,97 @@
+{
+  "phase": "4c",
+  "world": "port_blackwater_zoned",
+  "events": [
+    {
+      "label": "pre_pause",
+      "elapsed_s": 2.953,
+      "tick": 1,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "event",
+      "next_hint_s": 300,
+      "n_subactions": 0
+    },
+    {
+      "label": "paused_tick",
+      "elapsed_s": 0.0,
+      "tick": 1,
+      "paused": true,
+      "paused_reason": "explicit_pause",
+      "action_kind": "noop",
+      "next_hint_s": 300,
+      "n_subactions": 0,
+      "expect_paused": true
+    },
+    {
+      "label": "post_resume",
+      "elapsed_s": 2.531,
+      "tick": 2,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "noop",
+      "next_hint_s": 300,
+      "n_subactions": 0
+    },
+    {
+      "label": "post_budget_set",
+      "elapsed_s": 0.0,
+      "tick": 2,
+      "paused": true,
+      "paused_reason": "budget_exceeded",
+      "action_kind": "noop",
+      "next_hint_s": 300,
+      "n_subactions": 0,
+      "budget_state": {
+        "paused": false,
+        "paused_at_tick": 1,
+        "tick_budget_seconds": 0.1,
+        "tick_budget_window_seconds": 60.0,
+        "window_llm_seconds_used": 5.484,
+        "budget_exceeded": true,
+        "next_tick_recommended_in_seconds": 300
+      }
+    },
+    {
+      "label": "blocked_by_budget",
+      "elapsed_s": 0.0,
+      "tick": 2,
+      "paused": true,
+      "paused_reason": "budget_exceeded",
+      "action_kind": "noop",
+      "next_hint_s": 300,
+      "n_subactions": 0,
+      "expect_paused_reason": "budget_exceeded"
+    },
+    {
+      "label": "post_budget_clear",
+      "elapsed_s": 1.344,
+      "tick": 3,
+      "paused": false,
+      "paused_reason": null,
+      "action_kind": "fact",
+      "next_hint_s": 300,
+      "n_subactions": 0
+    }
+  ],
+  "activity_hints": {
+    "in_combat": 10,
+    "in_menu": 30,
+    "idle": 120,
+    "wandering": 900,
+    "in_dungeon": 600,
+    "in_town": 300,
+    "unknown": 300
+  },
+  "confront_accelerator_hint": 60,
+  "confront_town_hint": 60,
+  "pause_state_end": {
+    "paused": false,
+    "paused_at_tick": 1,
+    "tick_budget_seconds": -1.0,
+    "tick_budget_window_seconds": 60.0,
+    "window_llm_seconds_used": 6.812,
+    "budget_exceeded": false,
+    "next_tick_recommended_in_seconds": 60
+  }
+}
