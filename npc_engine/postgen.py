@@ -452,6 +452,75 @@ def detect_wrong_addressee(dialogue: str,
     return False, None
 
 
+def detect_unauthorized_name_use(
+    dialogue: str,
+    player_known_names: set[str],
+    all_player_names: set[str],
+) -> Optional[str]:
+    """
+    Phase 5a — detect when an NPC uses a player identity they
+    haven't been introduced to. Returns the offending name (original
+    casing preserved from ``all_player_names``) or None.
+
+    ``all_player_names`` is the global set of identities the player
+    has established anywhere in the world (``{"jordan",
+    "the_dragonslayer", "hooded_stranger"}``). ``player_known_names``
+    is the subset this specific NPC has been introduced to; anything
+    in ``all_player_names`` but NOT in ``player_known_names`` that
+    appears in dialogue is an unauthorized use.
+
+    Matches as whole words, case-insensitive. Underscored slugs are
+    also checked against the space-separated form ("the_dragonslayer"
+    matches "the dragonslayer" in dialogue).
+    """
+    if not dialogue or not all_player_names:
+        return None
+    allowed = {n.lower() for n in player_known_names}
+    for name in all_player_names:
+        canon = name.lower()
+        if canon in allowed:
+            continue
+        # Match the slug form AND the space-separated form.
+        patterns = [re.escape(canon)]
+        if "_" in canon:
+            patterns.append(re.escape(canon.replace("_", " ")))
+        for pat in patterns:
+            if re.search(rf"\b{pat}\b", dialogue, flags=re.IGNORECASE):
+                return name
+    return None
+
+
+def repair_unauthorized_name_use(
+    dialogue: str, wrong_name: str, replacement: str = "stranger",
+) -> str:
+    """
+    Phase 5a — swap the unauthorized name for a generic address
+    term (``stranger`` by default). Preserves capitalization via
+    the same position-aware policy as ``repair_wrong_addressee``.
+    Matches both the slug form (``the_dragonslayer``) and the
+    space-form (``the dragonslayer``).
+    """
+    if not wrong_name:
+        return dialogue
+
+    def _replace(match: "re.Match") -> str:
+        start = match.start()
+        i = start - 1
+        while i >= 0 and dialogue[i].isspace():
+            i -= 1
+        if i < 0 or dialogue[i] in ".!?":
+            return replacement.capitalize()
+        return replacement
+
+    patterns = [re.escape(wrong_name)]
+    if "_" in wrong_name:
+        patterns.append(re.escape(wrong_name.replace("_", " ")))
+    result = dialogue
+    for pat in patterns:
+        result = re.sub(rf"\b{pat}\b", _replace, result, flags=re.IGNORECASE)
+    return result
+
+
 def repair_wrong_addressee(dialogue: str, wrong_name: str,
                             replacement: str = "traveler") -> str:
     """
@@ -611,7 +680,10 @@ OOD_FALLBACK = {
 def validate_and_repair(raw: str, npc_id: str = "",
                         profile: Optional[dict] = None,
                         user_input: str = "",
-                        events: Optional[list[str]] = None) -> str:
+                        events: Optional[list[str]] = None,
+                        *,
+                        player_known_names: Optional[set[str]] = None,
+                        all_player_names: Optional[set[str]] = None) -> str:
     """
     Parse, validate, and repair a model response.
     Returns a clean JSON string ready to send back to the game.
@@ -650,6 +722,20 @@ def validate_and_repair(raw: str, npc_id: str = "",
     if hit_addressee and wrong_name:
         obj["dialogue"] = repair_wrong_addressee(dialogue, wrong_name)
         dialogue = obj["dialogue"]
+
+    # Phase 5a — unauthorized name guard. Runs AFTER wrong-addressee
+    # so the simpler NPC-name cases are handled first. Fires only
+    # when the caller supplied identity sets (legacy callers that
+    # don't pass them skip this layer entirely).
+    if all_player_names:
+        unauthorized = detect_unauthorized_name_use(
+            dialogue,
+            player_known_names or set(),
+            all_player_names,
+        )
+        if unauthorized:
+            obj["dialogue"] = repair_unauthorized_name_use(dialogue, unauthorized)
+            dialogue = obj["dialogue"]
 
     # Echo detection — model copied the user's prompt instead of responding.
     # Only apply on quest-ask prompts (where we have a programmatic replacement).

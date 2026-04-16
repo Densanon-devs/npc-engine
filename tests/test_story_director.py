@@ -66,6 +66,17 @@ class _StubNPC:
         self.home_zone = zone
         self.current_zone = zone
         self.mobile = mobile
+        # Phase 5a — player_knowledge mirror. Defaults to "never met"
+        # so stubs behave like the post-5a real NPCKnowledge at boot.
+        self.player_knowledge: dict = {
+            "met": False,
+            "recognized": False,
+            "known_as": [],
+            "witnessed_deeds": [],
+            "heard_deeds": [],
+            "first_met_tick": None,
+            "last_interaction_tick": None,
+        }
 
     def add_quest(self, quest: Quest):
         self.quests.append(quest)
@@ -1657,6 +1668,264 @@ def test_auto_refuse_dev_enabled_applies_player_filter():
     finally:
         restore()
     print("  [PASS] auto_refuse_dev_enabled_applies_player_filter")
+
+
+# ── Identity split tests (Phase 5a-1) ────────────────────────────
+
+def test_fact_ledger_entry_carries_subject_identity():
+    """FactLedger.add accepts a subject_identity kwarg and surfaces
+    it on the stored entry. Legacy entries (callers that don't pass
+    it) get no key, and the similarity/NLI path is unchanged."""
+    restore = _isolate_state_file("phase5a_ledger_subject")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.ledger.add(
+            text="The hooded stranger walked into the inn.",
+            npc_id="kael", kind="fact", tick=1,
+            subject_identity="hooded_stranger",
+        )
+        director.ledger.add(
+            text="Unrelated thought — kael sharpens his blade.",
+            npc_id="kael", kind="fact", tick=2,
+        )
+        entries = director.ledger.entries
+        assert entries[-2].get("subject_identity") == "hooded_stranger", entries
+        # Legacy-style call has no key (not just None), so older
+        # ledger files don't suddenly gain the field.
+        assert "subject_identity" not in entries[-1], entries
+    finally:
+        restore()
+    print("  [PASS] fact_ledger_entry_carries_subject_identity")
+
+
+def test_unmet_npc_has_empty_player_knowledge():
+    """Fresh NPCs start with player_knowledge.met = False and empty
+    deed / identity lists. This is the pre-recognition baseline the
+    REST endpoints in 5a-2 flip."""
+    restore = _isolate_state_file("phase5a_unmet_player_knowledge")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        for npc in engine.pie.npc_knowledge.profiles.values():
+            pk = getattr(npc, "player_knowledge", None)
+            assert isinstance(pk, dict), pk
+            assert pk["met"] is False, pk
+            assert pk["recognized"] is False, pk
+            assert pk["known_as"] == [], pk
+            assert pk["witnessed_deeds"] == [], pk
+            assert pk["heard_deeds"] == [], pk
+            assert pk["first_met_tick"] is None, pk
+            assert pk["last_interaction_tick"] is None, pk
+    finally:
+        restore()
+    print("  [PASS] unmet_npc_has_empty_player_knowledge")
+
+
+# ── Recognition tests (Phase 5a-2) ───────────────────────────────
+
+def test_player_introduce_flips_met_and_recognized():
+    """introduce_player sets met + recognized, populates known_as
+    with slugged name + titles, and stamps first_met_tick on the
+    first meeting only."""
+    restore = _isolate_state_file("phase5a_introduce")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        director.tick_count = 3
+        result = director.introduce_player(
+            to_npc="kael", name="Jordan",
+            titles=["the Dragonslayer", "Hero of the Pass"],
+        )
+        assert result["ok"] is True, result
+        kael = engine.pie.npc_knowledge.get("kael")
+        pk = kael.player_knowledge
+        assert pk["met"] is True
+        assert pk["recognized"] is True
+        assert "jordan" in pk["known_as"]
+        assert "the_dragonslayer" in pk["known_as"]
+        assert "hero_of_the_pass" in pk["known_as"]
+        assert pk["first_met_tick"] == 4, pk  # tick_count+1 stamp
+
+        # Re-introduce later — first_met_tick must NOT shift.
+        director.tick_count = 20
+        director.introduce_player(to_npc="kael", name="Jordan")
+        assert pk["first_met_tick"] == 4, pk
+        assert pk["last_interaction_tick"] == 21, pk
+    finally:
+        restore()
+    print("  [PASS] player_introduce_flips_met_and_recognized")
+
+
+def test_witness_npc_gets_instant_recognition():
+    """record_player_action with witness_npcs flips each witness to
+    met + recognized, appends the ledger index to witnessed_deeds,
+    and adds the subject_identity to their known_as. Non-witnesses
+    get the deed in heard_deeds (gossip fallback)."""
+    restore = _isolate_state_file("phase5a_witness")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        result = director.record_player_action(
+            "The hooded stranger killed Old Bones in the tavern.",
+            target="noah",
+            witness_npcs=["kael", "bess"],
+            subject_identity="hooded_stranger",
+        )
+        assert result["ok"] is True, result
+        rec = result["recorded"]
+        assert "witness_npcs" in rec, rec
+        assert set(rec.get("witnessed_by", [])) == {"kael", "bess"}, rec
+        assert rec["subject_identity"] == "hooded_stranger", rec
+        assert rec["ledger_index"] >= 0, rec
+
+        kael = engine.pie.npc_knowledge.get("kael")
+        bess = engine.pie.npc_knowledge.get("bess")
+        assert kael.player_knowledge["met"] is True
+        assert kael.player_knowledge["recognized"] is True
+        assert "hooded_stranger" in kael.player_knowledge["known_as"]
+        assert rec["ledger_index"] in kael.player_knowledge["witnessed_deeds"]
+        assert rec["ledger_index"] in bess.player_knowledge["witnessed_deeds"]
+
+        # Non-witness — heard-only, unrecognized.
+        mara = engine.pie.npc_knowledge.get("mara")
+        assert mara.player_knowledge["met"] is False, mara.player_knowledge
+        assert rec["ledger_index"] in mara.player_knowledge["heard_deeds"]
+    finally:
+        restore()
+    print("  [PASS] witness_npc_gets_instant_recognition")
+
+
+def test_gossip_propagates_deed_under_subject_identity():
+    """The ledger entry created by record_player_action carries the
+    subject_identity tag. Non-witness NPCs who receive the deed via
+    gossip (the fallback-to-all-alive path in the stub engine) see
+    the ledger index in heard_deeds — the identity lives on the
+    ledger entry so downstream reputation queries can group by
+    identity."""
+    restore = _isolate_state_file("phase5a_gossip")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        result = director.record_player_action(
+            "The hooded figure stole a loaf from the bakery.",
+            target="bess",
+            witness_npcs=["bess"],
+            subject_identity="hooded_figure",
+        )
+        idx = result["recorded"]["ledger_index"]
+        entry = director.ledger.entries[idx]
+        assert entry.get("subject_identity") == "hooded_figure", entry
+        # All non-witness alive NPCs heard it.
+        for npc_id, npc in engine.pie.npc_knowledge.profiles.items():
+            if npc_id == "bess":
+                continue
+            assert idx in npc.player_knowledge["heard_deeds"], (npc_id, npc.player_knowledge)
+    finally:
+        restore()
+    print("  [PASS] gossip_propagates_deed_under_subject_identity")
+
+
+def test_trust_merges_max_across_identities_on_recognition():
+    """introduce_player normalizes per-identity trust to the max
+    across known_as. Seeding an NPC with divergent trust under two
+    identities and then introducing the player with BOTH names
+    collapses the two records to the max."""
+    restore = _isolate_state_file("phase5a_trust_merge")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        # Seed divergent trust on kael for two identities before
+        # introduction — e.g. good deeds under "jordan", a grudge
+        # under "the_stranger".
+        director._npc_player_identity_trust["kael"] = {
+            "jordan": 35,
+            "the_stranger": -8,
+        }
+        result = director.introduce_player(
+            to_npc="kael", name="Jordan",
+            titles=["The Stranger", "Wanderer"],
+        )
+        assert result["ok"] is True, result
+        assert result["max_trust"] == 35, result
+        idmap = director._npc_player_identity_trust["kael"]
+        assert idmap["jordan"] == 35, idmap
+        assert idmap["the_stranger"] == 35, idmap
+        # The fresh "wanderer" identity inherits the normalized max.
+        assert idmap["wanderer"] == 35, idmap
+    finally:
+        restore()
+    print("  [PASS] trust_merges_max_across_identities_on_recognition")
+
+
+# ── Postgen name-guard tests (Phase 5a-3) ────────────────────────
+
+def test_postgen_rewrites_unauthorized_name_to_stranger():
+    """detect + repair: an NPC who hasn't been introduced using a
+    player identity gets the name swapped to 'stranger' / 'Stranger'
+    with position-aware capitalization. validate_and_repair wires
+    the same two helpers when the identity-set kwargs are passed."""
+    from npc_engine.postgen import (
+        detect_unauthorized_name_use, repair_unauthorized_name_use,
+        validate_and_repair,
+    )
+    all_names = {"jordan", "the_dragonslayer"}
+    known_to_npc: set[str] = set()  # hasn't been introduced
+    dialogue = "Welcome, Jordan. You look well today."
+    hit = detect_unauthorized_name_use(dialogue, known_to_npc, all_names)
+    assert hit == "jordan", hit
+    repaired = repair_unauthorized_name_use(dialogue, hit)
+    # Mid-sentence → lowercase 'stranger'; sentence start / after .
+    # → 'Stranger'. Here the match is after "Welcome, " (no .!? prior)
+    # so the replacement is lowercase per the position rule.
+    assert "jordan" not in repaired.lower() or "Stranger" in repaired, repaired
+    assert "stranger" in repaired.lower() or "Stranger" in repaired, repaired
+
+    # Full validate_and_repair path with the new kwargs.
+    import json as _json
+    raw = _json.dumps({
+        "dialogue": "Welcome, Jordan. How may I help?",
+        "emotion": "friendly",
+        "action": None,
+    })
+    profile = {"identity": {"name": "Bess", "role": "innkeeper"}}
+    out = validate_and_repair(
+        raw, npc_id="bess", profile=profile,
+        all_player_names=all_names,
+        player_known_names=known_to_npc,
+    )
+    assert "Jordan" not in out, out
+    print("  [PASS] postgen_rewrites_unauthorized_name_to_stranger")
+
+
+def test_postgen_allows_name_use_after_recognition():
+    """When the speaker's known_as includes the player's name, the
+    guard leaves the dialogue alone."""
+    from npc_engine.postgen import (
+        detect_unauthorized_name_use, validate_and_repair,
+    )
+    all_names = {"jordan", "the_dragonslayer"}
+    known_to_npc = {"jordan"}
+    dialogue = "Welcome, Jordan. Your favorite table is free."
+    assert detect_unauthorized_name_use(dialogue, known_to_npc, all_names) is None
+    # But "the_dragonslayer" is still unauthorized since the NPC
+    # hasn't heard that name from the player.
+    dialogue2 = "Ah, the Dragonslayer returns!"
+    hit2 = detect_unauthorized_name_use(dialogue2, known_to_npc, all_names)
+    assert hit2 == "the_dragonslayer", hit2
+
+    import json as _json
+    raw = _json.dumps({
+        "dialogue": "Welcome, Jordan. Your table is ready.",
+        "emotion": "friendly", "action": None,
+    })
+    profile = {"identity": {"name": "Bess", "role": "innkeeper"}}
+    out = validate_and_repair(
+        raw, npc_id="bess", profile=profile,
+        all_player_names=all_names,
+        player_known_names=known_to_npc,
+    )
+    assert "Jordan" in out, out
+    print("  [PASS] postgen_allows_name_use_after_recognition")
 
 
 # ── GPU coordination tests (Phase 4c) ────────────────────────────
@@ -5470,6 +5739,20 @@ def main():
     test_refusal_permanent_mode_stays_refused()
     test_auto_refuse_dev_disabled_ignores_player_filter()
     test_auto_refuse_dev_enabled_applies_player_filter()
+
+    print("\nStory Director — identity split tests (Phase 5a-1)")
+    test_fact_ledger_entry_carries_subject_identity()
+    test_unmet_npc_has_empty_player_knowledge()
+
+    print("\nStory Director — recognition tests (Phase 5a-2)")
+    test_player_introduce_flips_met_and_recognized()
+    test_witness_npc_gets_instant_recognition()
+    test_gossip_propagates_deed_under_subject_identity()
+    test_trust_merges_max_across_identities_on_recognition()
+
+    print("\nStory Director — postgen name-guard tests (Phase 5a-3)")
+    test_postgen_rewrites_unauthorized_name_to_stranger()
+    test_postgen_allows_name_use_after_recognition()
 
     print("\nStory Director — GPU coordination tests (Phase 4c)")
     test_pause_state_blocks_ticks()

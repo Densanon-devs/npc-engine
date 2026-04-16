@@ -161,6 +161,22 @@ class NPCKnowledge:
         self.death_tick: Optional[int] = None
         self.death_cause: Optional[str] = None
         self.inheritor: Optional[str] = None
+        # Phase 5a — per-NPC player knowledge. Records whether this
+        # NPC has met the player, recognizes them, which identities
+        # they know the player under (``jordan`` vs ``the hooded
+        # stranger``), and the deeds they've personally witnessed vs
+        # heard about via gossip. Populated at runtime by the Story
+        # Director's recognition + witness plumbing; not part of the
+        # profile YAML so new NPCs start blank.
+        self.player_knowledge: dict = {
+            "met": False,
+            "recognized": False,
+            "known_as": [],           # identities this NPC associates w/ player
+            "witnessed_deeds": [],    # ledger indices for deeds personally seen
+            "heard_deeds": [],        # ledger indices for gossip received
+            "first_met_tick": None,
+            "last_interaction_tick": None,
+        }
 
         if self.profile_path.exists():
             self._load()

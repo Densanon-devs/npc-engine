@@ -237,6 +237,18 @@ def create_app():
     class PlayerAutoRefuseRequest(BaseModel):
         intents: list[str]
 
+    class PlayerIntroduceRequest(BaseModel):
+        to_npc: str
+        name: str
+        titles: Optional[list[str]] = None
+
+    class PlayerVisibleFeatureRequest(BaseModel):
+        feature: Optional[str] = None  # null clears
+
+    class PlayerVouchedByRequest(BaseModel):
+        voucher_npc: str
+        to_npc: str
+
     class NPCZoneRequest(BaseModel):
         npc_id: str
         zone: str
@@ -515,6 +527,55 @@ def create_app():
         if engine.story_director is None:
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_player_auto_refuse()
+
+    @app.post("/player/introduce")
+    async def player_introduce(req: PlayerIntroduceRequest):
+        """Phase 5a — player introduces themselves to an NPC. Flips
+        met + recognized, merges name + titles into the NPC's
+        known_as list, normalizes per-identity trust to max across
+        the expanded set."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.introduce_player(
+            to_npc=req.to_npc, name=req.name, titles=req.titles,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.post("/player/visible_feature")
+    async def player_visible_feature(req: PlayerVisibleFeatureRequest):
+        """Phase 5a — set a player-visible feature (cloak, bloodied
+        hand). Phase 5b will auto-recognize NPCs against a
+        feature→identity registry."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.set_player_visible_feature(req.feature)
+
+    @app.post("/player/vouched_by")
+    async def player_vouched_by(req: PlayerVouchedByRequest):
+        """Phase 5a — voucher_npc introduces the player to to_npc;
+        to_npc inherits voucher's known_as identities."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        result = engine.story_director.vouch_player_to(
+            voucher_npc=req.voucher_npc, to_npc=req.to_npc,
+        )
+        if not result.get("ok"):
+            raise HTTPException(status_code=400, detail=result.get("reason", "bad_request"))
+        return result
+
+    @app.get("/player/identity_state")
+    async def player_identity_state():
+        """Phase 5a — full view of per-NPC player_knowledge +
+        identity trust state for client sync / debug."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_player_identity_state()
 
     @app.post("/story/npc_death")
     async def story_npc_death(req: NPCDeathRequest):

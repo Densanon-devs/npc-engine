@@ -575,6 +575,7 @@ class FactLedger:
         *,
         source_ledger_entries: Optional[list[int]] = None,
         suggested_by: Optional[str] = None,
+        subject_identity: Optional[str] = None,
     ) -> Optional[dict]:
         """
         Add a new entry to the ledger and return a similarity warning if
@@ -601,6 +602,12 @@ class FactLedger:
         an older ``fact_ledger.json`` that predates the fields simply
         lack the keys — consumers should ``dict.get(...)`` rather than
         ``[...]`` when reading them.
+
+        Phase 5a adds ``subject_identity`` with the same contract: the
+        key is only present on entries where the caller attributed the
+        deed to a specific identity (``jordan``, ``stranger``,
+        ``hooded_figure``, ...). Reputation queries treat missing =
+        default ``"player"``.
         """
         if not text or not isinstance(text, str):
             return None
@@ -635,6 +642,12 @@ class FactLedger:
             entry["source_ledger_entries"] = list(source_ledger_entries)
         if suggested_by:
             entry["suggested_by"] = suggested_by
+        # Phase 5a — subject_identity tags player-related entries with
+        # whichever identity produced the deed/fact (``jordan``,
+        # ``stranger``, ``hooded_figure``, ...). Missing key = legacy
+        # entry; reputation queries treat that as ``"player"``.
+        if subject_identity:
+            entry["subject_identity"] = subject_identity
         self.entries.append(entry)
         # Bound memory — keep last 200 entries (largest a typical session reaches)
         if len(self.entries) > 200:
@@ -1419,6 +1432,19 @@ class StoryDirector:
         self._quest_auto_refuse_enabled: bool = False
         self._quest_auto_refuse_player_configurable: bool = True
         self._player_auto_refuse_intents: set[str] = set()
+        # Phase 5a — identity split. The Director tracks trust per
+        # (npc_id, identity) pair so two NPCs can know the player
+        # under different identities and have independent trust
+        # records. introduce_player merges identities for a given
+        # NPC and normalizes trust to max across them — keeps the
+        # "good deeds under one identity don't stay invisible
+        # forever" invariant Jordan specified.
+        self._npc_player_identity_trust: dict[str, dict[str, int]] = {}
+        # Last player-reported visible feature. Populated by
+        # /player/visible_feature — Phase 5b will match this against
+        # a feature→identity registry for auto-recognition. Cheap
+        # string-only state, persisted.
+        self._player_visible_feature: Optional[str] = None
         self._kind_rotation_index: int = 0      # round-robin over _ACTION_KIND_ROTATION
         self.recent_player_actions: list[dict] = []  # last 8 player observations
         self._lore_text: str = ""
@@ -1755,6 +1781,18 @@ class StoryDirector:
                 self._player_auto_refuse_intents = {
                     str(v) for v in raw_player_refuse if isinstance(v, str)
                 }
+            raw_identity_trust = state.get("npc_player_identity_trust", {}) or {}
+            if isinstance(raw_identity_trust, dict):
+                for npc_id, idmap in raw_identity_trust.items():
+                    if not isinstance(idmap, dict):
+                        continue
+                    self._npc_player_identity_trust[str(npc_id)] = {
+                        str(k): int(v) for k, v in idmap.items()
+                        if isinstance(v, (int, float))
+                    }
+            raw_feature = state.get("player_visible_feature")
+            if isinstance(raw_feature, str) and raw_feature:
+                self._player_visible_feature = raw_feature
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1800,6 +1838,8 @@ class StoryDirector:
                 in self._refused_quest_timers.items()
             ],
             "player_auto_refuse_intents": sorted(self._player_auto_refuse_intents),
+            "npc_player_identity_trust": self._npc_player_identity_trust,
+            "player_visible_feature": self._player_visible_feature,
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }
@@ -2399,7 +2439,11 @@ class StoryDirector:
                               target: Optional[str] = None,
                               trust_delta: Optional[int] = None,
                               quest_completed: Optional[str] = None,
-                              quest_accepted: Optional[dict] = None) -> dict:
+                              quest_accepted: Optional[dict] = None,
+                              *,
+                              witness_npcs: Optional[list[str]] = None,
+                              visible_feature: Optional[str] = None,
+                              subject_identity: Optional[str] = None) -> dict:
         """
         Record something the player did. Surfaced in the next tick's
         world snapshot so the Director can react to player behavior.
@@ -2408,19 +2452,36 @@ class StoryDirector:
             text: Human-readable description of what the player did.
             target: Optional NPC id the action was directed at.
             trust_delta: Optional trust adjustment to apply to ``target``
-                (positive = friendlier, negative = more hostile). Lets
-                a game client encode "player gave a gift" in one call.
-            quest_completed: Optional quest id. When set, the Director
-                calls ``engine.complete_quest`` so the engine's
-                ``player_quests`` tracker reflects the completion. The
-                trust ripple + gossip propagation happen automatically
-                through the engine's existing pipeline.
-            quest_accepted: Optional ``{id, name, given_by}`` dict. When
-                set, the Director calls ``engine.accept_quest`` so the
-                engine's tracker shows the quest as active.
+                (positive = friendlier, negative = more hostile).
+            quest_completed: Optional quest id; routes through
+                ``engine.complete_quest`` and accumulates main-line
+                rewards (Phase 3a).
+            quest_accepted: Optional ``{id, name, given_by}`` dict.
+            witness_npcs (Phase 5a): NPC ids who personally saw the
+                deed. Each gets instant ``met = recognized = True``
+                and the ledger index appended to their
+                ``witnessed_deeds``. Non-witnesses receive it as
+                ``heard_deeds`` via a simple gossip fallback.
+            visible_feature (Phase 5a): String naming a feature the
+                player exhibited during this action (distinctive
+                cloak, bloodied hand, etc.). Stored on the Director
+                and surfaced later by Phase 5b's auto-recognition.
+            subject_identity (Phase 5a): Identity string the deed
+                should be attributed to in the ledger + gossip
+                (``"jordan"``, ``"the hooded stranger"``, ...).
+                Defaults to ``"unknown_figure"`` when unspecified
+                and witnesses are present; legacy callers without
+                witnesses pass nothing and get a legacy entry.
         """
         if not text or not isinstance(text, str):
             return {"ok": False, "reason": "empty_text"}
+
+        witnesses = [w for w in (witness_npcs or []) if isinstance(w, str)]
+        if visible_feature is not None:
+            self.set_player_visible_feature(visible_feature)
+        effective_identity = subject_identity
+        if effective_identity is None and witnesses:
+            effective_identity = "unknown_figure"
 
         record = {
             "at": datetime.now(timezone.utc).isoformat(),
@@ -2428,6 +2489,12 @@ class StoryDirector:
             "text": text.strip()[:240],
             "target": target,
         }
+        if witnesses:
+            record["witness_npcs"] = list(witnesses)
+        if effective_identity:
+            record["subject_identity"] = effective_identity
+        if visible_feature:
+            record["visible_feature"] = visible_feature
 
         # Optional side-effect: apply the trust adjustment through the
         # engine so the next snapshot reflects it.
@@ -2476,6 +2543,65 @@ class StoryDirector:
 
         self.recent_player_actions.append(record)
         self.recent_player_actions = self.recent_player_actions[-8:]
+
+        # Phase 5a — witness + gossip propagation. Fires only when the
+        # caller supplied witnesses or an explicit subject_identity
+        # (legacy callers without either skip the whole block).
+        if witnesses or effective_identity:
+            # Ledger entry for the deed, tagged with subject_identity
+            # so gossip + reputation queries can group by identity.
+            ledger_npc = target or (witnesses[0] if witnesses else "?")
+            try:
+                self.ledger.add(
+                    text=text.strip()[:400],
+                    npc_id=ledger_npc,
+                    kind="player_action",
+                    tick=self.tick_count + 1,
+                    suggested_by="player_reaction",
+                    subject_identity=effective_identity,
+                )
+            except Exception as e:
+                logger.warning(f"ledger add for player action failed: {e}")
+
+            ledger_idx = len(self.ledger.entries) - 1
+            witness_set = {w for w in witnesses}
+            propagated_witnesses: list[str] = []
+            heard_list: list[str] = []
+            for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items():
+                if getattr(npc, "status", "alive") != "alive":
+                    continue
+                pk = self._ensure_player_knowledge(npc)
+                if npc_id in witness_set:
+                    # Witnesses get instant recognition under the
+                    # deed's subject_identity + the ledger index
+                    # appended to witnessed_deeds.
+                    if not pk["met"]:
+                        pk["first_met_tick"] = self.tick_count + 1
+                    pk["met"] = True
+                    pk["recognized"] = True
+                    pk["last_interaction_tick"] = self.tick_count + 1
+                    if (effective_identity
+                            and effective_identity not in pk["known_as"]):
+                        pk["known_as"].append(effective_identity)
+                    if ledger_idx >= 0 and ledger_idx not in pk["witnessed_deeds"]:
+                        pk["witnessed_deeds"].append(ledger_idx)
+                    if pk["known_as"]:
+                        self._merge_identity_trust(npc_id, pk["known_as"])
+                    propagated_witnesses.append(npc_id)
+                else:
+                    # Gossip fallback — the stub engine has no proper
+                    # social graph, so every non-witness NPC learns
+                    # the deed as hearsay. Real deployments will
+                    # override with GossipPropagator. The deed is
+                    # tagged with subject_identity so non-witnesses
+                    # don't auto-recognize the player.
+                    if ledger_idx >= 0 and ledger_idx not in pk["heard_deeds"]:
+                        pk["heard_deeds"].append(ledger_idx)
+                        heard_list.append(npc_id)
+            record["witnessed_by"] = propagated_witnesses
+            record["heard_by"] = heard_list
+            record["ledger_index"] = ledger_idx
+
         self._save_state()
         return {"ok": True, "recorded": record}
 
@@ -3834,6 +3960,163 @@ class StoryDirector:
             "dev_enabled": self._quest_auto_refuse_enabled,
             "player_configurable": self._quest_auto_refuse_player_configurable,
             "intents": sorted(self._player_auto_refuse_intents),
+        }
+
+    # ── Phase 5a — identity split ────────────────────────────────
+
+    @staticmethod
+    def _slugify_identity(text: str) -> str:
+        """Normalize an identity string to a lowercase slug. The
+        ``known_as`` list should be case-insensitive — "Jordan"
+        and "jordan" are the same identity — but we also want to
+        preserve readability for UI layers, so we slug rather than
+        lowercase-in-place."""
+        return str(text).strip().lower().replace(" ", "_")
+
+    def _ensure_player_knowledge(self, npc) -> dict:
+        """Return the NPC's player_knowledge dict, creating the
+        default skeleton if the stub predates Phase 5a."""
+        pk = getattr(npc, "player_knowledge", None)
+        if not isinstance(pk, dict):
+            pk = {
+                "met": False,
+                "recognized": False,
+                "known_as": [],
+                "witnessed_deeds": [],
+                "heard_deeds": [],
+                "first_met_tick": None,
+                "last_interaction_tick": None,
+            }
+            npc.player_knowledge = pk
+        return pk
+
+    def _merge_identity_trust(self, npc_id: str, identities: list[str]) -> int:
+        """Normalize the per-identity trust record for ``npc_id`` so
+        every identity in ``identities`` carries the same max value
+        across the set. Returns the max. Used by introduce / vouch
+        to keep trust consistent after identity merges."""
+        idmap = self._npc_player_identity_trust.setdefault(npc_id, {})
+        for ident in identities:
+            idmap.setdefault(ident, 0)
+        max_trust = max((idmap[i] for i in identities), default=0)
+        for ident in identities:
+            idmap[ident] = max_trust
+        return max_trust
+
+    def introduce_player(self, to_npc: str, name: str,
+                          titles: Optional[list[str]] = None) -> dict:
+        """Phase 5a — player introduces themselves to an NPC. Flips
+        met + recognized, merges ``name`` + ``titles`` into the
+        NPC's ``known_as`` list (slugged, deduped), normalizes
+        per-identity trust to the max across the expanded set, and
+        stamps ``first_met_tick`` if this is the NPC's first
+        meeting."""
+        if not isinstance(to_npc, str) or not to_npc:
+            return {"ok": False, "reason": "missing to_npc"}
+        if not isinstance(name, str) or not name.strip():
+            return {"ok": False, "reason": "missing name"}
+        npc = self.engine.pie.npc_knowledge.profiles.get(to_npc)
+        if npc is None:
+            return {"ok": False, "reason": f"unknown npc '{to_npc}'"}
+        pk = self._ensure_player_knowledge(npc)
+
+        idents = [self._slugify_identity(name)]
+        for t in titles or []:
+            if isinstance(t, str) and t.strip():
+                idents.append(self._slugify_identity(t))
+        # Merge into known_as (preserve existing order + add new)
+        existing = set(pk["known_as"])
+        for ident in idents:
+            if ident not in existing:
+                pk["known_as"].append(ident)
+                existing.add(ident)
+
+        if not pk["met"]:
+            pk["first_met_tick"] = self.tick_count + 1
+        pk["met"] = True
+        pk["recognized"] = True
+        pk["last_interaction_tick"] = self.tick_count + 1
+
+        max_trust = self._merge_identity_trust(to_npc, pk["known_as"])
+        self._save_state()
+        return {
+            "ok": True,
+            "npc_id": to_npc,
+            "known_as": list(pk["known_as"]),
+            "max_trust": max_trust,
+            "first_met_tick": pk["first_met_tick"],
+        }
+
+    def vouch_player_to(self, voucher_npc: str, to_npc: str) -> dict:
+        """Phase 5a — voucher_npc introduces the player to to_npc.
+        to_npc inherits voucher's known_as identities (they know the
+        player under the same names the voucher does). Trust
+        normalizes to max across the merged set, consistent with
+        direct introduction."""
+        if voucher_npc == to_npc:
+            return {"ok": False, "reason": "voucher and to_npc must differ"}
+        voucher = self.engine.pie.npc_knowledge.profiles.get(voucher_npc)
+        target = self.engine.pie.npc_knowledge.profiles.get(to_npc)
+        if voucher is None:
+            return {"ok": False, "reason": f"unknown voucher '{voucher_npc}'"}
+        if target is None:
+            return {"ok": False, "reason": f"unknown to_npc '{to_npc}'"}
+        voucher_pk = self._ensure_player_knowledge(voucher)
+        if not voucher_pk["known_as"]:
+            return {"ok": False, "reason": "voucher has never met the player"}
+        target_pk = self._ensure_player_knowledge(target)
+
+        existing = set(target_pk["known_as"])
+        for ident in voucher_pk["known_as"]:
+            if ident not in existing:
+                target_pk["known_as"].append(ident)
+                existing.add(ident)
+
+        if not target_pk["met"]:
+            target_pk["first_met_tick"] = self.tick_count + 1
+        target_pk["met"] = True
+        target_pk["recognized"] = True
+        target_pk["last_interaction_tick"] = self.tick_count + 1
+
+        max_trust = self._merge_identity_trust(to_npc, target_pk["known_as"])
+        self._save_state()
+        return {
+            "ok": True,
+            "voucher_npc": voucher_npc,
+            "to_npc": to_npc,
+            "known_as": list(target_pk["known_as"]),
+            "max_trust": max_trust,
+        }
+
+    def set_player_visible_feature(self, feature: Optional[str]) -> dict:
+        """Record a player-visible feature (e.g. a distinctive cloak,
+        a bloodied hand). Phase 5b will auto-recognize NPCs against
+        a feature→identity registry; in 5a we just store the
+        current value. Pass None or empty string to clear."""
+        if feature is None or (isinstance(feature, str) and not feature.strip()):
+            self._player_visible_feature = None
+        elif isinstance(feature, str):
+            self._player_visible_feature = feature.strip()
+        else:
+            return {"ok": False, "reason": "feature must be a string or null"}
+        self._save_state()
+        return {
+            "ok": True,
+            "player_visible_feature": self._player_visible_feature,
+        }
+
+    def get_player_identity_state(self) -> dict:
+        """Debug / client-sync view of per-NPC identity + trust state."""
+        return {
+            "player_visible_feature": self._player_visible_feature,
+            "npc_player_identity_trust": {
+                npc_id: dict(idmap)
+                for npc_id, idmap in self._npc_player_identity_trust.items()
+            },
+            "npcs": {
+                npc_id: dict(getattr(npc, "player_knowledge", {}))
+                for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items()
+            },
         }
 
     def _record_main_line_reward(self, quest_id: str) -> Optional[dict]:
