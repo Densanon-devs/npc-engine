@@ -1,0 +1,382 @@
+Model: qwen2.5-3b-instruct-q4_k_m.gguf
+World: port_blackwater_zoned (Port Blackwater)
+Ticks: 15
+Reset: True
+------------------------------------------------------------------------
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-04-15 20:40:40,937 WARNING huggingface_hub.utils._http: Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 11444.67it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 12287 MiB):
+  Device 0: NVIDIA GeForce RTX 3060, compute capability 8.6, VMM: yes, VRAM: 12287 MiB
+llama_context: n_ctx_seq (16384) < n_ctx_train (32768) -- the full capacity of the model will not be utilized
+Narration mode: terse
+Active zones: ['dock_district']
+Lore file: D:\LLCWork\npc-engine\data\worlds\port_blackwater_zoned\story\lore.md
+Examples:  D:\LLCWork\npc-engine\data\worlds\port_blackwater_zoned\story\examples.yaml (17 entries)
+State dir: D:\LLCWork\npc-engine\data\worlds\port_blackwater_zoned\story
+Profiles loaded: 8
+RSS baseline: 2964 MB
+Scripted PLAYER kills: {6: [('old_bones', 'stabbed by the player in the Drowned Rat tavern', -80)]}
+
+=== TICK 1 ===
+  snapshot: 291 chars (~72 tok)
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|##########| 103/103 [00:00<00:00, 8582.76it/s]
+[1mBertModel LOAD REPORT[0m from: sentence-transformers/all-MiniLM-L6-v2
+Key                     | Status     |  | 
+------------------------+------------+--+-
+embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  elapsed: 21.42s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Review the sealed letter from the governor of Meridia.", "target": "captain_reva", "event": "Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in e
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva'}
+    [2/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Finn has a dream of joining a crew, but also keeps a secret. A new quest can tie these together.", "npc_id": "finn", "quest": {"id": "dreams_and_secrets", "name": "Dreams and Secrets", "description": "Finn has been keeping a secret: a hooded figure 
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'finn', 'quest_id': 'dreams_and_secrets'}
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Gen T14 Bryn Oakshield notices a suspicious new dock worker.", "npc_id": "gen_t14_bryn_oakenshield", "fact": "A new dock worker, with dark hair and a weathered face, has arrived recently. He seems to know the docks well, and his eyes are always on th
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'gen_t14_bryn_oakenshield', 'fact_type': 'personal'}
+  world: +events(brom): 1; +events(captain_reva): 2; +quest(finn): dreams_and_secrets; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 1
+
+=== TICK 2 ===
+Loading weights:   0%|          | 0/106 [00:00<?, ?it/s]Loading weights: 100%|##########| 106/106 [00:00<00:00, 8830.11it/s]
+[1mDebertaV2ForSequenceClassification LOAD REPORT[0m from: cross-encoder/nli-deberta-v3-small
+Key                             | Status     |  | 
+--------------------------------+------------+--+-
+deberta.embeddings.position_ids | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+  elapsed: 18.42s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva sat at her desk and reviewed the sealed letter from the governor of Meridia, considering her next move.", "target": "captain_reva", "event": "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to h
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.666, 'matches_text': 'Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight.', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.995, 'is_contradiction': False, 'scores': {'contradiction': 0.005, 'entailment': 0.0, 'neutral': 0.995}}}}
+      ⚠ ledger sim=0.67  nli=neutral(0.99)  matches T1 event/captain_reva
+    [2/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Gen T19 Nils Larkspur is a new fence in town. He should have a reason for arriving recently.", "npc_id": "gen_t19_nils_larkspur", "quest": {"id": "recent_fencing", "name": "New Fence's Business", "description": "Nils Larkspur has just arrived from t
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'gen_t19_nils_larkspur', 'quest_id': 'recent_fencing'}
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones overheard someone talking about the strange singing and the lighthouse lens.", "npc_id": "old_bones", "fact": "I heard that strange singing coming from the Shoals last week, and a man talking about a piece of the lighthouse lens. He was car
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal'}
+  world: +events(brom): 1; +events(captain_reva): 2; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 1; +quest(gen_t19_nils_larkspur): recent_fencing; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 1
+
+=== TICK 3 ===
+  elapsed: 21.48s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva reviews her dock logs for signs of smuggling.", "target": "captain_reva", "event": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighe
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.707, 'matches_text': "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 2, 'nli': {'label': 'neutral', 'confidence': 0.99, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.008, 'neutral': 0.99}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.71  nli=neutral(0.99)  matches T2 event/captain_reva
+    [2/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Gather information from Varro, a fence with private knowledge.", "npc_id": "varro", "quest": {"id": "sea_tongue_fragments", "name": "Sea Tongue Fragments", "description": "Varro has seen melted lighthouse glass on the beach. Find out if he knows any
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'varro', 'quest_id': 'sea_tongue_fragments'}
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Brom discovered the remains of a strange lantern halfway up the lighthouse path.", "npc_id": "brom", "fact": "Brom found the remains of a strange lantern halfway up the lighthouse path. The lantern was melted glass and had iron bands around it. This 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'brom', 'fact_type': 'world'}
+  world: +events(brom): 1; +events(captain_reva): 2; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +quest(varro): sea_tongue_fragments; +events(varro): 1
+
+=== TICK 4 ===
+  elapsed: 20.03s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva noticed a suspiciously light crate at the docks.", "target": "captain_reva", "event": "Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the othe
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.711, 'matches_text': 'Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 3, 'nli': {'label': 'contradiction', 'confidence': 0.894, 'is_contradiction': True, 'scores': {'contradiction': 0.894, 'entailment': 0.004, 'neutral': 0.102}}, 'contradiction': True}, 'retried_after_self_repetition': True}
+      ⚠⚠ CONTRADICTION sim=0.71  nli=contradiction(0.89)  matches T3 event/captain_reva
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn notices a shadow moving near the lighthouse.", "npc_id": "finn", "fact": "I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Cap
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.602, 'matches_text': "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.", 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.994, 'is_contradiction': False, 'scores': {'contradiction': 0.006, 'entailment': 0.0, 'neutral': 0.994}}}}
+      ⚠ ledger sim=0.60  nli=neutral(0.99)  matches T1 quest/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen Bryn Oakshield notices a suspicious figure on the dock.", "target": "gen_t14_bryn_oakenshield", "event": "Gen Bryn Oakshield, a dock worker from the dock district, spotted a hooded figure rummaging through the crates near the dock three. The fig
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t14_bryn_oakenshield'}
+  world: +events(captain_reva): 1; +events(gen_t14_bryn_oakenshield): 1
+
+=== TICK 5 ===
+  [ARC] PROPOSED arc_t5_1776310942
+        theme: Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself
+        cast:  ['captain_reva']
+        beat:  1/4 (seed)
+  [ARC] arc_t5_1776310942 beat 1/4 (seed)
+  elapsed: 16.67s   sub_actions: 3
+    [1/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Gen T19 Nils Larkspur is a new fence in the dock district looking for work. Provide him a new task.", "npc_id": "gen_t19_nils_larkspur", "quest": {"id": "dock_fence_search", "name": "Dock Fence Search", "description": "Nils needs to find a crate at 
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'gen_t19_nils_larkspur', 'quest_id': 'dock_fence_search'}
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Old Bones heard a strange song from the Shoals last week.", "npc_id": "old_bones", "fact": "Last week, I heard a haunting song coming from the Shoals. It sounded like an ancient language and was sung by multiple voices. It was unsettling. I wonder wh
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'old_bones', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.608, 'matches_text': "I heard that strange singing coming from the Shoals last week, and a man talking about a piece of the lighthouse lens. He was carrying one of those black glass jars. They were talking in a language I don't recognize, but it sounded ancient.", 'matches_npc': 'old_bones', 'matches_kind': 'fact', 'matches_tick': 2, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.002, 'neutral': 0.998}}}}
+      ⚠ ledger sim=0.61  nli=neutral(1.00)  matches T2 fact/old_bones
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Varro is checking the lighthouse path for new wreck cargo as he climbs up.", "target": "varro", "event": "Varro slipped on a loose cobble and fell from the lighthouse path. He twisted his ankle and groaned as he struggled to get back up."}
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'varro'}
+  world: +events(brom): 1; +events(captain_reva): 1; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 1; +quest(gen_t19_nils_larkspur): dock_fence_search; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 2
+
+=== TICK 6 ===
+  [ARC] arc_t5_1776310942 beat 1/4 (seed)
+  elapsed: 32.97s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Nils Larkspur learns about the sealed letter from the governor of Meridia.", "npc_id": "gen_t19_nils_larkspur", "fact": "Nils Larkspur found a suspicious package at the docks. It was sealed and labeled with the governor's seal. I will not tell anyone
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'gen_t19_nils_larkspur', 'fact_type': 'world'}
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva inspected the crates at the docks again, her eyes narrowing in suspicion.", "target": "captain_reva", "event": "Captain Reva's hands trembled as she examined a crate at the docks, her eyes narrowing. It rattled unnaturally, like thin gl
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.875, 'matches_text': "Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. She frowned, her mind racing with possibilities.", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.002, 'neutral': 0.997}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.88  nli=neutral(1.00)  matches T4 event/captain_reva
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Thessa learned a new piece of information about the lighthouse keeper.", "npc_id": "thessa", "fact": "The lighthouse keeper argued with a hooded figure the night the light went out, but the hooded figure carried a black glass jar and disappeared with
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'thessa', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.645, 'matches_text': 'I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.989, 'is_contradiction': False, 'scores': {'contradiction': 0.011, 'entailment': 0.0, 'neutral': 0.989}}}}
+      ⚠ ledger sim=0.65  nli=neutral(0.99)  matches T4 fact/finn
+  world: +events(captain_reva): 1
+
+[PLAYER KILL after T6] old_bones — stabbed by the player in the Drowned Rat tavern (trust_delta=-80)
+
+=== TICK 7 ===
+  [ARC] arc_t5_1776310942 beat 1/4 (seed)
+  elapsed: 17.00s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen T19 Nils Larkspur notices an unusual package at the docks.", "target": "gen_t19_nils_larkspur", "event": "Nils Larkspur's eyes widened as he recognized the sealed, labeled crate in the dock district. He approached cautiously, his hands shaking s
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t19_nils_larkspur'}
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learned more about the strange cargo the Red Tide brought in.", "npc_id": "finn", "fact": "I learned the sealed black crates were not just sealed but also had glowing markings on the lid. The markings looked like old sea-tongue script, and they 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world'}
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen Bryn Oakeshield's recent arrival makes him wary of the docks.", "target": "gen_t14_bryn_oakenshield", "event": "Gen Bryn Oakeshield nervously eyed the crates at the docks. A shadow moved out of the corner of his eye, and he quickly glanced over 
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t14_bryn_oakenshield'}
+  world: +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1
+
+=== TICK 8 ===
+  [ARC] arc_t5_1776310942 beat 1/4 (seed)
+  elapsed: 21.22s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Nils Larkspur notices a suspicious figure near the docks.", "npc_id": "gen_t19_nils_larkspur", "fact": "Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the l
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'gen_t19_nils_larkspur', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.608, 'matches_text': 'I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.', 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.768, 'is_contradiction': False, 'scores': {'contradiction': 0.232, 'entailment': 0.001, 'neutral': 0.768}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.61  nli=neutral(0.77)  matches T4 fact/finn
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "The lighthouse keeper's disappearance is on Varro's mind.", "target": "varro", "event": "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'varro', 'similarity_warning': {'similarity': 0.681, 'matches_text': 'Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.', 'matches_npc': 'varro', 'matches_kind': 'quest', 'matches_tick': 3, 'nli': {'label': 'contradiction', 'confidence': 0.705, 'is_contradiction': False, 'scores': {'contradiction': 0.705, 'entailment': 0.0, 'neutral': 0.295}}}}
+      ⚠ ledger sim=0.68  nli=contradiction(0.70)  matches T3 quest/varro
+    [3/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Captain Reva needs to stay sharp and vigilant in the face of the dark lighthouse mystery.", "npc_id": "captain_reva", "quest": {"id": "lighthouse_watch", "name": "Lighthouse Watch", "description": "Captain Reva must sit at her desk and keep a close 
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'captain_reva', 'quest_id': 'lighthouse_watch', 'similarity_warning': {'similarity': 0.737, 'matches_text': 'Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.001, 'neutral': 0.998}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.737, 'matches_tick': 3}}
+      ⚠ ledger sim=0.74  nli=neutral(1.00)  matches T3 event/captain_reva
+  world: +events(brom): 1; +quest(captain_reva): lighthouse_watch; +events(captain_reva): 1; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 2
+
+=== TICK 9 ===
+  [ARC] arc_t5_1776310942 beat 1/4 (seed)
+  elapsed: 27.03s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learns a new piece of information from the docks.", "npc_id": "finn", "fact": "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.", "
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.645, 'matches_text': "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.", 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.898, 'is_contradiction': False, 'scores': {'contradiction': 0.099, 'entailment': 0.002, 'neutral': 0.898}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.65  nli=neutral(0.90)  matches T1 quest/finn
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen T14 Bryn Oakshield notices a strange figure near the docks.", "target": "gen_t14_bryn_oakenshield", "event": "Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his sp
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t14_bryn_oakenshield', 'similarity_warning': {'similarity': 0.765, 'matches_text': "Gen Bryn Oakshield, a dock worker from the dock district, spotted a hooded figure rummaging through the crates near the dock three. The figure wore heavy leather boots and a hood pulled low over their face. Gen Bryn Oakshield's eyes narrowe", 'matches_npc': 'gen_t14_bryn_oakenshield', 'matches_kind': 'event', 'matches_tick': 4, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.765, 'matches_tick': 4}}
+      ⚠ ledger sim=0.77  nli=neutral(1.00)  matches T4 event/gen_t14_bryn_oakenshield
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Brom has learned that the lights inside the lighthouse move every new moon.", "npc_id": "brom", "fact": "The lights inside the lighthouse move every new moon, and I saw them shimmering inside the dark lighthouse last night. It’s a warning, I believe.
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'brom', 'fact_type': 'world'}
+  world: +events(gen_t14_bryn_oakenshield): 1
+
+=== TICK 10 ===
+  snapshot: 1085 chars (~271 tok)
+  [ARC] PROPOSED arc_t10_1776311056
+        theme: Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but
+        cast:  ['gen_t19_nils_larkspur', 'finn', 'gen_t14_bryn_oakenshield', 'thessa']
+        beat:  1/4 (seed)
+  [ARC] arc_t5_1776310942 beat 1/4 (seed) | arc_t10_1776311056 beat 1/4 (seed)
+  elapsed: 20.47s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Finn notices a shadowy figure lingering near the docks, checking the lighthouse path again. He feels uneasy but dismisses it.", "target": "finn", "event": "Finn watched the shadows near the docks for a moment, then saw a figure moving towards the no
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'finn', 'similarity_warning': {'similarity': 0.762, 'matches_text': "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.", 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.76  nli=neutral(1.00)  matches T9 fact/finn
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva heard a rumour about the north cliff that connects with the lighthouse mystery.", "npc_id": "captain_reva", "fact": "Captain Reva heard a rumour from dock workers that a tunnel connects the north cliff of Port Blackwater to the lighthous
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.602, 'matches_text': 'Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.001, 'neutral': 0.997}}}}
+      ⚠ ledger sim=0.60  nli=neutral(1.00)  matches T3 event/captain_reva
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Seed the tension through a private observation.", "target": "gen_t19_nils_larkspur", "event": "Nils Larkspur peeked through the window of the Drowned Rat tavern, his eyes narrowing on the shadowy shape moving towards the north gate. He thought it mi
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t19_nils_larkspur'}
+  world: +events(finn): 1; +events(gen_t19_nils_larkspur): 1
+
+=== TICK 11 ===
+  [ARC] arc_t10_1776311056 BEAT 1 -> 2 (escalate)
+  [ARC] arc_t5_1776310942 beat 1/4 (seed) | arc_t10_1776311056 beat 2/4 (escalate)
+  elapsed: 39.06s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn saw a shadowy figure on the docks last night moving towards the north gate, but dismissed it as just a shadow. Now he remembers the hooded figure near the lighthouse. He wonders if they're connected.", "npc_id": "finn", "fact": "Finn noticed a s
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.773, 'matches_text': "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.", 'matches_npc': 'finn', 'matches_kind': 'quest', 'matches_tick': 1, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.002, 'neutral': 0.997}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.77  nli=neutral(1.00)  matches T1 quest/finn
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Varro, climbing the lighthouse path, hears a soft whisper from the shadows.", "target": "varro", "event": "Varro, peering into the darkness, hears a soft whisper from the shadows. He quickly turns and runs back to his cabin, leaving the path unmarke
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'varro', 'similarity_warning': {'similarity': 0.81, 'matches_text': "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down t", 'matches_npc': 'varro', 'matches_kind': 'event', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.001, 'neutral': 0.996}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.81  nli=neutral(1.00)  matches T8 event/varro
+    [3/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Introduce the dock worker's suspicion of the hooded figure.", "npc_id": "gen_t14_bryn_oakenshield", "quest": {"id": "dock_worker_suspicion", "name": "Dock Worker's Suspicion", "description": "Gen T14 Bryn Oakshield noticed a hooded figure lurking ne
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'gen_t14_bryn_oakenshield', 'quest_id': 'dock_worker_suspicion', 'similarity_warning': {'similarity': 0.809, 'matches_text': 'Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.', 'matches_npc': 'gen_t14_bryn_oakenshield', 'matches_kind': 'event', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.995, 'is_contradiction': False, 'scores': {'contradiction': 0.005, 'entailment': 0.0, 'neutral': 0.995}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.809, 'matches_tick': 9}}
+      ⚠ ledger sim=0.81  nli=neutral(0.99)  matches T9 event/gen_t14_bryn_oakenshield
+  world: +events(brom): 1; +events(captain_reva): 1; +events(finn): 1; +quest(gen_t14_bryn_oakenshield): dock_worker_suspicion; +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 2
+
+=== TICK 12 ===
+  [ARC] arc_t5_1776310942 BEAT 1 -> 2 (escalate)
+  [ARC] arc_t5_1776310942 beat 2/4 (escalate) | arc_t10_1776311056 beat 2/4 (escalate)
+  elapsed: 36.69s   sub_actions: 3
+    [1/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learned the mysterious black crates are sealed and have markings that glow faintly in moonlight.", "npc_id": "finn", "fact": "I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue scri
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.626, 'matches_text': 'Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.', 'matches_npc': 'varro', 'matches_kind': 'quest', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.001, 'neutral': 0.997}}}}
+      ⚠ ledger sim=0.63  nli=neutral(1.00)  matches T3 quest/varro
+    [2/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Captain Reva examined the cargo of the last ship to dock, noticing the sealed black glass jars with faintly glowing markings.", "target": "captain_reva", "event": "Captain Reva took a closer look at the crates of the last ship to dock, noting the se
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'captain_reva', 'similarity_warning': {'similarity': 0.857, 'matches_text': "Captain Reva's hands trembled as she examined a crate at the docks, her eyes narrowing. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. Sighing, she decided to check the dock logs for any signs of ", 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 6, 'nli': {'label': 'neutral', 'confidence': 0.995, 'is_contradiction': False, 'scores': {'contradiction': 0.005, 'entailment': 0.001, 'neutral': 0.995}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.86  nli=neutral(0.99)  matches T6 event/captain_reva
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Gen T19 Nils Larkspur sees a shadowy figure lurking near the docks again.", "npc_id": "gen_t19_nils_larkspur", "fact": "Nils Larkspur saw a shadowy figure near the docks again last night, moving towards the north gate. This time, he noticed a hooded 
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'gen_t19_nils_larkspur', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.891, 'matches_text': 'Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the light.', 'matches_npc': 'gen_t19_nils_larkspur', 'matches_kind': 'fact', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.996, 'is_contradiction': False, 'scores': {'contradiction': 0.003, 'entailment': 0.0, 'neutral': 0.996}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.891, 'matches_tick': 8}}
+      ⚠ ledger sim=0.89  nli=neutral(1.00)  matches T8 fact/gen_t19_nils_larkspur
+  world: +events(captain_reva): 1
+
+=== TICK 13 ===
+  [ARC] arc_t5_1776310942 beat 2/4 (escalate) | arc_t10_1776311056 beat 2/4 (escalate)
+  elapsed: 24.44s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression.", "target": "gen_t14_bryn_oakenshield", "event": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near th
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t14_bryn_oakenshield', 'similarity_warning': {'similarity': 0.838, 'matches_text': 'Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.', 'matches_npc': 'gen_t14_bryn_oakenshield', 'matches_kind': 'event', 'matches_tick': 9, 'nli': {'label': 'neutral', 'confidence': 0.997, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.001, 'neutral': 0.997}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.84  nli=neutral(1.00)  matches T9 event/gen_t14_bryn_oakenshield
+    [2/3] OK[quest]  coerced=False
+      action: {"action": "quest", "reason": "Varro has private knowledge he can use to advance the story.", "npc_id": "varro", "quest": {"id": "glass_markets", "name": "Selling the Melted Glass", "description": "Varro knows that the melted lighthouse glass is worth three times its weight in go
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'varro', 'quest_id': 'glass_markets', 'similarity_warning': {'similarity': 0.62, 'matches_text': 'Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.', 'matches_npc': 'varro', 'matches_kind': 'quest', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.0, 'neutral': 0.999}}}}
+      ⚠ ledger sim=0.62  nli=neutral(1.00)  matches T3 quest/varro
+    [3/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved.", "npc_id": "captain_reva", "fact": "Captain Reva learned a ship from the Red Tide fleet has gone missing, possi
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.624, 'matches_text': 'Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil', 'matches_npc': 'captain_reva', 'matches_kind': 'event', 'matches_tick': 3, 'nli': {'label': 'neutral', 'confidence': 0.979, 'is_contradiction': False, 'scores': {'contradiction': 0.021, 'entailment': 0.0, 'neutral': 0.979}}}}
+      ⚠ ledger sim=0.62  nli=neutral(0.98)  matches T3 event/captain_reva
+  world: +events(brom): 1; +events(captain_reva): 1; +events(finn): 1; +events(gen_t14_bryn_oakenshield): 2; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +quest(varro): glass_markets; +events(varro): 1
+
+=== TICK 14 ===
+  [ARC] arc_t10_1776311056 BEAT 2 -> 3 (confront)
+  [ARC] arc_t5_1776310942 beat 2/4 (escalate) | arc_t10_1776311056 beat 3/4 (confront)
+  elapsed: 28.39s   sub_actions: 3
+    [1/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Gen T14 Bryn Oakshield notices a shadowy figure lingering near the docks again.", "target": "gen_t14_bryn_oakenshield", "event": "Gen T14 Bryn Oakshield observed a shadowy figure moving slowly near the docks, casting long shadows in the moonlight, a
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t14_bryn_oakenshield', 'similarity_warning': {'similarity': 0.716, 'matches_text': 'Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.', 'matches_npc': 'gen_t14_bryn_oakenshield', 'matches_kind': 'quest', 'matches_tick': 11, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.002, 'entailment': 0.0, 'neutral': 0.998}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.72  nli=neutral(1.00)  matches T11 quest/gen_t14_bryn_oakenshield
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Finn learns a new detail about the strange black glass crates.", "npc_id": "finn", "fact": "I found faint sea-tongue script markings on the glass shard, like a faded sea map. It's not just any markings, they glow faintly in moonlight. The Red Tide fl
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'finn', 'fact_type': 'personal', 'similarity_warning': {'similarity': 0.77, 'matches_text': "I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue script, but I can't read it. I'm going to bring it to Old Bones to see if he knows anything.", 'matches_npc': 'finn', 'matches_kind': 'fact', 'matches_tick': 12, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.77, 'matches_tick': 12}}
+      ⚠ ledger sim=0.77  nli=neutral(1.00)  matches T12 fact/finn
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Nils Larkspur notices a shadowy figure near the docks again, this time he decides to investigate.", "target": "gen_t19_nils_larkspur", "event": "Nils Larkspur noticed a shadowy figure near the docks at night. He thought it might be a smuggler and de
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'gen_t19_nils_larkspur', 'similarity_warning': {'similarity': 0.788, 'matches_text': 'Nils Larkspur saw a shadowy figure near the docks again last night, moving towards the north gate. This time, he noticed a hooded figure and a faint glow emanating from inside the shadow, as if the hooded figure was carrying something dark ', 'matches_npc': 'gen_t19_nils_larkspur', 'matches_kind': 'fact', 'matches_tick': 12, 'nli': {'label': 'neutral', 'confidence': 0.999, 'is_contradiction': False, 'scores': {'contradiction': 0.0, 'entailment': 0.001, 'neutral': 0.999}}}, 'retried_after_contradiction': True}
+      ⚠ ledger sim=0.79  nli=neutral(1.00)  matches T12 fact/gen_t19_nils_larkspur
+  world: +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1
+
+=== TICK 15 ===
+  [ARC] PROPOSED arc_t15_1776311205
+        theme: Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure ap
+        cast:  ['varro']
+        beat:  1/4 (seed)
+  [ARC] arc_t5_1776310942 beat 2/4 (escalate) | arc_t10_1776311056 beat 3/4 (confront) | arc_t15_1776311205 beat 1/4 (seed)
+  elapsed: 26.02s   sub_actions: 3
+    [1/3] OK[quest]  coerced=True
+      action: {"action": "quest", "reason": "Gen T14 Bryn Oakshield observed a shadowy figure near the docks and decided to investigate.", "npc_id": "gen_t14_bryn_oakenshield", "quest": {"id": "gen_1776311220", "name": "Gen T14 Bryn Oakshield noticed a shadowy figure moving near ", "descriptio
+      dispatch: {'ok': True, 'kind': 'quest', 'npc_id': 'gen_t14_bryn_oakenshield', 'quest_id': 'gen_1776311220', 'similarity_warning': {'similarity': 0.776, 'matches_text': 'Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.', 'matches_npc': 'gen_t14_bryn_oakenshield', 'matches_kind': 'quest', 'matches_tick': 11, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.001, 'neutral': 0.998}}}, 'retried_after_self_repetition': True}
+      ⚠ ledger sim=0.78  nli=neutral(1.00)  matches T11 quest/gen_t14_bryn_oakenshield
+    [2/3] OK[fact]  coerced=False
+      action: {"action": "fact", "reason": "Captain Reva suspects Old Bones is trying to sell the governor's pardon to the Red Tide.", "npc_id": "captain_reva", "fact": "Captain Reva observed Old Bones talking to a mysterious hooded figure near the docks last night. The hooded figure seemed to
+      dispatch: {'ok': True, 'kind': 'fact', 'npc_id': 'captain_reva', 'fact_type': 'world', 'similarity_warning': {'similarity': 0.621, 'matches_text': 'Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved in smuggling contraband through the tavern cellar.', 'matches_npc': 'captain_reva', 'matches_kind': 'fact', 'matches_tick': 13, 'nli': {'label': 'neutral', 'confidence': 0.998, 'is_contradiction': False, 'scores': {'contradiction': 0.001, 'entailment': 0.0, 'neutral': 0.998}}}}
+      ⚠ ledger sim=0.62  nli=neutral(1.00)  matches T13 fact/captain_reva
+    [3/3] OK[event]  coerced=False
+      action: {"action": "event", "reason": "Varro checks the rocks for new wreck cargo and spots a hooded figure approaching.", "target": "varro", "event": "Varro paused on the lighthouse path, his eyes narrowing as he spotted a hooded figure moving towards the north gate. The figure paused a
+      dispatch: {'ok': True, 'kind': 'event', 'target': 'varro', 'similarity_warning': {'similarity': 0.882, 'matches_text': "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down t", 'matches_npc': 'varro', 'matches_kind': 'event', 'matches_tick': 8, 'nli': {'label': 'neutral', 'confidence': 0.714, 'is_contradiction': False, 'scores': {'contradiction': 0.283, 'entailment': 0.002, 'neutral': 0.714}}}, 'skipped_self_rep_retry': {'skipped_self_rep_retry': True, 'reason': 'budget_exhausted', 'similarity': 0.882, 'matches_tick': 8}}
+      ⚠ ledger sim=0.88  nli=neutral(0.71)  matches T8 event/varro
+  world: +events(brom): 1; +events(captain_reva): 1; +events(finn): 1; +quest(gen_t14_bryn_oakenshield): gen_1776311220; +events(gen_t14_bryn_oakenshield): 1; +events(gen_t19_nils_larkspur): 1; +events(old_bones): 1; +events(thessa): 1; +events(varro): 2
+
+========================================================================
+SUMMARY
+========================================================================
+Total ticks: 15
+Total time: 371.31s   mean: 24.75s/tick
+Coercions:   1/15
+Outcomes:
+  OK[event]                             19 ###################
+  OK[fact]                              18 ##################
+  OK[quest]                              8 ########
+Action kinds:
+  event        19
+  fact         18
+  quest        8
+Targets touched:
+  captain_reva         10
+  finn                 8
+  gen_t14_bryn_oakenshield 8
+  gen_t19_nils_larkspur 8
+  varro                6
+  old_bones            2
+  brom                 2
+  thessa               1
+
+Scaling report
+  cast size:          8
+  NPCs touched:       8 / 8 (100.0%)
+  NPCs untouched:     0
+  max touches/NPC:    10
+  median touches/NPC: 6
+  snapshot chars:     first=291  last=1131  min=291  max=1131
+  snapshot tokens (~chars/4): first=72  last=282  max=282
+  RSS baseline:       2964 MB
+  RSS peak:           3444 MB  (growth +480 MB)
+Consecutive target repeats (sub-action level): 0/44
+FactLedger warnings: 29/15  (contradictions: 1)
+  T2 sim    sim=0.67 nli=neutral(0.99) -> T1 event/captain_reva: Captain Reva sat at her desk and read the sealed letter from the gover
+  T3 sim    sim=0.71 nli=neutral(0.99) -> T2 event/captain_reva: Captain Reva's hands trembled as she held the letter, the seal still i
+  T4 CONTRA sim=0.71 nli=contradiction(0.89) -> T3 event/captain_reva: Captain Reva sat at her desk and reviewed the dock logs for any signs 
+  T4 sim    sim=0.60 nli=neutral(0.99) -> T1 quest/finn: Finn has been keeping a secret: a hooded figure was seen climbing the 
+  T5 sim    sim=0.61 nli=neutral(1.00) -> T2 fact/old_bones: I heard that strange singing coming from the Shoals last week, and a m
+  T6 sim    sim=0.88 nli=neutral(1.00) -> T4 event/captain_reva: Captain Reva's eyes narrowed as she inspected a crate at the docks. It
+  T6 sim    sim=0.65 nli=neutral(0.99) -> T4 fact/finn: I saw a hooded figure climb the lighthouse path three nights ago, carr
+  T8 sim    sim=0.61 nli=neutral(0.77) -> T4 fact/finn: I saw a hooded figure climb the lighthouse path three nights ago, carr
+  T8 sim    sim=0.68 nli=contradiction(0.70) -> T3 quest/varro: Varro has seen melted lighthouse glass on the beach. Find out if he kn
+  T8 sim    sim=0.74 nli=neutral(1.00) -> T3 event/captain_reva: Captain Reva sat at her desk and reviewed the dock logs for any signs 
+  T9 sim    sim=0.65 nli=neutral(0.90) -> T1 quest/finn: Finn has been keeping a secret: a hooded figure was seen climbing the 
+  T9 sim    sim=0.77 nli=neutral(1.00) -> T4 event/gen_t14_bryn_oakenshield: Gen Bryn Oakshield, a dock worker from the dock district, spotted a ho
+  T10 sim    sim=0.76 nli=neutral(1.00) -> T9 fact/finn: Finn saw a shadowy figure on the docks at night, moving towards the no
+  T10 sim    sim=0.60 nli=neutral(1.00) -> T3 event/captain_reva: Captain Reva sat at her desk and reviewed the dock logs for any signs 
+  T11 sim    sim=0.77 nli=neutral(1.00) -> T1 quest/finn: Finn has been keeping a secret: a hooded figure was seen climbing the 
+  T11 sim    sim=0.81 nli=neutral(1.00) -> T8 event/varro: Varro, climbing the lighthouse path to check the rocks for new wreck c
+  T11 sim    sim=0.81 nli=neutral(0.99) -> T9 event/gen_t14_bryn_oakenshield: Gen T14 Bryn Oakshield noticed a hooded figure lingering near the dock
+  T12 sim    sim=0.63 nli=neutral(1.00) -> T3 quest/varro: Varro has seen melted lighthouse glass on the beach. Find out if he kn
+  T12 sim    sim=0.86 nli=neutral(0.99) -> T6 event/captain_reva: Captain Reva's hands trembled as she examined a crate at the docks, he
+  T12 sim    sim=0.89 nli=neutral(1.00) -> T8 fact/gen_t19_nils_larkspur: Nils Larkspur saw a hooded figure lingering near the docks last night.
+  T13 sim    sim=0.84 nli=neutral(1.00) -> T9 event/gen_t14_bryn_oakenshield: Gen T14 Bryn Oakshield noticed a hooded figure lingering near the dock
+  T13 sim    sim=0.62 nli=neutral(1.00) -> T3 quest/varro: Varro has seen melted lighthouse glass on the beach. Find out if he kn
+  T13 sim    sim=0.62 nli=neutral(0.98) -> T3 event/captain_reva: Captain Reva sat at her desk and reviewed the dock logs for any signs 
+  T14 sim    sim=0.72 nli=neutral(1.00) -> T11 quest/gen_t14_bryn_oakenshield: Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks.
+  T14 sim    sim=0.77 nli=neutral(1.00) -> T12 fact/finn: I noticed the strange markings on the glass shard as the moonlight fil
+  T14 sim    sim=0.79 nli=neutral(1.00) -> T12 fact/gen_t19_nils_larkspur: Nils Larkspur saw a shadowy figure near the docks again last night, mo
+  T15 sim    sim=0.78 nli=neutral(1.00) -> T11 quest/gen_t14_bryn_oakenshield: Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks.
+  T15 sim    sim=0.62 nli=neutral(1.00) -> T13 fact/captain_reva: Captain Reva learned a ship from the Red Tide fleet has gone missing, 
+  T15 sim    sim=0.88 nli=neutral(0.71) -> T8 event/varro: Varro, climbing the lighthouse path to check the rocks for new wreck c
+Ledger entries: 46  threshold: 0.6
+Arcs proposed: 3  active at end: 3
+  arc_t5_1776310942  status=active  beat=2/4 (escalate)
+    theme: Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, i
+    cast:  ['captain_reva']
+  arc_t10_1776311056  status=active  beat=3/4 (confront)
+    theme: Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as jus
+    cast:  ['gen_t19_nils_larkspur', 'finn', 'gen_t14_bryn_oakenshield', 'thessa']
+  arc_t15_1776311205  status=active  beat=1/4 (seed)
+    theme: Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figur
+    cast:  ['varro']
+Arc events (6):
+  T5 PROPOSED arc_t5_1776310942 cast=['captain_reva'] theme=Captain Reva's hands trembled as she held the letter, the se
+  T10 PROPOSED arc_t10_1776311056 cast=['gen_t19_nils_larkspur', 'finn', 'gen_t14_bryn_oakenshield', 'thessa'] theme=Nils Larkspur saw a hooded figure lingering near the docks l
+  T11 BEAT 1 -> 2  arc=arc_t10_1776311056
+  T12 BEAT 1 -> 2  arc=arc_t5_1776310942
+  T14 BEAT 2 -> 3  arc=arc_t10_1776311056
+  T15 PROPOSED arc_t15_1776311205 cast=['varro'] theme=Varro, climbing the lighthouse path to check the rocks for n
+
+Full trace written to: D:\LLCWork\npc-engine\logs\pb_player_kill_15.json

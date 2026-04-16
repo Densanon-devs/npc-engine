@@ -1618,6 +1618,138 @@ def test_autonomous_death_capped_by_session_limit():
     print("  [PASS] autonomous_death_capped_by_session_limit")
 
 
+def test_player_killed_npc_full_propagation():
+    """End-to-end scenario: player kills old_bones in the tavern.
+    Game client records the player action with trust_delta then
+    queues the death with cause='killed by the player...'. Verify
+    the Director propagates the death through every surface:
+    deceased record, player action trail, quest cleanup, focus
+    exclusion, snapshot 'RECENTLY DEPARTED', FactLedger gossip
+    entry, and the cause string containing 'player'."""
+    restore = _isolate_state_file("player_kill")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_ZONED_PROFILES,
+            responses=[
+                # 5 response slots — one per tick after the death
+                '{"action": "event", "target": "finn", "event": "finn hears news of the murder"}',
+                '{"action": "fact", "npc_id": "finn", "fact": "Old Bones was killed in the tavern last night"}',
+                '{"action": "event", "target": "varro", "event": "varro looks over his shoulder warily"}',
+                '{"action": "fact", "npc_id": "varro", "fact": "the tavern is closed since Old Bones died"}',
+                '{"action": "event", "target": "captain_reva", "event": "reva investigates the scene"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        director.set_active_zones(["dock_district"])
+
+        # Give old_bones an active quest that the player had accepted
+        from npc_engine.knowledge import Quest
+        engine.pie.npc_knowledge.profiles["old_bones"].add_quest(
+            Quest(id="tavern_smuggler", name="The Loose Tongue",
+                   description="Find the informant", status="active"),
+        )
+        pre_active_quests = [
+            q for q in engine.pie.npc_knowledge.profiles["old_bones"].quests
+            if q.status in ("available", "active")
+        ]
+        assert len(pre_active_quests) == 1
+
+        # 1. Player records the murder action (trust tanks on target)
+        player_result = director.record_player_action(
+            text="Player drew a blade and killed Old Bones in the tavern",
+            target="old_bones",
+            trust_delta=-60,
+        )
+        assert player_result["ok"] is True
+        assert director.recent_player_actions[-1]["target"] == "old_bones"
+
+        # 2. Game client queues the death
+        death_result = director.queue_death_request(
+            npc_id="old_bones",
+            cause="killed by the player in the tavern",
+            transfers_quests_to=None,
+        )
+        assert death_result["ok"] is True
+
+        # 3. Next tick drains the death via lifecycle phase
+        director.tick()
+
+        # Post-conditions
+        old_bones_npc = engine.pie.npc_knowledge.profiles["old_bones"]
+        assert old_bones_npc.status == "deceased"
+        assert "player" in old_bones_npc.death_cause.lower()
+        assert "old_bones" in director._deceased_npcs
+        rec = director._deceased_npcs["old_bones"]
+        assert "player" in rec["death_cause"].lower()
+        assert rec["death_tick"] > 0
+
+        # Quest was aborted (no inheritor given)
+        post_quests = [
+            q for q in engine.pie.npc_knowledge.profiles["old_bones"].quests
+            if q.status in ("available", "active")
+        ]
+        assert len(post_quests) == 0, (
+            "quest should be aborted after giver killed by player"
+        )
+        assert any(q.status == "aborted" for q in old_bones_npc.quests)
+
+        # Player action trail still carries the murder record so the
+        # Director's world snapshot surfaces it as player behavior
+        # on subsequent ticks
+        assert any(
+            "killed old bones" in pa.get("text", "").lower()
+            for pa in director.recent_player_actions
+        )
+
+        # 4. Future focus picks must exclude old_bones
+        for _ in range(10):
+            focus = director._pick_focus_npc()
+            assert focus != "old_bones", f"deceased picked: {focus}"
+
+        # 5. Snapshot surfaces the death as RECENTLY DEPARTED with
+        # the player-specific cause so the LLM sees it as world state
+        snap = director._world_snapshot()
+        assert "RECENTLY DEPARTED" in snap, snap
+        assert "killed by the player" in snap.lower()
+
+        # 6. FactLedger has a death entry for gossip propagation
+        ledger_texts = [
+            str(e.get("text", "")).lower()
+            for e in director.ledger.entries
+        ]
+        assert any(
+            ("dead" in t or "died" in t)
+            and ("old bones" in t or "old_bones" in t)
+            for t in ledger_texts
+        ), f"no FactLedger death entry found: {ledger_texts}"
+
+        # 7. Subsequent ticks continue to dispatch to other NPCs
+        # (world isn't frozen just because one NPC died)
+        director.tick()
+        director.tick()
+        # Should have touched various remaining dock NPCs
+        remaining_touches = set()
+        for d in director.recent_decisions:
+            for key in ("action", "sub_actions"):
+                val = d.get(key)
+                if isinstance(val, dict):
+                    nid = val.get("npc_id") or val.get("target")
+                    if nid and nid != "old_bones":
+                        remaining_touches.add(nid)
+                elif isinstance(val, list):
+                    for sub in val:
+                        a = sub.get("action", {}) if isinstance(sub, dict) else {}
+                        nid = a.get("npc_id") or a.get("target")
+                        if nid and nid != "old_bones":
+                            remaining_touches.add(nid)
+        assert len(remaining_touches) >= 1, (
+            f"rotation should continue post-death, touched: {remaining_touches}"
+        )
+    finally:
+        restore()
+    print("  [PASS] player_killed_npc_full_propagation")
+
+
 def test_autonomous_skips_death_when_no_arc_at_confront():
     """When autonomous is ON but no arc is at confront beat, the
     Director should NOT propose any death."""
@@ -4285,6 +4417,7 @@ def main():
     test_autonomous_on_proposes_death_at_confront()
     test_autonomous_death_capped_by_session_limit()
     test_autonomous_skips_death_when_no_arc_at_confront()
+    test_player_killed_npc_full_propagation()
 
     test_single_action_tick_is_backward_compatible()
     test_dialogue_autofeed_format()

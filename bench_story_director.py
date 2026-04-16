@@ -198,6 +198,19 @@ def boot_engine(model_path: Path, reset: bool, world_spec: dict):
                     runtime_file.unlink()
                 except Exception:
                     pass
+        # Clean up Director-generated NPC profiles from prior bench
+        # runs. Generated profiles have a `generated: true` tag and a
+        # `gen_t<tick>_` id prefix. Leaving them around between --reset
+        # benches inflates the cast with ghost NPCs from previous
+        # lifecycle sessions. In a real game these would persist (the
+        # alive-world feature), but bench runs want a clean start.
+        profiles_dir = world_dir / "npc_profiles"
+        if profiles_dir.exists():
+            for profile_file in profiles_dir.glob("gen_t*.yaml"):
+                try:
+                    profile_file.unlink()
+                except Exception:
+                    pass
         # Clear PIE's response cache so dialogue calls actually hit the
         # LLM instead of returning identical replies from the prior run.
         pie_cache = PIE_ROOT / "data" / "cache" / "response_cache.json"
@@ -375,6 +388,14 @@ def main():
                              "Death fires AFTER the specified tick completes "
                              "(queued via queue_death_request, dispatched on "
                              "the next lifecycle tick).")
+    parser.add_argument("--player-kill-at-tick", action="append", default=None,
+                        help="Scripted PLAYER-initiated kill for integration "
+                             "testing. Format: 'tick:npc_id[:cause[:trust_delta]]'. "
+                             "Records a player action (with tanking trust) "
+                             "AND queues the death — exactly the two calls a "
+                             "game client makes when the player murders an "
+                             "NPC. Default cause: 'killed by the player'. "
+                             "Default trust_delta: -60.")
     args = parser.parse_args()
 
     model_path = find_model(args.model)
@@ -446,6 +467,28 @@ def main():
             scripted_deaths.setdefault(tick_n, []).append((npc_id, cause))
         if scripted_deaths:
             print(f"Scripted deaths: {dict(scripted_deaths)}")
+
+    scripted_player_kills: dict[int, list[tuple[str, str, int]]] = {}
+    if args.player_kill_at_tick:
+        for spec in args.player_kill_at_tick:
+            parts = spec.split(":", 3)
+            if len(parts) < 2:
+                print(f"  [warn] bad --player-kill-at-tick spec: {spec}")
+                continue
+            try:
+                tick_n = int(parts[0])
+            except ValueError:
+                print(f"  [warn] bad tick number in --player-kill-at-tick: {spec}")
+                continue
+            npc_id = parts[1].strip()
+            cause = parts[2].strip() if len(parts) > 2 and parts[2].strip() else "killed by the player"
+            try:
+                trust_delta = int(parts[3]) if len(parts) > 3 else -60
+            except ValueError:
+                trust_delta = -60
+            scripted_player_kills.setdefault(tick_n, []).append((npc_id, cause, trust_delta))
+        if scripted_player_kills:
+            print(f"Scripted PLAYER kills: {dict(scripted_player_kills)}")
 
     try:
         outcomes = Counter()
@@ -691,6 +734,26 @@ def main():
                     )
                     if not result.get("ok"):
                         print(f"  [warn] death queue rejected: {result.get('reason')}")
+
+            # Scripted player-kills — player kills an NPC. Records
+            # the player action first (tanking trust) then queues
+            # the death. Game client's two-step path.
+            if tick_num in scripted_player_kills:
+                for npc_id, cause, trust_delta in scripted_player_kills[tick_num]:
+                    print(f"\n[PLAYER KILL after T{tick_num}] {npc_id} — {cause} "
+                          f"(trust_delta={trust_delta})")
+                    pa_result = engine.story_director.record_player_action(
+                        text=f"Player killed {npc_id}: {cause}",
+                        target=npc_id,
+                        trust_delta=trust_delta,
+                    )
+                    if not pa_result.get("ok"):
+                        print(f"  [warn] player action rejected: {pa_result.get('reason')}")
+                    d_result = engine.story_director.queue_death_request(
+                        npc_id, cause=cause,
+                    )
+                    if not d_result.get("ok"):
+                        print(f"  [warn] death queue rejected: {d_result.get('reason')}")
 
         # Summary
         print("\n" + "=" * 72)

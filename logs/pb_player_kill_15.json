@@ -1,0 +1,2064 @@
+{
+  "player_events": [],
+  "dialogue_events": [],
+  "ticks": [
+    {
+      "tick": 1,
+      "elapsed": 21.422,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Review the sealed letter from the governor of Meridia.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Review the sealed letter from the governor of Meridia.",
+            "target": "captain_reva",
+            "event": "Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Finn has a dream of joining a crew, but also keeps a secret. A new quest can tie these together.\", \"npc_id\": \"finn\", \"quest\": {\"id\": \"dreams_and_secrets\", \"name\": \"Dreams and Secrets\", \"description\": \"Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.\", \"reward\": \"A berth and a cutlass.\", \"objectives\": [\"Investigate the hooded figure's identity and find out what's at the Shoals.\", \"Join a crew and sail past the Shoals.\", \"Bring back information and a cutlass.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Finn has a dream of joining a crew, but also keeps a secret. A new quest can tie these together.",
+            "npc_id": "finn",
+            "quest": {
+              "id": "dreams_and_secrets",
+              "name": "Dreams and Secrets",
+              "description": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+              "reward": "A berth and a cutlass.",
+              "objectives": [
+                "Investigate the hooded figure's identity and find out what's at the Shoals.",
+                "Join a crew and sail past the Shoals.",
+                "Bring back information and a cutlass."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "finn",
+            "quest_id": "dreams_and_secrets"
+          }
+        },
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Gen T14 Bryn Oakshield notices a suspicious new dock worker.\", \"npc_id\": \"gen_t14_bryn_oakenshield\", \"fact\": \"A new dock worker, with dark hair and a weathered face, has arrived recently. He seems to know the docks well, and his eyes are always on the water, as if he’s been watching for something. I’ll keep an eye on him.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Gen T14 Bryn Oakshield notices a suspicious new dock worker.",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "fact": "A new dock worker, with dark hair and a weathered face, has arrived recently. He seems to know the docks well, and his eyes are always on the water, as if he’s been watching for something. I’ll keep an eye on him.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "fact_type": "personal"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 2",
+        "+quest(finn): dreams_and_secrets",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Review the sealed letter from the governor of Meridia.",
+        "target": "captain_reva",
+        "event": "Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva"
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 2,
+      "elapsed": 18.422,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva sat at her desk and reviewed the sealed letter from the governor of Meridia, considering her next move.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva sat at her desk and reviewed the sealed letter from the governor of Meridia, considering her next move.",
+            "target": "captain_reva",
+            "event": "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.666,
+              "matches_text": "Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.0,
+                  "neutral": 0.995
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Gen T19 Nils Larkspur is a new fence in town. He should have a reason for arriving recently.\", \"npc_id\": \"gen_t19_nils_larkspur\", \"quest\": {\"id\": \"recent_fencing\", \"name\": \"New Fence's Business\", \"description\": \"Nils Larkspur has just arrived from the dock district to fence goods. He's looking to make a few shady deals.\", \"reward\": \"A good reputation and an extra five silver.\", \"objectives\": [\"Talk to Nils and get his backstory. Find out why he's in town so soon.\"]}}\n\n---",
+          "action": {
+            "action": "quest",
+            "reason": "Gen T19 Nils Larkspur is a new fence in town. He should have a reason for arriving recently.",
+            "npc_id": "gen_t19_nils_larkspur",
+            "quest": {
+              "id": "recent_fencing",
+              "name": "New Fence's Business",
+              "description": "Nils Larkspur has just arrived from the dock district to fence goods. He's looking to make a few shady deals.",
+              "reward": "A good reputation and an extra five silver.",
+              "objectives": [
+                "Talk to Nils and get his backstory. Find out why he's in town so soon."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "gen_t19_nils_larkspur",
+            "quest_id": "recent_fencing"
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones overheard someone talking about the strange singing and the lighthouse lens.\", \"npc_id\": \"old_bones\", \"fact\": \"I heard that strange singing coming from the Shoals last week, and a man talking about a piece of the lighthouse lens. He was carrying one of those black glass jars. They were talking in a language I don't recognize, but it sounded ancient.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones overheard someone talking about the strange singing and the lighthouse lens.",
+            "npc_id": "old_bones",
+            "fact": "I heard that strange singing coming from the Shoals last week, and a man talking about a piece of the lighthouse lens. He was carrying one of those black glass jars. They were talking in a language I don't recognize, but it sounded ancient.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 2",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+quest(gen_t19_nils_larkspur): recent_fencing",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva sat at her desk and reviewed the sealed letter from the governor of Meridia, considering her next move.",
+        "target": "captain_reva",
+        "event": "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.666,
+          "matches_text": "Captain Reva sat at her desk and read the sealed letter from the governor of Meridia, her eyes narrowing as she considered the offer to pardon the port in exchange for handing it over to the crown. She made a note to read it again tonight.",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 1,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.995,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.005,
+              "entailment": 0.0,
+              "neutral": 0.995
+            }
+          }
+        }
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 3,
+      "elapsed": 21.484,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Captain Reva reviews her dock logs for signs of smuggling.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chill in the air.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva reviews her dock logs for signs of smuggling.",
+            "target": "captain_reva",
+            "event": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chill in the air."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.707,
+              "matches_text": "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.99,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.008,
+                  "neutral": 0.99
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Gather information from Varro, a fence with private knowledge.\", \"npc_id\": \"varro\", \"quest\": {\"id\": \"sea_tongue_fragments\", \"name\": \"Sea Tongue Fragments\", \"description\": \"Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.\", \"reward\": \"A permanent berth and twenty silver.\", \"objectives\": [\"Talk to Varro twice a week for a week and listen for any information about the melted glass.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Gather information from Varro, a fence with private knowledge.",
+            "npc_id": "varro",
+            "quest": {
+              "id": "sea_tongue_fragments",
+              "name": "Sea Tongue Fragments",
+              "description": "Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.",
+              "reward": "A permanent berth and twenty silver.",
+              "objectives": [
+                "Talk to Varro twice a week for a week and listen for any information about the melted glass."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "varro",
+            "quest_id": "sea_tongue_fragments"
+          }
+        },
+        {
+          "focus_npc": "brom",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Brom discovered the remains of a strange lantern halfway up the lighthouse path.\", \"npc_id\": \"brom\", \"fact\": \"Brom found the remains of a strange lantern halfway up the lighthouse path. The lantern was melted glass and had iron bands around it. This confirms the lighthouse's lens was melted, not shattered.\", \"fact_type\": \"world\"}\nThe strange lantern's melted glass and iron bands confirm the lighthouse's lens was melted, not shattered. Brom has learned a new piece of the puzzle.",
+          "action": {
+            "action": "fact",
+            "reason": "Brom discovered the remains of a strange lantern halfway up the lighthouse path.",
+            "npc_id": "brom",
+            "fact": "Brom found the remains of a strange lantern halfway up the lighthouse path. The lantern was melted glass and had iron bands around it. This confirms the lighthouse's lens was melted, not shattered.",
+            "fact_type": "world"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "brom",
+            "fact_type": "world"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 2",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+quest(varro): sea_tongue_fragments",
+        "+events(varro): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva reviews her dock logs for signs of smuggling.",
+        "target": "captain_reva",
+        "event": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chill in the air."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.707,
+          "matches_text": "Captain Reva's hands trembled as she held the letter, the seal still intact. She muttered to herself, 'This is a test, isn't it?'",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 2,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.99,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.008,
+              "neutral": 0.99
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 4,
+      "elapsed": 20.031,
+      "sub_actions": [
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Make it a single JSON object.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva noticed a suspiciously light crate at the docks.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. She frowned, her mind racing with possibilities.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva noticed a suspiciously light crate at the docks.",
+            "target": "captain_reva",
+            "event": "Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. She frowned, her mind racing with possibilities."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.711,
+              "matches_text": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "contradiction",
+                "confidence": 0.894,
+                "is_contradiction": true,
+                "scores": {
+                  "contradiction": 0.894,
+                  "entailment": 0.004,
+                  "neutral": 0.102
+                }
+              },
+              "contradiction": true
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn notices a shadow moving near the lighthouse.\", \"npc_id\": \"finn\", \"fact\": \"I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn notices a shadow moving near the lighthouse.",
+            "npc_id": "finn",
+            "fact": "I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.602,
+              "matches_text": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.994,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.006,
+                  "entailment": 0.0,
+                  "neutral": 0.994
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Gen Bryn Oakshield notices a suspicious figure on the dock.\", \"target\": \"gen_t14_bryn_oakenshield\", \"event\": \"Gen Bryn Oakshield, a dock worker from the dock district, spotted a hooded figure rummaging through the crates near the dock three. The figure wore heavy leather boots and a hood pulled low over their face. Gen Bryn Oakshield's eyes narrowed as he noticed the figure's movements were cautious and hurried.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Gen Bryn Oakshield notices a suspicious figure on the dock.",
+            "target": "gen_t14_bryn_oakenshield",
+            "event": "Gen Bryn Oakshield, a dock worker from the dock district, spotted a hooded figure rummaging through the crates near the dock three. The figure wore heavy leather boots and a hood pulled low over their face. Gen Bryn Oakshield's eyes narrowed as he noticed the figure's movements were cautious and hurried."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t14_bryn_oakenshield"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1",
+        "+events(gen_t14_bryn_oakenshield): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Captain Reva noticed a suspiciously light crate at the docks.",
+        "target": "captain_reva",
+        "event": "Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. She frowned, her mind racing with possibilities."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "captain_reva",
+        "similarity_warning": {
+          "similarity": 0.711,
+          "matches_text": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil",
+          "matches_npc": "captain_reva",
+          "matches_kind": "event",
+          "matches_tick": 3,
+          "nli": {
+            "label": "contradiction",
+            "confidence": 0.894,
+            "is_contradiction": true,
+            "scores": {
+              "contradiction": 0.894,
+              "entailment": 0.004,
+              "neutral": 0.102
+            }
+          },
+          "contradiction": true
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 5,
+      "elapsed": 16.672,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Gen T19 Nils Larkspur is a new fence in the dock district looking for work. Provide him a new task.\", \"npc_id\": \"gen_t19_nils_larkspur\", \"quest\": {\"id\": \"dock_fence_search\", \"name\": \"Dock Fence Search\", \"description\": \"Nils needs to find a crate at the docks that has been stolen. He can earn 5 silver and a permanent berth by recovering it.\", \"reward\": \"5 silver, 1 berth\", \"objectives\": [\"Find a stolen crate at the docks and recover it.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Gen T19 Nils Larkspur is a new fence in the dock district looking for work. Provide him a new task.",
+            "npc_id": "gen_t19_nils_larkspur",
+            "quest": {
+              "id": "dock_fence_search",
+              "name": "Dock Fence Search",
+              "description": "Nils needs to find a crate at the docks that has been stolen. He can earn 5 silver and a permanent berth by recovering it.",
+              "reward": "5 silver, 1 berth",
+              "objectives": [
+                "Find a stolen crate at the docks and recover it."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "gen_t19_nils_larkspur",
+            "quest_id": "dock_fence_search"
+          }
+        },
+        {
+          "focus_npc": "old_bones",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Old Bones heard a strange song from the Shoals last week.\", \"npc_id\": \"old_bones\", \"fact\": \"Last week, I heard a haunting song coming from the Shoals. It sounded like an ancient language and was sung by multiple voices. It was unsettling. I wonder what it means.\", \"fact_type\": \"personal\"} The strange song heard by Old Bones from the Shoals last week has unsettled him, adding another layer of mystery to the dark lighthouse and the sealed black glass jars that were last seen on a ship before the light went out.",
+          "action": {
+            "action": "fact",
+            "reason": "Old Bones heard a strange song from the Shoals last week.",
+            "npc_id": "old_bones",
+            "fact": "Last week, I heard a haunting song coming from the Shoals. It sounded like an ancient language and was sung by multiple voices. It was unsettling. I wonder what it means.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "old_bones",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.608,
+              "matches_text": "I heard that strange singing coming from the Shoals last week, and a man talking about a piece of the lighthouse lens. He was carrying one of those black glass jars. They were talking in a language I don't recognize, but it sounded ancient.",
+              "matches_npc": "old_bones",
+              "matches_kind": "fact",
+              "matches_tick": 2,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.002,
+                  "neutral": 0.998
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Varro is checking the lighthouse path for new wreck cargo as he climbs up.\", \"target\": \"varro\", \"event\": \"Varro slipped on a loose cobble and fell from the lighthouse path. He twisted his ankle and groaned as he struggled to get back up.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Varro is checking the lighthouse path for new wreck cargo as he climbs up.",
+            "target": "varro",
+            "event": "Varro slipped on a loose cobble and fell from the lighthouse path. He twisted his ankle and groaned as he struggled to get back up."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "varro"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+quest(gen_t19_nils_larkspur): dock_fence_search",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 2"
+      ],
+      "action": {
+        "action": "quest",
+        "reason": "Gen T19 Nils Larkspur is a new fence in the dock district looking for work. Provide him a new task.",
+        "npc_id": "gen_t19_nils_larkspur",
+        "quest": {
+          "id": "dock_fence_search",
+          "name": "Dock Fence Search",
+          "description": "Nils needs to find a crate at the docks that has been stolen. He can earn 5 silver and a permanent berth by recovering it.",
+          "reward": "5 silver, 1 berth",
+          "objectives": [
+            "Find a stolen crate at the docks and recover it."
+          ]
+        }
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "quest",
+        "npc_id": "gen_t19_nils_larkspur",
+        "quest_id": "dock_fence_search"
+      },
+      "outcome": "OK[quest]"
+    },
+    {
+      "tick": 6,
+      "elapsed": 32.969,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Nils Larkspur learns about the sealed letter from the governor of Meridia.\", \"npc_id\": \"gen_t19_nils_larkspur\", \"fact\": \"Nils Larkspur found a suspicious package at the docks. It was sealed and labeled with the governor's seal. I will not tell anyone, but I suspect it's important.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Nils Larkspur learns about the sealed letter from the governor of Meridia.",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact": "Nils Larkspur found a suspicious package at the docks. It was sealed and labeled with the governor's seal. I will not tell anyone, but I suspect it's important."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact_type": "world"
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "If you pick (b), do not describe a beat that involves a physical object, such as a crate, if the last time you described such an object was in the prior beat.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva inspected the crates at the docks again, her eyes narrowing in suspicion.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva's hands trembled as she examined a crate at the docks, her eyes narrowing. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. Sighing, she decided to check the dock logs for any signs of smuggling.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva inspected the crates at the docks again, her eyes narrowing in suspicion.",
+            "target": "captain_reva",
+            "event": "Captain Reva's hands trembled as she examined a crate at the docks, her eyes narrowing. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. Sighing, she decided to check the dock logs for any signs of smuggling."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.875,
+              "matches_text": "Captain Reva's eyes narrowed as she inspected a crate at the docks. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. She frowned, her mind racing with possibilities.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 4,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.002,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "thessa",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Thessa learned a new piece of information about the lighthouse keeper.\", \"npc_id\": \"thessa\", \"fact\": \"The lighthouse keeper argued with a hooded figure the night the light went out, but the hooded figure carried a black glass jar and disappeared without taking it, leaving only a faint glow behind.\"} ===",
+          "action": {
+            "action": "fact",
+            "reason": "Thessa learned a new piece of information about the lighthouse keeper.",
+            "npc_id": "thessa",
+            "fact": "The lighthouse keeper argued with a hooded figure the night the light went out, but the hooded figure carried a black glass jar and disappeared without taking it, leaving only a faint glow behind."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "thessa",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.645,
+              "matches_text": "I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 4,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.989,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.011,
+                  "entailment": 0.0,
+                  "neutral": 0.989
+                }
+              }
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Nils Larkspur learns about the sealed letter from the governor of Meridia.",
+        "npc_id": "gen_t19_nils_larkspur",
+        "fact": "Nils Larkspur found a suspicious package at the docks. It was sealed and labeled with the governor's seal. I will not tell anyone, but I suspect it's important."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "gen_t19_nils_larkspur",
+        "fact_type": "world"
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 7,
+      "elapsed": 17.0,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Gen T19 Nils Larkspur notices an unusual package at the docks.\", \"target\": \"gen_t19_nils_larkspur\", \"event\": \"Nils Larkspur's eyes widened as he recognized the sealed, labeled crate in the dock district. He approached cautiously, his hands shaking slightly.\"} ===\nACTION: {\"action\": \"event\", \"reason\": \"Gen T19 Nils Larkspur notices an unusual package at the docks.\", \"target\": \"gen_t19_nils_larkspur\", \"event\": \"Nils Larkspur's eyes widened as he recognized the sealed, labeled crate in the dock district. He approached cautiously, his hands shaking slightly.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Gen T19 Nils Larkspur notices an unusual package at the docks.",
+            "target": "gen_t19_nils_larkspur",
+            "event": "Nils Larkspur's eyes widened as he recognized the sealed, labeled crate in the dock district. He approached cautiously, his hands shaking slightly."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t19_nils_larkspur"
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn learned more about the strange cargo the Red Tide brought in.\", \"npc_id\": \"finn\", \"fact\": \"I learned the sealed black crates were not just sealed but also had glowing markings on the lid. The markings looked like old sea-tongue script, and they flickered faintly in the moonlight.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn learned more about the strange cargo the Red Tide brought in.",
+            "npc_id": "finn",
+            "fact": "I learned the sealed black crates were not just sealed but also had glowing markings on the lid. The markings looked like old sea-tongue script, and they flickered faintly in the moonlight."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world"
+          }
+        },
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Gen Bryn Oakeshield's recent arrival makes him wary of the docks.\", \"target\": \"gen_t14_bryn_oakenshield\", \"event\": \"Gen Bryn Oakeshield nervously eyed the crates at the docks. A shadow moved out of the corner of his eye, and he quickly glanced over his shoulder, then hurried to finish his job without lingering.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Gen Bryn Oakeshield's recent arrival makes him wary of the docks.",
+            "target": "gen_t14_bryn_oakenshield",
+            "event": "Gen Bryn Oakeshield nervously eyed the crates at the docks. A shadow moved out of the corner of his eye, and he quickly glanced over his shoulder, then hurried to finish his job without lingering."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t14_bryn_oakenshield"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Gen T19 Nils Larkspur notices an unusual package at the docks.",
+        "target": "gen_t19_nils_larkspur",
+        "event": "Nils Larkspur's eyes widened as he recognized the sealed, labeled crate in the dock district. He approached cautiously, his hands shaking slightly."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "gen_t19_nils_larkspur"
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 8,
+      "elapsed": 21.219,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "Focus on gen_t19_nils_larkspur directly.\n\nACTION:\n{\"action\": \"fact\", \"reason\": \"Nils Larkspur notices a suspicious figure near the docks.\", \"npc_id\": \"gen_t19_nils_larkspur\", \"fact\": \"Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the light.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Nils Larkspur notices a suspicious figure near the docks.",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact": "Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the light."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.608,
+              "matches_text": "I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 4,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.768,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.232,
+                  "entailment": 0.001,
+                  "neutral": 0.768
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"The lighthouse keeper's disappearance is on Varro's mind.\", \"target\": \"varro\", \"event\": \"Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down the path to report the sighting to Old Bones.\"}",
+          "action": {
+            "action": "event",
+            "reason": "The lighthouse keeper's disappearance is on Varro's mind.",
+            "target": "varro",
+            "event": "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down the path to report the sighting to Old Bones."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "varro",
+            "similarity_warning": {
+              "similarity": 0.681,
+              "matches_text": "Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.",
+              "matches_npc": "varro",
+              "matches_kind": "quest",
+              "matches_tick": 3,
+              "nli": {
+                "label": "contradiction",
+                "confidence": 0.705,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.705,
+                  "entailment": 0.0,
+                  "neutral": 0.295
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Captain Reva needs to stay sharp and vigilant in the face of the dark lighthouse mystery.\", \"npc_id\": \"captain_reva\", \"quest\": {\"id\": \"lighthouse_watch\", \"name\": \"Lighthouse Watch\", \"description\": \"Captain Reva must sit at her desk and keep a close eye on the dock logs for any signs of unusual activity.\", \"reward\": \"Captain Reva's reputation as a stern and vigilant Harbor Master.\", \"objectives\": [\"Monitor the dock logs for two ticks. Report any suspicious activity to the governor of Meridia.\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Captain Reva needs to stay sharp and vigilant in the face of the dark lighthouse mystery.",
+            "npc_id": "captain_reva",
+            "quest": {
+              "id": "lighthouse_watch",
+              "name": "Lighthouse Watch",
+              "description": "Captain Reva must sit at her desk and keep a close eye on the dock logs for any signs of unusual activity.",
+              "reward": "Captain Reva's reputation as a stern and vigilant Harbor Master.",
+              "objectives": [
+                "Monitor the dock logs for two ticks. Report any suspicious activity to the governor of Meridia."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "captain_reva",
+            "quest_id": "lighthouse_watch",
+            "similarity_warning": {
+              "similarity": 0.737,
+              "matches_text": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.737,
+              "matches_tick": 3
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+quest(captain_reva): lighthouse_watch",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 2"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Nils Larkspur notices a suspicious figure near the docks.",
+        "npc_id": "gen_t19_nils_larkspur",
+        "fact": "Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the light."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "gen_t19_nils_larkspur",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.608,
+          "matches_text": "I saw a hooded figure climb the lighthouse path three nights ago, carrying a sealed black glass jar. I hid the shard under a loose plank near dock three. I should tell Captain Reva about it.",
+          "matches_npc": "finn",
+          "matches_kind": "fact",
+          "matches_tick": 4,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.768,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.232,
+              "entailment": 0.001,
+              "neutral": 0.768
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 9,
+      "elapsed": 27.031,
+      "sub_actions": [
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Finn learns a new piece of information from the docks.\", \"npc_id\": \"finn\", \"fact\": \"Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn learns a new piece of information from the docks.",
+            "npc_id": "finn",
+            "fact": "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.645,
+              "matches_text": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.898,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.099,
+                  "entailment": 0.002,
+                  "neutral": 0.898
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Gen T14 Bryn Oakshield notices a strange figure near the docks.\", \"target\": \"gen_t14_bryn_oakenshield\", \"event\": \"Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Gen T14 Bryn Oakshield notices a strange figure near the docks.",
+            "target": "gen_t14_bryn_oakenshield",
+            "event": "Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t14_bryn_oakenshield",
+            "similarity_warning": {
+              "similarity": 0.765,
+              "matches_text": "Gen Bryn Oakshield, a dock worker from the dock district, spotted a hooded figure rummaging through the crates near the dock three. The figure wore heavy leather boots and a hood pulled low over their face. Gen Bryn Oakshield's eyes narrowe",
+              "matches_npc": "gen_t14_bryn_oakenshield",
+              "matches_kind": "event",
+              "matches_tick": 4,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.0,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.765,
+              "matches_tick": 4
+            }
+          }
+        },
+        {
+          "focus_npc": "brom",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Brom has learned that the lights inside the lighthouse move every new moon.\", \"npc_id\": \"brom\", \"fact\": \"The lights inside the lighthouse move every new moon, and I saw them shimmering inside the dark lighthouse last night. It’s a warning, I believe.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Brom has learned that the lights inside the lighthouse move every new moon.",
+            "npc_id": "brom",
+            "fact": "The lights inside the lighthouse move every new moon, and I saw them shimmering inside the dark lighthouse last night. It’s a warning, I believe."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "brom",
+            "fact_type": "world"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(gen_t14_bryn_oakenshield): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Finn learns a new piece of information from the docks.",
+        "npc_id": "finn",
+        "fact": "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.",
+        "fact_type": "personal"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "finn",
+        "fact_type": "personal",
+        "similarity_warning": {
+          "similarity": 0.645,
+          "matches_text": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+          "matches_npc": "finn",
+          "matches_kind": "quest",
+          "matches_tick": 1,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.898,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.099,
+              "entailment": 0.002,
+              "neutral": 0.898
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 10,
+      "elapsed": 20.469,
+      "sub_actions": [
+        {
+          "focus_npc": "finn",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "You may add new NPCs or new information as long as it does not contradict standing tensions or introduce new characters.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Finn notices a shadowy figure lingering near the docks, checking the lighthouse path again. He feels uneasy but dismisses it.\", \"target\": \"finn\", \"event\": \"Finn watched the shadows near the docks for a moment, then saw a figure moving towards the north gate. He felt a chill, but dismissed it as just the wind blowing through the alleyways.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Finn notices a shadowy figure lingering near the docks, checking the lighthouse path again. He feels uneasy but dismisses it.",
+            "target": "finn",
+            "event": "Finn watched the shadows near the docks for a moment, then saw a figure moving towards the north gate. He felt a chill, but dismissed it as just the wind blowing through the alleyways."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "finn",
+            "similarity_warning": {
+              "similarity": 0.762,
+              "matches_text": "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva heard a rumour about the north cliff that connects with the lighthouse mystery.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva heard a rumour from dock workers that a tunnel connects the north cliff of Port Blackwater to the lighthouse. The rumour suggests that something is being smuggled through these tunnels. She wonders if the lighthouse's darkening is related.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva heard a rumour about the north cliff that connects with the lighthouse mystery.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva heard a rumour from dock workers that a tunnel connects the north cliff of Port Blackwater to the lighthouse. The rumour suggests that something is being smuggled through these tunnels. She wonders if the lighthouse's darkening is related.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.602,
+              "matches_text": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Seed the tension through a private observation.\", \"target\": \"gen_t19_nils_larkspur\", \"event\": \"Nils Larkspur peeked through the window of the Drowned Rat tavern, his eyes narrowing on the shadowy shape moving towards the north gate. He thought it might be a smuggler, but dismissed it as nothing important.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Seed the tension through a private observation.",
+            "target": "gen_t19_nils_larkspur",
+            "event": "Nils Larkspur peeked through the window of the Drowned Rat tavern, his eyes narrowing on the shadowy shape moving towards the north gate. He thought it might be a smuggler, but dismissed it as nothing important."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t19_nils_larkspur"
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(finn): 1",
+        "+events(gen_t19_nils_larkspur): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Finn notices a shadowy figure lingering near the docks, checking the lighthouse path again. He feels uneasy but dismisses it.",
+        "target": "finn",
+        "event": "Finn watched the shadows near the docks for a moment, then saw a figure moving towards the north gate. He felt a chill, but dismissed it as just the wind blowing through the alleyways."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "finn",
+        "similarity_warning": {
+          "similarity": 0.762,
+          "matches_text": "Finn saw a shadowy figure on the docks at night, moving towards the north gate. He heard a low, muffled voice, but couldn't make out the words. He'll investigate.",
+          "matches_npc": "finn",
+          "matches_kind": "fact",
+          "matches_tick": 9,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.998,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.001,
+              "entailment": 0.001,
+              "neutral": 0.998
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 11,
+      "elapsed": 39.062,
+      "sub_actions": [
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"fact\", \"reason\": \"Finn saw a shadowy figure on the docks last night moving towards the north gate, but dismissed it as just a shadow. Now he remembers the hooded figure near the lighthouse. He wonders if they're connected.\", \"npc_id\": \"finn\", \"fact\": \"Finn noticed a shadowy figure moving towards the north gate last night. He dismissed it at the time, but now wonders if the hooded figure near the lighthouse and the shadowy figure are the same person. He knows the lighthouse is dark and something is at the Shoals, but he doesn't know what. He feels uneasy and wants to find out more.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn saw a shadowy figure on the docks last night moving towards the north gate, but dismissed it as just a shadow. Now he remembers the hooded figure near the lighthouse. He wonders if they're connected.",
+            "npc_id": "finn",
+            "fact": "Finn noticed a shadowy figure moving towards the north gate last night. He dismissed it at the time, but now wonders if the hooded figure near the lighthouse and the shadowy figure are the same person. He knows the lighthouse is dark and something is at the Shoals, but he doesn't know what. He feels uneasy and wants to find out more."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.773,
+              "matches_text": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+              "matches_npc": "finn",
+              "matches_kind": "quest",
+              "matches_tick": 1,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.002,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "ACTION:\n{\"action\": \"event\", \"reason\": \"Varro, climbing the lighthouse path, hears a soft whisper from the shadows.\", \"target\": \"varro\", \"event\": \"Varro, peering into the darkness, hears a soft whisper from the shadows. He quickly turns and runs back to his cabin, leaving the path unmarked and the lighthouse hidden from view. He's heard something older, and it unsettles him.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Varro, climbing the lighthouse path, hears a soft whisper from the shadows.",
+            "target": "varro",
+            "event": "Varro, peering into the darkness, hears a soft whisper from the shadows. He quickly turns and runs back to his cabin, leaving the path unmarked and the lighthouse hidden from view. He's heard something older, and it unsettles him."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "varro",
+            "similarity_warning": {
+              "similarity": 0.81,
+              "matches_text": "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down t",
+              "matches_npc": "varro",
+              "matches_kind": "event",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.001,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "retried_after_contradiction": true
+          }
+        },
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Introduce the dock worker's suspicion of the hooded figure.\", \"npc_id\": \"gen_t14_bryn_oakenshield\", \"quest\": {\"id\": \"dock_worker_suspicion\", \"name\": \"Dock Worker's Suspicion\", \"description\": \"Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.\", \"reward\": \"A permanent berth and five silver.\", \"objectives\": [\"Walk to the harbor master's office and report the sighting.\"]}}\n\nThe dock worker Bryn Oakshield noticed a figure moving around the docks. He wants to discuss it with Captain Reva. He's been in the dock district recently, looking for work. He saw a hooded figure near the north gate at night and wants to report it to Reva. He's eager to get paid and has been looking for a berth. The story arc is about the increasing tension in the port, and Bryn Oakshield's suspicion is a new piece of evidence. He's not yet a fully trusted NPC, but his suspicion adds to the overall sense of unease in the port.\n\nACTION: {\"action\": \"quest\", \"reason\": \"Introduce the dock worker's suspicion of the hooded figure.\", \"npc_id\": \"gen_t14_bryn_oakenshield\", \"quest\": {\"id\": \"dock_worker_suspicion\", \"name\": \"Dock Worker's Suspicion\", \"description\": \"Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to report it to Captain Reva.\", \"reward\": \"A permanent berth and five silver.\", \"objectives\": [\"Walk to the harbor master's office and report the sighting.\"}}}\n{\"action\": \"event\", \"reason\": \"Gen T14 Bryn Oakshield's suspicion is a new piece of evidence",
+          "action": {
+            "action": "quest",
+            "reason": "Introduce the dock worker's suspicion of the hooded figure.",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "quest": {
+              "id": "dock_worker_suspicion",
+              "name": "Dock Worker's Suspicion",
+              "description": "Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.",
+              "reward": "A permanent berth and five silver.",
+              "objectives": [
+                "Walk to the harbor master's office and report the sighting."
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "quest_id": "dock_worker_suspicion",
+            "similarity_warning": {
+              "similarity": 0.809,
+              "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.",
+              "matches_npc": "gen_t14_bryn_oakenshield",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.0,
+                  "neutral": 0.995
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.809,
+              "matches_tick": 9
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+quest(gen_t14_bryn_oakenshield): dock_worker_suspicion",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 2"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Finn saw a shadowy figure on the docks last night moving towards the north gate, but dismissed it as just a shadow. Now he remembers the hooded figure near the lighthouse. He wonders if they're connected.",
+        "npc_id": "finn",
+        "fact": "Finn noticed a shadowy figure moving towards the north gate last night. He dismissed it at the time, but now wonders if the hooded figure near the lighthouse and the shadowy figure are the same person. He knows the lighthouse is dark and something is at the Shoals, but he doesn't know what. He feels uneasy and wants to find out more."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "finn",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.773,
+          "matches_text": "Finn has been keeping a secret: a hooded figure was seen climbing the lighthouse path three nights ago. He wants to find out what's at the Shoals and join a crew to sail past it.",
+          "matches_npc": "finn",
+          "matches_kind": "quest",
+          "matches_tick": 1,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.001,
+              "entailment": 0.002,
+              "neutral": 0.997
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 12,
+      "elapsed": 36.688,
+      "sub_actions": [
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn learned the mysterious black crates are sealed and have markings that glow faintly in moonlight.\", \"npc_id\": \"finn\", \"fact\": \"I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue script, but I can't read it. I'm going to bring it to Old Bones to see if he knows anything.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn learned the mysterious black crates are sealed and have markings that glow faintly in moonlight.",
+            "npc_id": "finn",
+            "fact": "I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue script, but I can't read it. I'm going to bring it to Old Bones to see if he knows anything."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.626,
+              "matches_text": "Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.",
+              "matches_npc": "varro",
+              "matches_kind": "quest",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Ensure your action is specific to the captain_reva NPC and the current world state.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Captain Reva examined the cargo of the last ship to dock, noticing the sealed black glass jars with faintly glowing markings.\", \"target\": \"captain_reva\", \"event\": \"Captain Reva took a closer look at the crates of the last ship to dock, noting the sealed black glass jars with faintly glowing markings. She frowned, her hands trembling as she recalled the lighthouse keeper's disappearance and the dark lighthouse. She decided to have her dock workers search the crates for any signs of smuggling tunnels.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Captain Reva examined the cargo of the last ship to dock, noticing the sealed black glass jars with faintly glowing markings.",
+            "target": "captain_reva",
+            "event": "Captain Reva took a closer look at the crates of the last ship to dock, noting the sealed black glass jars with faintly glowing markings. She frowned, her hands trembling as she recalled the lighthouse keeper's disappearance and the dark lighthouse. She decided to have her dock workers search the crates for any signs of smuggling tunnels."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "captain_reva",
+            "similarity_warning": {
+              "similarity": 0.857,
+              "matches_text": "Captain Reva's hands trembled as she examined a crate at the docks, her eyes narrowing. It rattled unnaturally, like thin glass, and was noticeably lighter than the other crates. Sighing, she decided to check the dock logs for any signs of ",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 6,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.995,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.005,
+                  "entailment": 0.001,
+                  "neutral": 0.995
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Gen T19 Nils Larkspur sees a shadowy figure lurking near the docks again.\", \"npc_id\": \"gen_t19_nils_larkspur\", \"fact\": \"Nils Larkspur saw a shadowy figure near the docks again last night, moving towards the north gate. This time, he noticed a hooded figure and a faint glow emanating from inside the shadow, as if the hooded figure was carrying something dark and dangerous.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Gen T19 Nils Larkspur sees a shadowy figure lurking near the docks again.",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact": "Nils Larkspur saw a shadowy figure near the docks again last night, moving towards the north gate. This time, he noticed a hooded figure and a faint glow emanating from inside the shadow, as if the hooded figure was carrying something dark and dangerous.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "gen_t19_nils_larkspur",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.891,
+              "matches_text": "Nils Larkspur saw a hooded figure lingering near the docks last night. He thought it was strange but dismissed it as just a shadowy shape in the light.",
+              "matches_npc": "gen_t19_nils_larkspur",
+              "matches_kind": "fact",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.996,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.003,
+                  "entailment": 0.0,
+                  "neutral": 0.996
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.891,
+              "matches_tick": 8
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(captain_reva): 1"
+      ],
+      "action": {
+        "action": "fact",
+        "reason": "Finn learned the mysterious black crates are sealed and have markings that glow faintly in moonlight.",
+        "npc_id": "finn",
+        "fact": "I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue script, but I can't read it. I'm going to bring it to Old Bones to see if he knows anything."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "fact",
+        "npc_id": "finn",
+        "fact_type": "world",
+        "similarity_warning": {
+          "similarity": 0.626,
+          "matches_text": "Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.",
+          "matches_npc": "varro",
+          "matches_kind": "quest",
+          "matches_tick": 3,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.001,
+              "neutral": 0.997
+            }
+          }
+        }
+      },
+      "outcome": "OK[fact]"
+    },
+    {
+      "tick": 13,
+      "elapsed": 24.437,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "No more than one of these options per tick.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression.\", \"target\": \"gen_t14_bryn_oakenshield\", \"event\": \"Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression, and his hands trembled as he watched the figure.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression.",
+            "target": "gen_t14_bryn_oakenshield",
+            "event": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression, and his hands trembled as he watched the figure."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t14_bryn_oakenshield",
+            "similarity_warning": {
+              "similarity": 0.838,
+              "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.",
+              "matches_npc": "gen_t14_bryn_oakenshield",
+              "matches_kind": "event",
+              "matches_tick": 9,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.997,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.001,
+                  "neutral": 0.997
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": false,
+          "raw": "{\"action\": \"quest\", \"reason\": \"Varro has private knowledge he can use to advance the story.\", \"npc_id\": \"varro\", \"quest\": {\"id\": \"glass_markets\", \"name\": \"Selling the Melted Glass\", \"description\": \"Varro knows that the melted lighthouse glass is worth three times its weight in gold. He can help you sell it for a better price. But be careful, it's a risky business.\", \"reward\": \"50 silver per jar of melted glass, plus the buyer's credit\", \"objectives\": [\"Sell the melted glass jars from the lighthouse to a buyer in Meridia for a better price than the market\"]}}",
+          "action": {
+            "action": "quest",
+            "reason": "Varro has private knowledge he can use to advance the story.",
+            "npc_id": "varro",
+            "quest": {
+              "id": "glass_markets",
+              "name": "Selling the Melted Glass",
+              "description": "Varro knows that the melted lighthouse glass is worth three times its weight in gold. He can help you sell it for a better price. But be careful, it's a risky business.",
+              "reward": "50 silver per jar of melted glass, plus the buyer's credit",
+              "objectives": [
+                "Sell the melted glass jars from the lighthouse to a buyer in Meridia for a better price than the market"
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "varro",
+            "quest_id": "glass_markets",
+            "similarity_warning": {
+              "similarity": 0.62,
+              "matches_text": "Varro has seen melted lighthouse glass on the beach. Find out if he knows anything about the old sea-tongue script markings.",
+              "matches_npc": "varro",
+              "matches_kind": "quest",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.0,
+                  "neutral": 0.999
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved in smuggling contraband through the tavern cellar.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved in smuggling contraband through the tavern cellar."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.624,
+              "matches_text": "Captain Reva sat at her desk and reviewed the dock logs for any signs of smuggling. Her eyes scanned each line, looking for any discrepancies. She sighed as she found the usual suspects, but nothing new. Her hands shook, and she felt a chil",
+              "matches_npc": "captain_reva",
+              "matches_kind": "event",
+              "matches_tick": 3,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.979,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.021,
+                  "entailment": 0.0,
+                  "neutral": 0.979
+                }
+              }
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+events(gen_t14_bryn_oakenshield): 2",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+quest(varro): glass_markets",
+        "+events(varro): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression.",
+        "target": "gen_t14_bryn_oakenshield",
+        "event": "Gen T14 Bryn Oakshield noticed a shadowy figure lingering near the docks, examining the crates and barrels with a worried expression, and his hands trembled as he watched the figure."
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "gen_t14_bryn_oakenshield",
+        "similarity_warning": {
+          "similarity": 0.838,
+          "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lingering near the docks, peering at the crates and barrels. He felt a chill down his spine, but kept his distance, knowing better than to trust anyone in this port.",
+          "matches_npc": "gen_t14_bryn_oakenshield",
+          "matches_kind": "event",
+          "matches_tick": 9,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.997,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.001,
+              "neutral": 0.997
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 14,
+      "elapsed": 28.391,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "Do not describe the same NPC from a different perspective.\n\nACTION:\n{\"action\": \"event\", \"reason\": \"Gen T14 Bryn Oakshield notices a shadowy figure lingering near the docks again.\", \"target\": \"gen_t14_bryn_oakenshield\", \"event\": \"Gen T14 Bryn Oakshield observed a shadowy figure moving slowly near the docks, casting long shadows in the moonlight, and whispered to himself, 'That hooded figure is back. What's going on here?'\"}",
+          "action": {
+            "action": "event",
+            "reason": "Gen T14 Bryn Oakshield notices a shadowy figure lingering near the docks again.",
+            "target": "gen_t14_bryn_oakenshield",
+            "event": "Gen T14 Bryn Oakshield observed a shadowy figure moving slowly near the docks, casting long shadows in the moonlight, and whispered to himself, 'That hooded figure is back. What's going on here?'"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t14_bryn_oakenshield",
+            "similarity_warning": {
+              "similarity": 0.716,
+              "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.",
+              "matches_npc": "gen_t14_bryn_oakenshield",
+              "matches_kind": "quest",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.002,
+                  "entailment": 0.0,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "finn",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Finn learns a new detail about the strange black glass crates.\", \"npc_id\": \"finn\", \"fact\": \"I found faint sea-tongue script markings on the glass shard, like a faded sea map. It's not just any markings, they glow faintly in moonlight. The Red Tide fleet brought in the sealed black crates last week, and something at the Shoals is up.\", \"fact_type\": \"personal\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Finn learns a new detail about the strange black glass crates.",
+            "npc_id": "finn",
+            "fact": "I found faint sea-tongue script markings on the glass shard, like a faded sea map. It's not just any markings, they glow faintly in moonlight. The Red Tide fleet brought in the sealed black crates last week, and something at the Shoals is up.",
+            "fact_type": "personal"
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "finn",
+            "fact_type": "personal",
+            "similarity_warning": {
+              "similarity": 0.77,
+              "matches_text": "I noticed the strange markings on the glass shard as the moonlight filtered through. They look like old sea-tongue script, but I can't read it. I'm going to bring it to Old Bones to see if he knows anything.",
+              "matches_npc": "finn",
+              "matches_kind": "fact",
+              "matches_tick": 12,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.77,
+              "matches_tick": 12
+            }
+          }
+        },
+        {
+          "focus_npc": "gen_t19_nils_larkspur",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "For example, instead of saying \"Nils Larkspur saw the figure and followed it\", you might say \"Nils Larkspur saw a shadowy figure near the docks and thought it might be a smuggler. He decided to keep a closer eye on the figure.\" This way, the new fact is consistent with the previous one, but adds a new detail to the story.\n\nACTION:\n\n{\"action\": \"event\", \"reason\": \"Nils Larkspur notices a shadowy figure near the docks again, this time he decides to investigate.\", \"target\": \"gen_t19_nils_larkspur\", \"event\": \"Nils Larkspur noticed a shadowy figure near the docks at night. He thought it might be a smuggler and decided to follow the figure, keeping a sharp eye on its movements.\"}",
+          "action": {
+            "action": "event",
+            "reason": "Nils Larkspur notices a shadowy figure near the docks again, this time he decides to investigate.",
+            "target": "gen_t19_nils_larkspur",
+            "event": "Nils Larkspur noticed a shadowy figure near the docks at night. He thought it might be a smuggler and decided to follow the figure, keeping a sharp eye on its movements."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "gen_t19_nils_larkspur",
+            "similarity_warning": {
+              "similarity": 0.788,
+              "matches_text": "Nils Larkspur saw a shadowy figure near the docks again last night, moving towards the north gate. This time, he noticed a hooded figure and a faint glow emanating from inside the shadow, as if the hooded figure was carrying something dark ",
+              "matches_npc": "gen_t19_nils_larkspur",
+              "matches_kind": "fact",
+              "matches_tick": 12,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.999,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.0,
+                  "entailment": 0.001,
+                  "neutral": 0.999
+                }
+              }
+            },
+            "retried_after_contradiction": true
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1"
+      ],
+      "action": {
+        "action": "event",
+        "reason": "Gen T14 Bryn Oakshield notices a shadowy figure lingering near the docks again.",
+        "target": "gen_t14_bryn_oakenshield",
+        "event": "Gen T14 Bryn Oakshield observed a shadowy figure moving slowly near the docks, casting long shadows in the moonlight, and whispered to himself, 'That hooded figure is back. What's going on here?'"
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "event",
+        "target": "gen_t14_bryn_oakenshield",
+        "similarity_warning": {
+          "similarity": 0.716,
+          "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.",
+          "matches_npc": "gen_t14_bryn_oakenshield",
+          "matches_kind": "quest",
+          "matches_tick": 11,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.998,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.002,
+              "entailment": 0.0,
+              "neutral": 0.998
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[event]"
+    },
+    {
+      "tick": 15,
+      "elapsed": 26.016,
+      "sub_actions": [
+        {
+          "focus_npc": "gen_t14_bryn_oakenshield",
+          "action_kind": "quest",
+          "outcome": "OK[quest]",
+          "coerced": true,
+          "raw": "Here's a new beat for Gen T14 Bryn Oakshield:\n\n{\"action\": \"event\", \"reason\": \"Gen T14 Bryn Oakshield observed a shadowy figure near the docks and decided to investigate.\", \"target\": \"all\", \"event\": \"Gen T14 Bryn Oakshield noticed a shadowy figure moving near the docks and whispered to himself, 'Something fishy going on here, I'll check it out.'\"}",
+          "action": {
+            "action": "quest",
+            "reason": "Gen T14 Bryn Oakshield observed a shadowy figure near the docks and decided to investigate.",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "quest": {
+              "id": "gen_1776311220",
+              "name": "Gen T14 Bryn Oakshield noticed a shadowy figure moving near ",
+              "description": "Gen T14 Bryn Oakshield noticed a shadowy figure moving near the docks and whispered to himself, 'Something fishy going on here, I'll check it out.'",
+              "reward": "",
+              "objectives": [
+                "Gen T14 Bryn Oakshield noticed a shadowy figure moving near the docks and whispered to himself, 'Something fishy going o"
+              ]
+            }
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "quest",
+            "npc_id": "gen_t14_bryn_oakenshield",
+            "quest_id": "gen_1776311220",
+            "similarity_warning": {
+              "similarity": 0.776,
+              "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.",
+              "matches_npc": "gen_t14_bryn_oakenshield",
+              "matches_kind": "quest",
+              "matches_tick": 11,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.001,
+                  "neutral": 0.998
+                }
+              }
+            },
+            "retried_after_self_repetition": true
+          }
+        },
+        {
+          "focus_npc": "captain_reva",
+          "action_kind": "fact",
+          "outcome": "OK[fact]",
+          "coerced": false,
+          "raw": "{\"action\": \"fact\", \"reason\": \"Captain Reva suspects Old Bones is trying to sell the governor's pardon to the Red Tide.\", \"npc_id\": \"captain_reva\", \"fact\": \"Captain Reva observed Old Bones talking to a mysterious hooded figure near the docks last night. The hooded figure seemed to have a lot of money. Old Bones told the hooded figure he could help him get the governor's pardon. Captain Reva's gut told her something was off.\"}",
+          "action": {
+            "action": "fact",
+            "reason": "Captain Reva suspects Old Bones is trying to sell the governor's pardon to the Red Tide.",
+            "npc_id": "captain_reva",
+            "fact": "Captain Reva observed Old Bones talking to a mysterious hooded figure near the docks last night. The hooded figure seemed to have a lot of money. Old Bones told the hooded figure he could help him get the governor's pardon. Captain Reva's gut told her something was off."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "fact",
+            "npc_id": "captain_reva",
+            "fact_type": "world",
+            "similarity_warning": {
+              "similarity": 0.621,
+              "matches_text": "Captain Reva learned a ship from the Red Tide fleet has gone missing, possibly due to the Shoals. She suspects Old Bones may be involved in smuggling contraband through the tavern cellar.",
+              "matches_npc": "captain_reva",
+              "matches_kind": "fact",
+              "matches_tick": 13,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.998,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.001,
+                  "entailment": 0.0,
+                  "neutral": 0.998
+                }
+              }
+            }
+          }
+        },
+        {
+          "focus_npc": "varro",
+          "action_kind": "event",
+          "outcome": "OK[event]",
+          "coerced": false,
+          "raw": "{\"action\": \"event\", \"reason\": \"Varro checks the rocks for new wreck cargo and spots a hooded figure approaching.\", \"target\": \"varro\", \"event\": \"Varro paused on the lighthouse path, his eyes narrowing as he spotted a hooded figure moving towards the north gate. The figure paused a few paces away, then spoke in a voice that seemed older and more mysterious than human.\"} ===",
+          "action": {
+            "action": "event",
+            "reason": "Varro checks the rocks for new wreck cargo and spots a hooded figure approaching.",
+            "target": "varro",
+            "event": "Varro paused on the lighthouse path, his eyes narrowing as he spotted a hooded figure moving towards the north gate. The figure paused a few paces away, then spoke in a voice that seemed older and more mysterious than human."
+          },
+          "dispatch": {
+            "ok": true,
+            "kind": "event",
+            "target": "varro",
+            "similarity_warning": {
+              "similarity": 0.882,
+              "matches_text": "Varro, climbing the lighthouse path to check the rocks for new wreck cargo, spots a hooded figure approaching. The figure stops and speaks in a voice that seems older than time. Varro's eyes widen, and he quickly turns away, hurrying down t",
+              "matches_npc": "varro",
+              "matches_kind": "event",
+              "matches_tick": 8,
+              "nli": {
+                "label": "neutral",
+                "confidence": 0.714,
+                "is_contradiction": false,
+                "scores": {
+                  "contradiction": 0.283,
+                  "entailment": 0.002,
+                  "neutral": 0.714
+                }
+              }
+            },
+            "skipped_self_rep_retry": {
+              "skipped_self_rep_retry": true,
+              "reason": "budget_exhausted",
+              "similarity": 0.882,
+              "matches_tick": 8
+            }
+          }
+        }
+      ],
+      "world_changes": [
+        "+events(brom): 1",
+        "+events(captain_reva): 1",
+        "+events(finn): 1",
+        "+quest(gen_t14_bryn_oakenshield): gen_1776311220",
+        "+events(gen_t14_bryn_oakenshield): 1",
+        "+events(gen_t19_nils_larkspur): 1",
+        "+events(old_bones): 1",
+        "+events(thessa): 1",
+        "+events(varro): 2"
+      ],
+      "action": {
+        "action": "quest",
+        "reason": "Gen T14 Bryn Oakshield observed a shadowy figure near the docks and decided to investigate.",
+        "npc_id": "gen_t14_bryn_oakenshield",
+        "quest": {
+          "id": "gen_1776311220",
+          "name": "Gen T14 Bryn Oakshield noticed a shadowy figure moving near ",
+          "description": "Gen T14 Bryn Oakshield noticed a shadowy figure moving near the docks and whispered to himself, 'Something fishy going on here, I'll check it out.'",
+          "reward": "",
+          "objectives": [
+            "Gen T14 Bryn Oakshield noticed a shadowy figure moving near the docks and whispered to himself, 'Something fishy going o"
+          ]
+        }
+      },
+      "dispatch": {
+        "ok": true,
+        "kind": "quest",
+        "npc_id": "gen_t14_bryn_oakenshield",
+        "quest_id": "gen_1776311220",
+        "similarity_warning": {
+          "similarity": 0.776,
+          "matches_text": "Gen T14 Bryn Oakshield noticed a hooded figure lurking near the docks. He wants to talk to the harbor master about it.",
+          "matches_npc": "gen_t14_bryn_oakenshield",
+          "matches_kind": "quest",
+          "matches_tick": 11,
+          "nli": {
+            "label": "neutral",
+            "confidence": 0.998,
+            "is_contradiction": false,
+            "scores": {
+              "contradiction": 0.001,
+              "entailment": 0.001,
+              "neutral": 0.998
+            }
+          }
+        },
+        "retried_after_self_repetition": true
+      },
+      "outcome": "OK[quest]"
+    }
+  ]
+}
