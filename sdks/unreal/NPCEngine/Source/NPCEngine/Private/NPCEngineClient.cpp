@@ -343,3 +343,442 @@ void UNPCEngineClient::CheckHealth()
             OnHealthCheck.Broadcast(Response);
         });
 }
+
+// ---------------------------------------------------------------------------
+// Story Director methods
+// ---------------------------------------------------------------------------
+
+void UNPCEngineClient::StoryReset()
+{
+    SendRequest(TEXT("POST"), TEXT("/story/reset"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FStoryResetResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+
+            const TArray<TSharedPtr<FJsonValue>>* BornArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("born_removed"), BornArray) && BornArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *BornArray)
+                {
+                    Response.BornRemoved.Add(Val->AsString());
+                }
+            }
+
+            const TArray<TSharedPtr<FJsonValue>>* DeceasedArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("deceased_restored"), DeceasedArray) && DeceasedArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *DeceasedArray)
+                {
+                    Response.DeceasedRestored.Add(Val->AsString());
+                }
+            }
+
+            OnStoryReset.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::SetActivity(const FString& Activity)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("activity"), Activity);
+
+    SendRequest(TEXT("POST"), TEXT("/story/activity"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FActivityResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.Activity = Json->GetStringField(TEXT("activity"));
+            Response.ActivitySetAtTick = static_cast<int32>(Json->GetNumberField(TEXT("activity_set_at_tick")));
+
+            OnActivityResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::GetActivity()
+{
+    SendRequest(TEXT("GET"), TEXT("/story/activity"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FActivityResponse Response;
+            Response.bOk = true;
+            Response.Activity = Json->GetStringField(TEXT("activity"));
+            Response.ActivitySetAtTick = static_cast<int32>(Json->GetNumberField(TEXT("activity_set_at_tick")));
+
+            OnActivityResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::PauseStory()
+{
+    SendRequest(TEXT("POST"), TEXT("/story/pause"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FPauseResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.bPaused = Json->GetBoolField(TEXT("paused"));
+            Response.PausedAtTick = static_cast<int32>(Json->GetNumberField(TEXT("paused_at_tick")));
+
+            OnPauseResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::ResumeStory()
+{
+    SendRequest(TEXT("POST"), TEXT("/story/resume"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FPauseResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.bPaused = Json->GetBoolField(TEXT("paused"));
+            Response.PausedAtTick = static_cast<int32>(Json->GetNumberField(TEXT("paused_at_tick")));
+
+            OnPauseResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::GetPauseState()
+{
+    SendRequest(TEXT("GET"), TEXT("/story/pause_state"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FPauseStateResponse Response;
+            Response.bPaused = Json->GetBoolField(TEXT("paused"));
+            Response.PausedAtTick = static_cast<int32>(Json->GetNumberField(TEXT("paused_at_tick")));
+            Response.TickBudgetSeconds = static_cast<float>(Json->GetNumberField(TEXT("tick_budget_seconds")));
+            Response.WindowLLMSecondsUsed = static_cast<float>(Json->GetNumberField(TEXT("window_llm_seconds_used")));
+            Response.bBudgetExceeded = Json->GetBoolField(TEXT("budget_exceeded"));
+            Response.NextTickRecommendedInSeconds = static_cast<float>(Json->GetNumberField(TEXT("next_tick_recommended_in_seconds")));
+
+            OnPauseStateResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::SetTickBudget(float MaxSecondsPerMinute)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetNumberField(TEXT("max_seconds_per_minute"), MaxSecondsPerMinute);
+
+    SendRequest(TEXT("POST"), TEXT("/story/tick_budget"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FTickBudgetResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.TickBudgetSeconds = static_cast<float>(Json->GetNumberField(TEXT("tick_budget_seconds")));
+
+            OnTickBudgetResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::SetQuestPacing(int32 MaxUnoffered, int32 CooldownTicks)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+
+    if (MaxUnoffered >= 0)
+    {
+        Body->SetNumberField(TEXT("max_unoffered"), MaxUnoffered);
+    }
+
+    if (CooldownTicks >= 0)
+    {
+        Body->SetNumberField(TEXT("cooldown_ticks"), CooldownTicks);
+    }
+
+    SendRequest(TEXT("POST"), TEXT("/story/quest_pacing"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FQuestPacingResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.MaxUnoffered = static_cast<int32>(Json->GetNumberField(TEXT("max_unoffered")));
+            Response.CooldownTicks = static_cast<int32>(Json->GetNumberField(TEXT("cooldown_ticks")));
+
+            OnQuestPacingResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::GetQuestPacing()
+{
+    SendRequest(TEXT("GET"), TEXT("/story/quest_pacing"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FQuestPacingResponse Response;
+            Response.bOk = true;
+            Response.MaxUnoffered = static_cast<int32>(Json->GetNumberField(TEXT("max_unoffered")));
+            Response.CooldownTicks = static_cast<int32>(Json->GetNumberField(TEXT("cooldown_ticks")));
+
+            OnQuestPacingResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::QueueNPCDeath(const FString& NpcId, const FString& Cause, const FString& TransfersQuestsTo)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("npc_id"), NpcId);
+
+    if (!Cause.IsEmpty())
+    {
+        Body->SetStringField(TEXT("cause"), Cause);
+    }
+
+    if (!TransfersQuestsTo.IsEmpty())
+    {
+        Body->SetStringField(TEXT("transfers_quests_to"), TransfersQuestsTo);
+    }
+
+    SendRequest(TEXT("POST"), TEXT("/story/npc_death"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}
+
+void UNPCEngineClient::GetGraveyard()
+{
+    SendRequest(TEXT("GET"), TEXT("/story/graveyard"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}
+
+void UNPCEngineClient::QueueNPCBirth(const FString& Zone, const FString& Role)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("zone"), Zone);
+
+    if (!Role.IsEmpty())
+    {
+        Body->SetStringField(TEXT("role"), Role);
+    }
+
+    SendRequest(TEXT("POST"), TEXT("/story/npc_birth_request"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}
+
+void UNPCEngineClient::GetPopulation()
+{
+    SendRequest(TEXT("GET"), TEXT("/story/population"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}
+
+void UNPCEngineClient::RefuseQuest(const FString& QuestId, const FString& NpcId, const FString& Reason)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("quest_id"), QuestId);
+    Body->SetStringField(TEXT("npc_id"), NpcId);
+
+    if (!Reason.IsEmpty())
+    {
+        Body->SetStringField(TEXT("reason"), Reason);
+    }
+
+    SendRequest(TEXT("POST"), TEXT("/quests/refuse"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FQuestRefusalResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.QuestId = Json->GetStringField(TEXT("quest_id"));
+            Response.NpcId = Json->GetStringField(TEXT("npc_id"));
+            Response.TrustDelta = static_cast<int32>(Json->GetNumberField(TEXT("trust_delta")));
+            Response.RefusalMode = Json->GetStringField(TEXT("refusal_mode"));
+
+            OnQuestRefusalResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::SetAutoRefuse(const TArray<FString>& Intents)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+
+    TArray<TSharedPtr<FJsonValue>> IntentValues;
+    for (const FString& Intent : Intents)
+    {
+        IntentValues.Add(MakeShared<FJsonValueString>(Intent));
+    }
+    Body->SetArrayField(TEXT("intents"), IntentValues);
+
+    SendRequest(TEXT("POST"), TEXT("/player/auto_refuse"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FAutoRefuseResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.bDevEnabled = Json->GetBoolField(TEXT("dev_enabled"));
+
+            const TArray<TSharedPtr<FJsonValue>>* IntentArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("intents"), IntentArray) && IntentArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *IntentArray)
+                {
+                    Response.Intents.Add(Val->AsString());
+                }
+            }
+
+            OnAutoRefuseResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::GetAutoRefuse()
+{
+    SendRequest(TEXT("GET"), TEXT("/player/auto_refuse"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FAutoRefuseResponse Response;
+            Response.bOk = true;
+            Response.bDevEnabled = Json->GetBoolField(TEXT("dev_enabled"));
+
+            const TArray<TSharedPtr<FJsonValue>>* IntentArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("intents"), IntentArray) && IntentArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *IntentArray)
+                {
+                    Response.Intents.Add(Val->AsString());
+                }
+            }
+
+            OnAutoRefuseResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::IntroducePlayer(const FString& ToNpc, const FString& Name, const TArray<FString>& Titles)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("to_npc"), ToNpc);
+    Body->SetStringField(TEXT("name"), Name);
+
+    TArray<TSharedPtr<FJsonValue>> TitleValues;
+    for (const FString& Title : Titles)
+    {
+        TitleValues.Add(MakeShared<FJsonValueString>(Title));
+    }
+    Body->SetArrayField(TEXT("titles"), TitleValues);
+
+    SendRequest(TEXT("POST"), TEXT("/player/introduce"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FIntroduceResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.NpcId = Json->GetStringField(TEXT("npc_id"));
+            Response.MaxTrust = static_cast<int32>(Json->GetNumberField(TEXT("max_trust")));
+
+            const TArray<TSharedPtr<FJsonValue>>* KnownArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("known_as"), KnownArray) && KnownArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *KnownArray)
+                {
+                    Response.KnownAs.Add(Val->AsString());
+                }
+            }
+
+            OnIntroduceResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::SetVisibleFeature(const FString& Feature)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("feature"), Feature);
+
+    SendRequest(TEXT("POST"), TEXT("/player/visible_feature"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FVisibleFeatureResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.PlayerVisibleFeature = Json->GetStringField(TEXT("player_visible_feature"));
+
+            OnVisibleFeatureResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::RegisterFeature(const FString& Feature, const FString& Identity)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("feature"), Feature);
+    Body->SetStringField(TEXT("identity"), Identity);
+
+    SendRequest(TEXT("POST"), TEXT("/player/register_feature"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FRegisterFeatureResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.Feature = Json->GetStringField(TEXT("feature"));
+            Response.Identity = Json->GetStringField(TEXT("identity"));
+
+            OnRegisterFeatureResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::VouchPlayer(const FString& VoucherNpc, const FString& ToNpc)
+{
+    TSharedRef<FJsonObject> Body = MakeShared<FJsonObject>();
+    Body->SetStringField(TEXT("voucher_npc"), VoucherNpc);
+    Body->SetStringField(TEXT("to_npc"), ToNpc);
+
+    SendRequest(TEXT("POST"), TEXT("/player/vouched_by"), JsonObjectToString(Body),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FVouchResponse Response;
+            Response.bOk = Json->GetBoolField(TEXT("ok"));
+            Response.VoucherNpc = Json->GetStringField(TEXT("voucher_npc"));
+            Response.ToNpc = Json->GetStringField(TEXT("to_npc"));
+            Response.MaxTrust = static_cast<int32>(Json->GetNumberField(TEXT("max_trust")));
+
+            const TArray<TSharedPtr<FJsonValue>>* KnownArray = nullptr;
+            if (Json->TryGetArrayField(TEXT("known_as"), KnownArray) && KnownArray)
+            {
+                for (const TSharedPtr<FJsonValue>& Val : *KnownArray)
+                {
+                    Response.KnownAs.Add(Val->AsString());
+                }
+            }
+
+            OnVouchResponse.Broadcast(Response);
+        });
+}
+
+void UNPCEngineClient::GetIdentityState()
+{
+    SendRequest(TEXT("GET"), TEXT("/player/identity_state"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}
+
+void UNPCEngineClient::GetReputation()
+{
+    SendRequest(TEXT("GET"), TEXT("/player/reputation"), TEXT(""),
+        [this](TSharedPtr<FJsonObject> Json)
+        {
+            FString RawJson;
+            TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&RawJson);
+            FJsonSerializer::Serialize(Json.ToSharedRef(), Writer);
+
+            OnRawJsonResponse.Broadcast(RawJson);
+        });
+}

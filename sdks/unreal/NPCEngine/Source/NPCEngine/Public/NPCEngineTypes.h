@@ -184,3 +184,241 @@ struct NPCENGINE_API FNPCHealthResponse
     UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Health")
     FString Version;
 };
+
+// ---------------------------------------------------------------------------
+// Story Director types
+// ---------------------------------------------------------------------------
+
+/**
+ * Response from POST /story/reset.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FStoryResetResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    TArray<FString> BornRemoved;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    TArray<FString> DeceasedRestored;
+};
+
+/**
+ * Response from POST/GET /story/activity.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FActivityResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    FString Activity;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    int32 ActivitySetAtTick = 0;
+};
+
+/**
+ * Response from POST /story/pause and POST /story/resume.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FPauseResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bPaused = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    int32 PausedAtTick = 0;
+};
+
+/**
+ * Response from GET /story/pause_state.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FPauseStateResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bPaused = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    int32 PausedAtTick = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    float TickBudgetSeconds = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    float WindowLLMSecondsUsed = 0.0f;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bBudgetExceeded = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    float NextTickRecommendedInSeconds = 0.0f;
+};
+
+/**
+ * Response from POST /story/tick_budget.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FTickBudgetResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    float TickBudgetSeconds = 0.0f;
+};
+
+/**
+ * Response from POST/GET /story/quest_pacing.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FQuestPacingResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    int32 MaxUnoffered = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Story")
+    int32 CooldownTicks = 0;
+};
+
+/**
+ * Response from POST /quests/refuse.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FQuestRefusalResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Quest")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Quest")
+    FString QuestId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Quest")
+    FString NpcId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Quest")
+    int32 TrustDelta = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Quest")
+    FString RefusalMode;
+};
+
+/**
+ * Response from POST/GET /player/auto_refuse.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FAutoRefuseResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    TArray<FString> Intents;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bDevEnabled = false;
+};
+
+/**
+ * Response from POST /player/introduce.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FIntroduceResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString NpcId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    TArray<FString> KnownAs;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    int32 MaxTrust = 0;
+};
+
+/**
+ * Response from POST /player/visible_feature.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FVisibleFeatureResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString PlayerVisibleFeature;
+};
+
+/**
+ * Response from POST /player/register_feature.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FRegisterFeatureResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString Feature;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString Identity;
+};
+
+/**
+ * Response from POST /player/vouched_by.
+ */
+USTRUCT(BlueprintType)
+struct NPCENGINE_API FVouchResponse
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    bool bOk = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString VoucherNpc;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    FString ToNpc;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    TArray<FString> KnownAs;
+
+    UPROPERTY(BlueprintReadOnly, Category = "NPC Engine|Player")
+    int32 MaxTrust = 0;
+};

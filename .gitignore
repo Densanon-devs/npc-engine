@@ -49,8 +49,10 @@ data/cache/
 data/worlds/*/story/arcs.embeddings.npy
 data/story_director/arcs.embeddings.npy
 
-# Models (too large for git)
-models/
+# GGUF model binaries (too large for git). Anchored to the repo
+# root so SDK subdirectories named "Models" or "models" are NOT
+# caught (they contain source code, not binaries).
+/models/
 
 # IDE
 .vscode/

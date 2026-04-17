@@ -196,6 +196,389 @@ namespace NPCEngine
         }
 
         // --------------------------------------------------------------------
+        // Story Director API
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Advances the story world by one overseer tick.
+        /// </summary>
+        /// <returns>A <see cref="StoryTickResponse"/> with the tick result and timing hint.</returns>
+        public async Task<StoryTickResponse> StoryTickAsync()
+        {
+            string json = await PostAsync("/story/tick", "{}");
+            if (json == null) return null;
+            return JsonUtility.FromJson<StoryTickResponse>(json);
+        }
+
+        /// <summary>
+        /// Resets the story to the YAML baseline (born NPCs removed, deceased revived, state cleared).
+        /// </summary>
+        /// <returns>A <see cref="StoryResetResponse"/> with reset details.</returns>
+        public async Task<StoryResetResponse> ResetStoryAsync()
+        {
+            string json = await PostAsync("/story/reset", "{}");
+            if (json == null) return null;
+            return JsonUtility.FromJson<StoryResetResponse>(json);
+        }
+
+        /// <summary>
+        /// Sets the player's current activity context for the Story Director.
+        /// </summary>
+        /// <param name="activity">Activity string (e.g., "in_town", "in_combat", "idle").</param>
+        /// <returns>An <see cref="ActivityResponse"/> confirming the activity.</returns>
+        public async Task<ActivityResponse> SetActivityAsync(string activity)
+        {
+            var body = JsonUtility.ToJson(new SetActivityRequest { activity = activity });
+            string json = await PostAsync("/story/activity", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<ActivityResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets the player's current activity context.
+        /// </summary>
+        /// <returns>An <see cref="ActivityResponse"/> with the current activity.</returns>
+        public async Task<ActivityResponse> GetActivityAsync()
+        {
+            string json = await GetAsync("/story/activity");
+            if (json == null) return null;
+            return JsonUtility.FromJson<ActivityResponse>(json);
+        }
+
+        /// <summary>
+        /// Pauses all future story ticks.
+        /// </summary>
+        /// <returns>A <see cref="PauseResponse"/> confirming the pause.</returns>
+        public async Task<PauseResponse> PauseStoryAsync()
+        {
+            string json = await PostAsync("/story/pause", "{}");
+            if (json == null) return null;
+            return JsonUtility.FromJson<PauseResponse>(json);
+        }
+
+        /// <summary>
+        /// Resumes story ticks after a pause.
+        /// </summary>
+        /// <returns>A <see cref="PauseResponse"/> confirming the resume.</returns>
+        public async Task<PauseResponse> ResumeStoryAsync()
+        {
+            string json = await PostAsync("/story/resume", "{}");
+            if (json == null) return null;
+            return JsonUtility.FromJson<PauseResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets the current pause state including budget info and next-tick hint.
+        /// </summary>
+        /// <returns>A <see cref="PauseStateResponse"/> with full pause/budget details.</returns>
+        public async Task<PauseStateResponse> GetPauseStateAsync()
+        {
+            string json = await GetAsync("/story/pause_state");
+            if (json == null) return null;
+            return JsonUtility.FromJson<PauseStateResponse>(json);
+        }
+
+        /// <summary>
+        /// Sets the rolling-window LLM time budget for story ticks.
+        /// </summary>
+        /// <param name="maxSecondsPerMinute">Max LLM seconds per minute. Negative clears the budget.</param>
+        /// <returns>A <see cref="TickBudgetResponse"/> confirming the budget.</returns>
+        public async Task<TickBudgetResponse> SetTickBudgetAsync(float maxSecondsPerMinute)
+        {
+            var body = JsonUtility.ToJson(new SetTickBudgetRequest { max_seconds_per_minute = maxSecondsPerMinute });
+            string json = await PostAsync("/story/tick_budget", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<TickBudgetResponse>(json);
+        }
+
+        // --------------------------------------------------------------------
+        // Quest Pacing API
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Overrides per-NPC quest pacing caps.
+        /// </summary>
+        /// <param name="maxUnoffered">Max unoffered quests per NPC. Null leaves unchanged.</param>
+        /// <param name="cooldownTicks">Cooldown ticks between quest dispatches. Null leaves unchanged.</param>
+        /// <returns>A <see cref="QuestPacingResponse"/> with effective pacing values.</returns>
+        public async Task<QuestPacingResponse> SetQuestPacingAsync(int? maxUnoffered = null, int? cooldownTicks = null)
+        {
+            // Build JSON manually to omit null fields
+            var parts = new System.Collections.Generic.List<string>();
+            if (maxUnoffered.HasValue)
+                parts.Add($"\"max_unoffered\":{maxUnoffered.Value}");
+            if (cooldownTicks.HasValue)
+                parts.Add($"\"cooldown_ticks\":{cooldownTicks.Value}");
+            string body = "{" + string.Join(",", parts) + "}";
+
+            string json = await PostAsync("/story/quest_pacing", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<QuestPacingResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets the effective quest pacing configuration.
+        /// </summary>
+        /// <returns>A <see cref="QuestPacingResponse"/> with current pacing values.</returns>
+        public async Task<QuestPacingResponse> GetQuestPacingAsync()
+        {
+            string json = await GetAsync("/story/quest_pacing");
+            if (json == null) return null;
+            return JsonUtility.FromJson<QuestPacingResponse>(json);
+        }
+
+        // --------------------------------------------------------------------
+        // NPC Lifecycle API
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Queues a death dispatch for an NPC (game-authoritative).
+        /// </summary>
+        /// <param name="npcId">The NPC ID to kill.</param>
+        /// <param name="cause">Optional cause of death.</param>
+        /// <param name="transfersQuestsTo">Optional NPC ID to inherit open quests.</param>
+        /// <returns>A <see cref="GenericOkResponse"/> confirming the queue.</returns>
+        public async Task<GenericOkResponse> QueueNPCDeathAsync(string npcId, string cause = "", string transfersQuestsTo = null)
+        {
+            // Build JSON manually to omit null transfers_quests_to
+            string body;
+            if (transfersQuestsTo != null)
+            {
+                body = JsonUtility.ToJson(new NPCDeathRequestFull
+                {
+                    npc_id = npcId,
+                    cause = cause,
+                    transfers_quests_to = transfersQuestsTo
+                });
+            }
+            else
+            {
+                body = JsonUtility.ToJson(new NPCDeathRequest
+                {
+                    npc_id = npcId,
+                    cause = cause
+                });
+            }
+
+            string json = await PostAsync("/story/npc_death", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<GenericOkResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets the graveyard (deceased NPCs and their death records).
+        /// </summary>
+        /// <returns>Raw JSON string (complex nested structure).</returns>
+        public async Task<string> GetGraveyardAsync()
+        {
+            return await GetAsync("/story/graveyard");
+        }
+
+        /// <summary>
+        /// Queues a birth request for a new NPC in a zone.
+        /// </summary>
+        /// <param name="zone">The zone to spawn the NPC in.</param>
+        /// <param name="role">Optional role for the new NPC.</param>
+        /// <returns>A <see cref="GenericOkResponse"/> confirming the queue.</returns>
+        public async Task<GenericOkResponse> QueueNPCBirthAsync(string zone, string role = null)
+        {
+            // Build JSON manually to omit null role
+            string body;
+            if (role != null)
+            {
+                body = JsonUtility.ToJson(new NPCBirthRequestFull
+                {
+                    zone = zone,
+                    role = role
+                });
+            }
+            else
+            {
+                body = JsonUtility.ToJson(new NPCBirthRequestSimple { zone = zone });
+            }
+
+            string json = await PostAsync("/story/npc_birth_request", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<GenericOkResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets per-zone population counts.
+        /// </summary>
+        /// <returns>Raw JSON string (complex nested structure).</returns>
+        public async Task<string> GetPopulationAsync()
+        {
+            return await GetAsync("/story/population");
+        }
+
+        // --------------------------------------------------------------------
+        // Quest Refusal API
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Player refuses a quest (trust hit, ledger entry, decay timer if applicable).
+        /// </summary>
+        /// <param name="questId">The quest ID to refuse.</param>
+        /// <param name="npcId">The NPC who offered the quest.</param>
+        /// <param name="reason">Optional refusal reason.</param>
+        /// <returns>A <see cref="QuestRefusalResponse"/> with refusal details.</returns>
+        public async Task<QuestRefusalResponse> RefuseQuestAsync(string questId, string npcId, string reason = null)
+        {
+            // Build JSON manually to omit null reason
+            string body;
+            if (reason != null)
+            {
+                body = JsonUtility.ToJson(new RefuseQuestRequestFull
+                {
+                    quest_id = questId,
+                    npc_id = npcId,
+                    reason = reason
+                });
+            }
+            else
+            {
+                body = JsonUtility.ToJson(new RefuseQuestRequest
+                {
+                    quest_id = questId,
+                    npc_id = npcId
+                });
+            }
+
+            string json = await PostAsync("/quests/refuse", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<QuestRefusalResponse>(json);
+        }
+
+        /// <summary>
+        /// Sets the player's auto-refuse intent filter.
+        /// </summary>
+        /// <param name="intents">Array of intent tags to auto-refuse.</param>
+        /// <returns>An <see cref="AutoRefuseResponse"/> confirming the config.</returns>
+        public async Task<AutoRefuseResponse> SetAutoRefuseAsync(string[] intents)
+        {
+            var body = JsonUtility.ToJson(new SetAutoRefuseRequest { intents = intents });
+            string json = await PostAsync("/player/auto_refuse", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<AutoRefuseResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets the current auto-refuse configuration.
+        /// </summary>
+        /// <returns>An <see cref="AutoRefuseResponse"/> with current config.</returns>
+        public async Task<AutoRefuseResponse> GetAutoRefuseAsync()
+        {
+            string json = await GetAsync("/player/auto_refuse");
+            if (json == null) return null;
+            return JsonUtility.FromJson<AutoRefuseResponse>(json);
+        }
+
+        // --------------------------------------------------------------------
+        // Player Identity API
+        // --------------------------------------------------------------------
+
+        /// <summary>
+        /// Player introduces themselves to an NPC.
+        /// </summary>
+        /// <param name="toNpc">The NPC ID to introduce to.</param>
+        /// <param name="name">The player's name.</param>
+        /// <param name="titles">Optional titles to share.</param>
+        /// <returns>An <see cref="IntroduceResponse"/> with recognition details.</returns>
+        public async Task<IntroduceResponse> IntroducePlayerAsync(string toNpc, string name, string[] titles = null)
+        {
+            // Build JSON manually to omit null titles
+            string body;
+            if (titles != null)
+            {
+                body = JsonUtility.ToJson(new IntroduceRequestFull
+                {
+                    to_npc = toNpc,
+                    name = name,
+                    titles = titles
+                });
+            }
+            else
+            {
+                body = JsonUtility.ToJson(new IntroduceRequest
+                {
+                    to_npc = toNpc,
+                    name = name
+                });
+            }
+
+            string json = await PostAsync("/player/introduce", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<IntroduceResponse>(json);
+        }
+
+        /// <summary>
+        /// Sets a player-visible feature (e.g., cloak, weapon).
+        /// </summary>
+        /// <param name="feature">The visible feature string.</param>
+        /// <returns>A <see cref="VisibleFeatureResponse"/> confirming the feature.</returns>
+        public async Task<VisibleFeatureResponse> SetVisibleFeatureAsync(string feature)
+        {
+            var body = JsonUtility.ToJson(new SetVisibleFeatureRequest { feature = feature });
+            string json = await PostAsync("/player/visible_feature", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<VisibleFeatureResponse>(json);
+        }
+
+        /// <summary>
+        /// Maps a visible feature to an identity for auto-recognition.
+        /// </summary>
+        /// <param name="feature">The visible feature to register.</param>
+        /// <param name="identity">The identity this feature maps to.</param>
+        /// <returns>A <see cref="RegisterFeatureResponse"/> confirming the mapping.</returns>
+        public async Task<RegisterFeatureResponse> RegisterFeatureAsync(string feature, string identity)
+        {
+            var body = JsonUtility.ToJson(new RegisterFeatureRequest
+            {
+                feature = feature,
+                identity = identity
+            });
+            string json = await PostAsync("/player/register_feature", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<RegisterFeatureResponse>(json);
+        }
+
+        /// <summary>
+        /// One NPC vouches the player to another NPC (identity inheritance).
+        /// </summary>
+        /// <param name="voucherNpc">The NPC doing the vouching.</param>
+        /// <param name="toNpc">The NPC being vouched to.</param>
+        /// <returns>A <see cref="VouchResponse"/> with vouch details.</returns>
+        public async Task<VouchResponse> VouchPlayerAsync(string voucherNpc, string toNpc)
+        {
+            var body = JsonUtility.ToJson(new VouchRequest
+            {
+                voucher_npc = voucherNpc,
+                to_npc = toNpc
+            });
+            string json = await PostAsync("/player/vouched_by", body);
+            if (json == null) return null;
+            return JsonUtility.FromJson<VouchResponse>(json);
+        }
+
+        /// <summary>
+        /// Gets per-NPC player knowledge, identity trust, and feature registry.
+        /// </summary>
+        /// <returns>Raw JSON string (complex nested structure).</returns>
+        public async Task<string> GetIdentityStateAsync()
+        {
+            return await GetAsync("/player/identity_state");
+        }
+
+        /// <summary>
+        /// Gets aggregated per-identity reputation data.
+        /// </summary>
+        /// <returns>Raw JSON string (complex nested structure).</returns>
+        public async Task<string> GetReputationAsync()
+        {
+            return await GetAsync("/player/reputation");
+        }
+
+        // --------------------------------------------------------------------
         // Internal HTTP helpers
         // --------------------------------------------------------------------
 
@@ -323,6 +706,110 @@ namespace NPCEngine
         private class CompleteQuestRequest
         {
             public string quest_id;
+        }
+
+        // Story Director request DTOs
+
+        [System.Serializable]
+        private class SetActivityRequest
+        {
+            public string activity;
+        }
+
+        [System.Serializable]
+        private class SetTickBudgetRequest
+        {
+            public float max_seconds_per_minute;
+        }
+
+        // NPC Lifecycle request DTOs
+
+        [System.Serializable]
+        private class NPCDeathRequest
+        {
+            public string npc_id;
+            public string cause;
+        }
+
+        [System.Serializable]
+        private class NPCDeathRequestFull
+        {
+            public string npc_id;
+            public string cause;
+            public string transfers_quests_to;
+        }
+
+        [System.Serializable]
+        private class NPCBirthRequestSimple
+        {
+            public string zone;
+        }
+
+        [System.Serializable]
+        private class NPCBirthRequestFull
+        {
+            public string zone;
+            public string role;
+        }
+
+        // Quest Refusal request DTOs
+
+        [System.Serializable]
+        private class RefuseQuestRequest
+        {
+            public string quest_id;
+            public string npc_id;
+        }
+
+        [System.Serializable]
+        private class RefuseQuestRequestFull
+        {
+            public string quest_id;
+            public string npc_id;
+            public string reason;
+        }
+
+        [System.Serializable]
+        private class SetAutoRefuseRequest
+        {
+            public string[] intents;
+        }
+
+        // Player Identity request DTOs
+
+        [System.Serializable]
+        private class IntroduceRequest
+        {
+            public string to_npc;
+            public string name;
+        }
+
+        [System.Serializable]
+        private class IntroduceRequestFull
+        {
+            public string to_npc;
+            public string name;
+            public string[] titles;
+        }
+
+        [System.Serializable]
+        private class SetVisibleFeatureRequest
+        {
+            public string feature;
+        }
+
+        [System.Serializable]
+        private class RegisterFeatureRequest
+        {
+            public string feature;
+            public string identity;
+        }
+
+        [System.Serializable]
+        private class VouchRequest
+        {
+            public string voucher_npc;
+            public string to_npc;
         }
     }
 }

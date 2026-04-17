@@ -17,6 +17,21 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEventInjected, const FNPCEventRes
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnHealthCheck, const FNPCHealthResponse&, Response);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnRequestFailed, const FString&, Endpoint, const FString&, Error);
 
+// Story Director delegates
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnStoryReset, const FStoryResetResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActivityResponse, const FActivityResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPauseResponse, const FPauseResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPauseStateResponse, const FPauseStateResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTickBudgetResponse, const FTickBudgetResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnQuestPacingResponse, const FQuestPacingResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRawJsonResponse, const FString&, JsonString);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnQuestRefusalResponse, const FQuestRefusalResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAutoRefuseResponse, const FAutoRefuseResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnIntroduceResponse, const FIntroduceResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVisibleFeatureResponse, const FVisibleFeatureResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRegisterFeatureResponse, const FRegisterFeatureResponse&, Response);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVouchResponse, const FVouchResponse&, Response);
+
 class IHttpRequest;
 class IHttpResponse;
 
@@ -70,6 +85,60 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
     FOnRequestFailed OnRequestFailed;
 
+    // --- Story Director Delegates ---
+
+    /** Fired when a story reset response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnStoryReset OnStoryReset;
+
+    /** Fired when an activity response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnActivityResponse OnActivityResponse;
+
+    /** Fired when a pause/resume response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnPauseResponse OnPauseResponse;
+
+    /** Fired when the pause state is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnPauseStateResponse OnPauseStateResponse;
+
+    /** Fired when the tick budget response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnTickBudgetResponse OnTickBudgetResponse;
+
+    /** Fired when a quest pacing response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnQuestPacingResponse OnQuestPacingResponse;
+
+    /** Fired when a raw JSON response is received (graveyard, population, identity_state, reputation). */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnRawJsonResponse OnRawJsonResponse;
+
+    /** Fired when a quest refusal response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnQuestRefusalResponse OnQuestRefusalResponse;
+
+    /** Fired when an auto-refuse response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnAutoRefuseResponse OnAutoRefuseResponse;
+
+    /** Fired when a player introduction response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnIntroduceResponse OnIntroduceResponse;
+
+    /** Fired when a visible feature response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnVisibleFeatureResponse OnVisibleFeatureResponse;
+
+    /** Fired when a register feature response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnRegisterFeatureResponse OnRegisterFeatureResponse;
+
+    /** Fired when a vouch response is received. */
+    UPROPERTY(BlueprintAssignable, Category = "NPC Engine|Delegates")
+    FOnVouchResponse OnVouchResponse;
+
     // --- API Methods ---
 
     /** Generate NPC dialogue from a player prompt. */
@@ -111,6 +180,96 @@ public:
     /** Check if the NPC Engine server is healthy. */
     UFUNCTION(BlueprintCallable, Category = "NPC Engine")
     void CheckHealth();
+
+    // --- Story Director Methods ---
+
+    /** Reset the story to its YAML baseline. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void StoryReset();
+
+    /** Set the player's current activity context. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void SetActivity(const FString& Activity);
+
+    /** Get the player's current activity context. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetActivity();
+
+    /** Pause all future story ticks. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void PauseStory();
+
+    /** Resume story ticks after a pause. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void ResumeStory();
+
+    /** Get the current pause state and budget info. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetPauseState();
+
+    /** Set the rolling-window LLM-time cap (max seconds per minute). */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void SetTickBudget(float MaxSecondsPerMinute);
+
+    /** Set per-NPC quest pacing overrides. Only fields >= 0 are sent. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void SetQuestPacing(int32 MaxUnoffered = -1, int32 CooldownTicks = -1);
+
+    /** Get the current quest pacing configuration. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetQuestPacing();
+
+    /** Queue a death dispatch for an NPC. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void QueueNPCDeath(const FString& NpcId, const FString& Cause = TEXT(""), const FString& TransfersQuestsTo = TEXT(""));
+
+    /** Get the graveyard (deceased NPCs). Broadcasts raw JSON via OnRawJsonResponse. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetGraveyard();
+
+    /** Queue a birth request for a zone. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void QueueNPCBirth(const FString& Zone, const FString& Role = TEXT(""));
+
+    /** Get population stats per zone. Broadcasts raw JSON via OnRawJsonResponse. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetPopulation();
+
+    /** Refuse a quest from an NPC. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void RefuseQuest(const FString& QuestId, const FString& NpcId, const FString& Reason = TEXT(""));
+
+    /** Set the player's auto-refuse intent filter. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void SetAutoRefuse(const TArray<FString>& Intents);
+
+    /** Get the current auto-refuse configuration. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetAutoRefuse();
+
+    /** Introduce the player to an NPC by name and titles. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void IntroducePlayer(const FString& ToNpc, const FString& Name, const TArray<FString>& Titles);
+
+    /** Set a player-visible feature (cloak, weapon, etc.). */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void SetVisibleFeature(const FString& Feature);
+
+    /** Map a visible feature to an identity for auto-recognition. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void RegisterFeature(const FString& Feature, const FString& Identity);
+
+    /** Have one NPC vouch the player to another NPC. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void VouchPlayer(const FString& VoucherNpc, const FString& ToNpc);
+
+    /** Get per-NPC identity state. Broadcasts raw JSON via OnRawJsonResponse. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetIdentityState();
+
+    /** Get aggregated reputation data. Broadcasts raw JSON via OnRawJsonResponse. */
+    UFUNCTION(BlueprintCallable, Category = "NPC Engine")
+    void GetReputation();
 
 private:
     /**

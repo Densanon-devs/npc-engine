@@ -41,6 +41,60 @@ signal mood_set(result: NPCModels.MoodResult)
 ## Emitted when a world event is injected.
 signal event_injected(result: NPCModels.EventResult)
 
+## Emitted when a story reset completes.
+signal story_reset_completed(result: NPCModels.StoryResetResult)
+
+## Emitted when the player activity is set or retrieved.
+signal activity_received(result: NPCModels.ActivityResult)
+
+## Emitted when the story is paused or resumed.
+signal pause_changed(result: NPCModels.PauseResult)
+
+## Emitted when the pause state is retrieved.
+signal pause_state_received(result: NPCModels.PauseStateResult)
+
+## Emitted when the tick budget is set.
+signal tick_budget_set(result: NPCModels.TickBudgetResult)
+
+## Emitted when quest pacing is set or retrieved.
+signal quest_pacing_received(result: NPCModels.QuestPacingResult)
+
+## Emitted when an NPC death is queued.
+signal npc_death_queued(result: Dictionary)
+
+## Emitted when the graveyard is retrieved.
+signal graveyard_received(result: Dictionary)
+
+## Emitted when an NPC birth is queued.
+signal npc_birth_queued(result: Dictionary)
+
+## Emitted when the population is retrieved.
+signal population_received(result: Dictionary)
+
+## Emitted when a quest is refused.
+signal quest_refused(result: NPCModels.QuestRefusalResult)
+
+## Emitted when auto-refuse config is set or retrieved.
+signal auto_refuse_received(result: NPCModels.AutoRefuseResult)
+
+## Emitted when the player introduces themselves to an NPC.
+signal player_introduced(result: NPCModels.IntroduceResult)
+
+## Emitted when a visible feature is set.
+signal visible_feature_set(result: NPCModels.VisibleFeatureResult)
+
+## Emitted when a feature-identity mapping is registered.
+signal feature_registered(result: NPCModels.RegisterFeatureResult)
+
+## Emitted when an NPC vouches the player to another.
+signal player_vouched(result: NPCModels.VouchResult)
+
+## Emitted when the identity state is retrieved.
+signal identity_state_received(result: Dictionary)
+
+## Emitted when the reputation is retrieved.
+signal reputation_received(result: Dictionary)
+
 ## Emitted when any API request fails.
 signal request_failed(endpoint: String, error: String)
 
@@ -134,6 +188,98 @@ func check_health() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Story Director — fire-and-forget API methods
+# ---------------------------------------------------------------------------
+
+## Reset the story to YAML baseline.
+func reset_story() -> void:
+	_post("/story/reset", {}, _on_story_reset_response)
+
+
+## Set the player's current activity context.
+func set_activity(activity: String) -> void:
+	_post("/story/activity", {"activity": activity}, _on_activity_response)
+
+
+## Pause the story (hold all future ticks).
+func pause_story() -> void:
+	_post("/story/pause", {}, _on_pause_changed_response)
+
+
+## Resume the story after a pause.
+func resume_story() -> void:
+	_post("/story/resume", {}, _on_pause_changed_response)
+
+
+## Set the rolling-window LLM-time cap.
+func set_tick_budget(max_seconds_per_minute: float) -> void:
+	_post("/story/tick_budget", {"max_seconds_per_minute": max_seconds_per_minute}, _on_tick_budget_response)
+
+
+## Override per-NPC quest pacing caps.
+func set_quest_pacing(max_unoffered: int, cooldown_ticks: int) -> void:
+	_post("/story/quest_pacing", {"max_unoffered": max_unoffered, "cooldown_ticks": cooldown_ticks}, _on_quest_pacing_response)
+
+
+## Queue a death dispatch for an NPC (game-authoritative).
+func queue_npc_death(npc_id: String, cause: String, transfers_quests_to: String = "") -> void:
+	var body: Dictionary = {"npc_id": npc_id, "cause": cause}
+	if transfers_quests_to != "":
+		body["transfers_quests_to"] = transfers_quests_to
+	_post("/story/npc_death", body, _on_npc_death_response)
+
+
+## Queue a birth request for a zone.
+func queue_npc_birth(zone: String, role: String = "") -> void:
+	var body: Dictionary = {"zone": zone}
+	if role != "":
+		body["role"] = role
+	_post("/story/npc_birth_request", body, _on_npc_birth_response)
+
+
+## Refuse a quest on behalf of the player.
+func refuse_quest(quest_id: String, npc_id: String, reason: String = "") -> void:
+	var body: Dictionary = {"quest_id": quest_id, "npc_id": npc_id}
+	if reason != "":
+		body["reason"] = reason
+	_post("/quests/refuse", body, _on_quest_refused_response)
+
+
+## Set the player's auto-refuse intent filter.
+func set_auto_refuse(intents: PackedStringArray) -> void:
+	var intents_array: Array = []
+	for intent in intents:
+		intents_array.append(intent)
+	_post("/player/auto_refuse", {"intents": intents_array}, _on_auto_refuse_response)
+
+
+## Introduce the player to an NPC.
+func introduce_player(to_npc: String, player_name: String, titles: PackedStringArray = PackedStringArray()) -> void:
+	var body: Dictionary = {"to_npc": to_npc, "name": player_name}
+	if titles.size() > 0:
+		var titles_array: Array = []
+		for title in titles:
+			titles_array.append(title)
+		body["titles"] = titles_array
+	_post("/player/introduce", body, _on_player_introduced_response)
+
+
+## Set a player-visible feature (cloak, weapon, etc.).
+func set_visible_feature(feature: String) -> void:
+	_post("/player/visible_feature", {"feature": feature}, _on_visible_feature_response)
+
+
+## Map a visible feature to an identity for auto-recognition.
+func register_feature(feature: String, identity: String) -> void:
+	_post("/player/register_feature", {"feature": feature, "identity": identity}, _on_feature_registered_response)
+
+
+## One NPC vouches the player to another.
+func vouch_player(voucher_npc: String, to_npc: String) -> void:
+	_post("/player/vouched_by", {"voucher_npc": voucher_npc, "to_npc": to_npc}, _on_player_vouched_response)
+
+
+# ---------------------------------------------------------------------------
 # Await-style async alternatives
 # ---------------------------------------------------------------------------
 
@@ -170,6 +316,269 @@ func check_health_async() -> NPCModels.HealthResult:
 		return null
 
 	return NPCModels.HealthResult.from_dict(data)
+
+
+# ---------------------------------------------------------------------------
+# Story Director — await-style async alternatives
+# ---------------------------------------------------------------------------
+
+## Reset the story and return the result (use with [code]await[/code]).
+func reset_story_async() -> NPCModels.StoryResetResult:
+	var data := await _post_async("/story/reset", {})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.StoryResetResult.from_dict(data)
+	story_reset_completed.emit(result)
+	return result
+
+
+## Set the player activity and return the result (use with [code]await[/code]).
+func set_activity_async(activity: String) -> NPCModels.ActivityResult:
+	var data := await _post_async("/story/activity", {"activity": activity})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.ActivityResult.from_dict(data)
+	activity_received.emit(result)
+	return result
+
+
+## Get the current player activity (use with [code]await[/code]).
+func get_activity_async() -> NPCModels.ActivityResult:
+	var data := await _get_async("/story/activity")
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.ActivityResult.from_dict(data)
+	activity_received.emit(result)
+	return result
+
+
+## Pause the story and return the result (use with [code]await[/code]).
+func pause_story_async() -> NPCModels.PauseResult:
+	var data := await _post_async("/story/pause", {})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.PauseResult.from_dict(data)
+	pause_changed.emit(result)
+	return result
+
+
+## Resume the story and return the result (use with [code]await[/code]).
+func resume_story_async() -> NPCModels.PauseResult:
+	var data := await _post_async("/story/resume", {})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.PauseResult.from_dict(data)
+	pause_changed.emit(result)
+	return result
+
+
+## Get the current pause state (use with [code]await[/code]).
+func get_pause_state_async() -> NPCModels.PauseStateResult:
+	var data := await _get_async("/story/pause_state")
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.PauseStateResult.from_dict(data)
+	pause_state_received.emit(result)
+	return result
+
+
+## Set the tick budget and return the result (use with [code]await[/code]).
+func set_tick_budget_async(max_seconds_per_minute: float) -> NPCModels.TickBudgetResult:
+	var data := await _post_async("/story/tick_budget", {"max_seconds_per_minute": max_seconds_per_minute})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.TickBudgetResult.from_dict(data)
+	tick_budget_set.emit(result)
+	return result
+
+
+## Set quest pacing and return the result (use with [code]await[/code]).
+func set_quest_pacing_async(max_unoffered: int, cooldown_ticks: int) -> NPCModels.QuestPacingResult:
+	var data := await _post_async("/story/quest_pacing", {"max_unoffered": max_unoffered, "cooldown_ticks": cooldown_ticks})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.QuestPacingResult.from_dict(data)
+	quest_pacing_received.emit(result)
+	return result
+
+
+## Get current quest pacing config (use with [code]await[/code]).
+func get_quest_pacing_async() -> NPCModels.QuestPacingResult:
+	var data := await _get_async("/story/quest_pacing")
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.QuestPacingResult.from_dict(data)
+	quest_pacing_received.emit(result)
+	return result
+
+
+## Queue an NPC death and return the raw result (use with [code]await[/code]).
+func queue_npc_death_async(npc_id: String, cause: String, transfers_quests_to: String = "") -> Dictionary:
+	var body: Dictionary = {"npc_id": npc_id, "cause": cause}
+	if transfers_quests_to != "":
+		body["transfers_quests_to"] = transfers_quests_to
+
+	var data := await _post_async("/story/npc_death", body)
+	if data.is_empty():
+		return {}
+
+	npc_death_queued.emit(data)
+	return data
+
+
+## Get the graveyard (deceased NPCs) as a raw Dictionary (use with [code]await[/code]).
+func get_graveyard_async() -> Dictionary:
+	var data := await _get_async("/story/graveyard")
+	if data.is_empty():
+		return {}
+
+	graveyard_received.emit(data)
+	return data
+
+
+## Queue an NPC birth request and return the raw result (use with [code]await[/code]).
+func queue_npc_birth_async(zone: String, role: String = "") -> Dictionary:
+	var body: Dictionary = {"zone": zone}
+	if role != "":
+		body["role"] = role
+
+	var data := await _post_async("/story/npc_birth_request", body)
+	if data.is_empty():
+		return {}
+
+	npc_birth_queued.emit(data)
+	return data
+
+
+## Get the population stats as a raw Dictionary (use with [code]await[/code]).
+func get_population_async() -> Dictionary:
+	var data := await _get_async("/story/population")
+	if data.is_empty():
+		return {}
+
+	population_received.emit(data)
+	return data
+
+
+## Refuse a quest and return the result (use with [code]await[/code]).
+func refuse_quest_async(quest_id: String, npc_id: String, reason: String = "") -> NPCModels.QuestRefusalResult:
+	var body: Dictionary = {"quest_id": quest_id, "npc_id": npc_id}
+	if reason != "":
+		body["reason"] = reason
+
+	var data := await _post_async("/quests/refuse", body)
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.QuestRefusalResult.from_dict(data)
+	quest_refused.emit(result)
+	return result
+
+
+## Set auto-refuse intents and return the result (use with [code]await[/code]).
+func set_auto_refuse_async(intents: PackedStringArray) -> NPCModels.AutoRefuseResult:
+	var intents_array: Array = []
+	for intent in intents:
+		intents_array.append(intent)
+
+	var data := await _post_async("/player/auto_refuse", {"intents": intents_array})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.AutoRefuseResult.from_dict(data)
+	auto_refuse_received.emit(result)
+	return result
+
+
+## Get auto-refuse config (use with [code]await[/code]).
+func get_auto_refuse_async() -> NPCModels.AutoRefuseResult:
+	var data := await _get_async("/player/auto_refuse")
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.AutoRefuseResult.from_dict(data)
+	auto_refuse_received.emit(result)
+	return result
+
+
+## Introduce the player to an NPC and return the result (use with [code]await[/code]).
+func introduce_player_async(to_npc: String, player_name: String, titles: PackedStringArray = PackedStringArray()) -> NPCModels.IntroduceResult:
+	var body: Dictionary = {"to_npc": to_npc, "name": player_name}
+	if titles.size() > 0:
+		var titles_array: Array = []
+		for title in titles:
+			titles_array.append(title)
+		body["titles"] = titles_array
+
+	var data := await _post_async("/player/introduce", body)
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.IntroduceResult.from_dict(data)
+	player_introduced.emit(result)
+	return result
+
+
+## Set a visible feature and return the result (use with [code]await[/code]).
+func set_visible_feature_async(feature: String) -> NPCModels.VisibleFeatureResult:
+	var data := await _post_async("/player/visible_feature", {"feature": feature})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.VisibleFeatureResult.from_dict(data)
+	visible_feature_set.emit(result)
+	return result
+
+
+## Register a feature-identity mapping and return the result (use with [code]await[/code]).
+func register_feature_async(feature: String, identity: String) -> NPCModels.RegisterFeatureResult:
+	var data := await _post_async("/player/register_feature", {"feature": feature, "identity": identity})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.RegisterFeatureResult.from_dict(data)
+	feature_registered.emit(result)
+	return result
+
+
+## Vouch the player to an NPC and return the result (use with [code]await[/code]).
+func vouch_player_async(voucher_npc: String, to_npc: String) -> NPCModels.VouchResult:
+	var data := await _post_async("/player/vouched_by", {"voucher_npc": voucher_npc, "to_npc": to_npc})
+	if data.is_empty():
+		return null
+
+	var result := NPCModels.VouchResult.from_dict(data)
+	player_vouched.emit(result)
+	return result
+
+
+## Get the identity state as a raw Dictionary (use with [code]await[/code]).
+func get_identity_state_async() -> Dictionary:
+	var data := await _get_async("/player/identity_state")
+	if data.is_empty():
+		return {}
+
+	identity_state_received.emit(data)
+	return data
+
+
+## Get the reputation as a raw Dictionary (use with [code]await[/code]).
+func get_reputation_async() -> Dictionary:
+	var data := await _get_async("/player/reputation")
+	if data.is_empty():
+		return {}
+
+	reputation_received.emit(data)
+	return data
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +622,73 @@ func _on_health_response(data: Dictionary) -> void:
 			_connected = true
 			server_connected.emit()
 		_consecutive_failures = 0
+
+
+# ---------------------------------------------------------------------------
+# Story Director — signal-based response handlers
+# ---------------------------------------------------------------------------
+
+func _on_story_reset_response(data: Dictionary) -> void:
+	var result := NPCModels.StoryResetResult.from_dict(data)
+	story_reset_completed.emit(result)
+
+
+func _on_activity_response(data: Dictionary) -> void:
+	var result := NPCModels.ActivityResult.from_dict(data)
+	activity_received.emit(result)
+
+
+func _on_pause_changed_response(data: Dictionary) -> void:
+	var result := NPCModels.PauseResult.from_dict(data)
+	pause_changed.emit(result)
+
+
+func _on_tick_budget_response(data: Dictionary) -> void:
+	var result := NPCModels.TickBudgetResult.from_dict(data)
+	tick_budget_set.emit(result)
+
+
+func _on_quest_pacing_response(data: Dictionary) -> void:
+	var result := NPCModels.QuestPacingResult.from_dict(data)
+	quest_pacing_received.emit(result)
+
+
+func _on_npc_death_response(data: Dictionary) -> void:
+	npc_death_queued.emit(data)
+
+
+func _on_npc_birth_response(data: Dictionary) -> void:
+	npc_birth_queued.emit(data)
+
+
+func _on_quest_refused_response(data: Dictionary) -> void:
+	var result := NPCModels.QuestRefusalResult.from_dict(data)
+	quest_refused.emit(result)
+
+
+func _on_auto_refuse_response(data: Dictionary) -> void:
+	var result := NPCModels.AutoRefuseResult.from_dict(data)
+	auto_refuse_received.emit(result)
+
+
+func _on_player_introduced_response(data: Dictionary) -> void:
+	var result := NPCModels.IntroduceResult.from_dict(data)
+	player_introduced.emit(result)
+
+
+func _on_visible_feature_response(data: Dictionary) -> void:
+	var result := NPCModels.VisibleFeatureResult.from_dict(data)
+	visible_feature_set.emit(result)
+
+
+func _on_feature_registered_response(data: Dictionary) -> void:
+	var result := NPCModels.RegisterFeatureResult.from_dict(data)
+	feature_registered.emit(result)
+
+
+func _on_player_vouched_response(data: Dictionary) -> void:
+	var result := NPCModels.VouchResult.from_dict(data)
+	player_vouched.emit(result)
 
 
 # ---------------------------------------------------------------------------
