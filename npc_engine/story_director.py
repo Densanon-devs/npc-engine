@@ -1491,6 +1491,21 @@ class StoryDirector:
         self._load_quest_lines()
         self._load_state()
         self._snapshot_original_bios()
+        # Manifest: subtract any NPC ids found in _birth_history
+        # (already persisted in state.json) from the current profile
+        # set. The remainder is the YAML-authored "shipping cast."
+        # Persisted births whose YAML files still exist on disk get
+        # loaded by NPCKnowledgeManager at boot; this subtraction
+        # keeps them out of the manifest so reset_to_initial_state()
+        # can identify and remove them cleanly.
+        born_ids = {
+            r.get("npc_id") for r in self._birth_history
+            if isinstance(r, dict) and isinstance(r.get("npc_id"), str)
+        }
+        self._initial_cast: frozenset[str] = frozenset(
+            npc_id for npc_id in self.engine.pie.npc_knowledge.profiles
+            if npc_id not in born_ids
+        )
 
     def _resolve_paths(self) -> None:
         """
@@ -2466,6 +2481,163 @@ class StoryDirector:
         self._burst_focus_npc = fresh
         self._burst_remaining = max(0, _BURST_ROTATION_DEPTH - 1)
         return fresh
+
+    def reset_to_initial_state(self) -> dict:
+        """
+        Soft-reset the Director + every NPC to the world's initial
+        YAML-authored state. Used by game clients to implement a
+        "new game" or "restart from save" without restarting the
+        server process.
+
+        What happens:
+          1. Born NPCs (Phase 2b births) are removed from the live
+             profiles dict and their YAML files are deleted from
+             ``npc_profiles/``.
+          2. Deceased NPCs are restored to ``alive``.
+          3. Every manifest NPC's mutable state (quests, events,
+             dynamic knowledge lanes, player_knowledge) is wiped
+             and the profile is re-loaded from its YAML file so
+             the NPC returns to its authored baseline.
+          4. All Director runtime state is zeroed: tick counter,
+             rotation state, ledger, arcs, quest-line progress,
+             identity trust, refusal timers, activity, pause,
+             budget, zone set, pacing overrides, narration mode.
+
+        State that is NOT cleared (stays from the prior boot):
+          - Quest-lines config + zone config (re-loaded from YAML at
+            init, stable across resets).
+          - The dev-layer auto-refuse flag (read from quest_lines.yaml,
+            not per-run state). Player intents ARE cleared.
+
+        Returns a report dict summarizing what was cleaned.
+        """
+        profiles = self.engine.pie.npc_knowledge.profiles
+        report: dict = {"born_removed": [], "deceased_restored": [],
+                         "manifest_reloaded": []}
+
+        # 1. Remove born NPCs.
+        born_ids = set(profiles.keys()) - self._initial_cast
+        for npc_id in list(born_ids):
+            npc = profiles.pop(npc_id, None)
+            if npc is not None:
+                # Delete the YAML file the birth pipeline wrote.
+                # Guard: only delete if the file stem matches this
+                # NPC's id. Prevents accidental deletion of another
+                # NPC's profile when a test-simulated birth shares a
+                # profile_path from an existing NPC.
+                try:
+                    pp = getattr(npc, "profile_path", None)
+                    if (pp is not None
+                            and Path(pp).exists()
+                            and Path(pp).stem == npc_id):
+                        Path(pp).unlink()
+                except Exception:
+                    pass
+                report["born_removed"].append(npc_id)
+
+        # 2. Restore deceased + 3. Reload manifest profiles.
+        for npc_id in list(self._initial_cast):
+            npc = profiles.get(npc_id)
+            if npc is None:
+                continue
+            was_dead = getattr(npc, "status", "alive") != "alive"
+            # Clear mutable runtime state before reloading.
+            npc.quests.clear()
+            npc.events.clear()
+            npc.dynamic_world_facts.clear()
+            npc.dynamic_personal_knowledge.clear()
+            # Re-read the YAML profile (identity, world_facts,
+            # personal_knowledge, active_quests, capability_configs).
+            try:
+                npc._load()
+            except Exception as e:
+                logger.warning(f"reset: failed to reload {npc_id}: {e}")
+            # Force alive even if _load read stale status from a
+            # profile YAML that was manually edited.
+            npc.status = "alive"
+            npc.death_tick = None
+            npc.death_cause = None
+            npc.inheritor = None
+            npc.player_knowledge = {
+                "met": False,
+                "recognized": False,
+                "known_as": [],
+                "witnessed_deeds": [],
+                "heard_deeds": [],
+                "first_met_tick": None,
+                "last_interaction_tick": None,
+            }
+            if was_dead:
+                report["deceased_restored"].append(npc_id)
+            report["manifest_reloaded"].append(npc_id)
+
+        # 4. Zero all Director runtime state.
+        self.tick_count = 0
+        self.last_tick_at = None
+        self.recent_decisions.clear()
+        self._npc_last_planned_tick.clear()
+        self._burst_focus_npc = None
+        self._burst_remaining = 0
+        self._zone_escape_counter = 0
+        self._kind_rotation_index = 0
+        self._self_rep_retries_this_tick = 0
+        self._bio_mention_counts.clear()
+        self.recent_player_actions.clear()
+        self._active_zones.clear()
+        # Lifecycle
+        self._deceased_npcs.clear()
+        self._pending_death_requests.clear()
+        self._pending_birth_requests.clear()
+        self._birth_history.clear()
+        self._autonomous_deaths_this_session = 0
+        self._autonomous_births_this_session = 0
+        # Phase 4a
+        self._player_activity = PlayerActivity.UNKNOWN.value
+        self._activity_set_at_tick = 0
+        # Phase 4b
+        self._last_quest_dispatched_per_npc.clear()
+        self._max_unoffered_quests_override = None
+        self._quest_cooldown_ticks_override = None
+        # Phase 4c
+        self._paused = False
+        self._paused_at_tick = 0
+        self._tick_budget_seconds = -1.0
+        self._tick_time_log.clear()
+        # Phase 3a — re-seed skeletons from config, clear refusal
+        # timers + player auto-refuse intents.
+        self._quest_line_state.clear()
+        for line_id in self._quest_lines_config:
+            self._quest_line_state[line_id] = {
+                "dispatched_beats": [],
+                "completed_quests": [],
+                "rewards_earned": [],
+                "line_status": "active",
+            }
+        self._refused_quest_timers.clear()
+        self._player_auto_refuse_intents.clear()
+        self._main_line_focus_counter = 0
+        # Phase 5
+        self._npc_player_identity_trust.clear()
+        self._player_visible_feature = None
+        self._visible_feature_to_identity.clear()
+        # Narration mode
+        self.narration_mode = "prose"
+        self._reload_examples()
+
+        # 5. Reset ledger + arcs.
+        self.ledger.reset()
+        self.arc_planner.reset()
+
+        # 6. Re-snapshot original bios from the freshly-reloaded
+        # profiles so bio rotation starts clean.
+        self._snapshot_original_bios()
+
+        # 7. Persist the clean state.
+        self._save_state()
+
+        report["tick_count"] = 0
+        report["initial_cast"] = sorted(self._initial_cast)
+        return {"ok": True, **report}
 
     def get_state(self) -> dict:
         return {

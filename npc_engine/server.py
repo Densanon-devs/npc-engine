@@ -347,6 +347,19 @@ def create_app():
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_state()
 
+    @app.post("/story/reset")
+    async def story_reset():
+        """Soft-reset the Director + every NPC back to the world's
+        initial YAML-authored state. Born NPCs are removed, deceased
+        NPCs are restored, all runtime state (ledger, arcs, quest
+        progress, identity, pause, budget) is zeroed. Profile YAML
+        files are re-read so every NPC returns to its authored
+        baseline. Use for 'new game' or 'restart from save'."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.reset_to_initial_state()
+
     @app.post("/story/player_action")
     async def story_player_action(req: PlayerActionRequest):
         """Record something the player did so the Director reacts next tick.

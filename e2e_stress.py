@@ -907,6 +907,125 @@ def scenario_scale_100(out: Path) -> dict:
     return report
 
 
+def scenario_game_reset(out: Path) -> dict:
+    """Drive a rich mid-session state (ticks, birth, death, identity,
+    quests, refusals, pause), call reset, then verify every subsystem
+    returns to its initial-cast baseline."""
+    world = "port_blackwater_zoned"
+    log = StepLog("game_reset")
+    engine, _, _ = boot_engine(world=world)
+    sd = engine.story_director
+    sd.set_narration_mode("terse")
+    sd.set_active_zones(["dock_district", "lighthouse_bluffs"])
+
+    log.step("accumulate_state")
+    # Run 5 real ticks to accumulate ledger, arcs, rotation state.
+    for i in range(5):
+        _tick(sd, f"t{i+1}", actions_per_tick=3)
+    log.check(sd.tick_count == 5, f"tick_count=5, got {sd.tick_count}")
+    log.check(len(sd.ledger.entries) > 0, "ledger non-empty")
+
+    # Introduce, deed, refusal, identity trust.
+    sd.introduce_player(to_npc="captain_reva", name="Jordan")
+    sd.register_visible_feature("cloak", "hero")
+    sd.set_player_visible_feature("cloak")
+    sd.record_player_action(
+        "A hooded figure punched finn.",
+        target="finn", witness_npcs=["finn"],
+        subject_identity="hooded_figure",
+    )
+    from npc_engine.knowledge import Quest
+    old_bones = engine.pie.npc_knowledge.profiles["old_bones"]
+    old_bones.add_quest(Quest(
+        id="ref_q", name="Refuse Me", description="d",
+        intent="dark", moral_weight=0.7,
+        refusal_mode="decay", refusal_decay_ticks=10,
+    ))
+    sd.process_refusal(quest_id="ref_q", npc_id="old_bones")
+
+    # Kill an NPC.
+    sd.queue_death_request("brom", cause="test reset")
+    sd._lifecycle_tick()
+    brom = engine.pie.npc_knowledge.profiles["brom"]
+    log.check(brom.status == "deceased", "brom deceased pre-reset")
+
+    # Simulate a birth (add to profiles + birth_history).
+    engine.pie.npc_knowledge.profiles["born_npc_pip"] = type(
+        brom  # same class as existing stubs
+    ).__new__(type(brom))
+    engine.pie.npc_knowledge.profiles["born_npc_pip"].__dict__.update(
+        engine.pie.npc_knowledge.profiles["finn"].__dict__.copy()
+    )
+    engine.pie.npc_knowledge.profiles["born_npc_pip"].identity = {
+        "name": "Pip", "role": "urchin",
+    }
+    sd._birth_history.append({"npc_id": "born_npc_pip"})
+    log.check("born_npc_pip" in engine.pie.npc_knowledge.profiles,
+               "born NPC present pre-reset")
+
+    sd.pause_ticks()
+    sd.set_tick_budget(2.5)
+    sd.set_quest_pacing(max_unoffered=0, cooldown_ticks=99)
+    sd.set_player_auto_refuse(["cruel", "dark"])
+    sd.set_player_activity("in_combat")
+
+    pre_reset_size = len(engine.pie.npc_knowledge.profiles)
+    log.check(pre_reset_size == 7,
+               f"7 profiles pre-reset (6+1 born), got {pre_reset_size}")
+
+    log.step("reset")
+    result = sd.reset_to_initial_state()
+    log.check(result["ok"] is True, "reset ok", result)
+    log.check("born_npc_pip" in result["born_removed"],
+               "born removed in report")
+    log.check("brom" in result["deceased_restored"],
+               "brom restored in report")
+
+    log.step("verify_clean_slate")
+    # Cast should be exactly the initial 6.
+    post_size = len(engine.pie.npc_knowledge.profiles)
+    log.check(post_size == 6, f"6 profiles post-reset, got {post_size}")
+    log.check("born_npc_pip" not in engine.pie.npc_knowledge.profiles,
+               "born NPC removed")
+
+    # Brom alive.
+    brom2 = engine.pie.npc_knowledge.profiles.get("brom")
+    log.check(brom2 is not None and brom2.status == "alive",
+               "brom alive post-reset")
+
+    # State zeroed.
+    log.check(sd.tick_count == 0, f"tick_count=0, got {sd.tick_count}")
+    log.check(len(sd.ledger.entries) == 0, "ledger empty")
+    log.check(sd.arc_planner.arcs == [], "arcs empty")
+    log.check(sd._paused is False, "not paused")
+    log.check(sd._tick_budget_seconds == -1.0, "budget cleared")
+    log.check(sd._player_activity == "unknown", "activity reset")
+    log.check(sd._max_unoffered_quests_override is None, "pacing cleared")
+    log.check(sd._player_auto_refuse_intents == set(), "auto-refuse cleared")
+    log.check(sd._visible_feature_to_identity == {}, "feature registry cleared")
+    log.check(sd._refused_quest_timers == {}, "refusal timers cleared")
+    log.check(sd._npc_player_identity_trust == {}, "identity trust cleared")
+    log.check(sd._deceased_npcs == {}, "deceased cleared")
+    log.check(sd._birth_history == [], "birth history cleared")
+
+    # Captain Reva's player_knowledge should be fresh (no more Jordan).
+    reva = engine.pie.npc_knowledge.profiles["captain_reva"]
+    log.check(reva.player_knowledge["met"] is False,
+               "reva player_knowledge reset")
+    log.check(reva.player_knowledge["known_as"] == [],
+               "reva known_as empty")
+
+    # A live tick should work after reset.
+    log.step("post_reset_tick")
+    rec = _tick(sd, "post_reset", actions_per_tick=1)
+    log.check(not rec["paused"], "post-reset tick fires", rec)
+    log.check(sd.tick_count == 1, "tick_count incremented to 1")
+
+    report = log.to_dict()
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report
+
+
 SCENARIOS = {
     "gameplay":              scenario_gameplay,
     "persistence":           scenario_persistence,
@@ -914,6 +1033,7 @@ SCENARIOS = {
     "live_dialogue":         scenario_live_dialogue,
     "identity_accuracy":     scenario_identity_accuracy,
     "activity_transitions":  scenario_activity_transitions,
+    "game_reset":            scenario_game_reset,
     "scale_100":             scenario_scale_100,
 }
 

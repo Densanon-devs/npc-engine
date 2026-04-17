@@ -1,0 +1,173 @@
+{
+  "scenario": "game_reset",
+  "failed": 0,
+  "check_count": 28,
+  "checks": [
+    {
+      "label": "tick_count=5, got 5",
+      "ok": true
+    },
+    {
+      "label": "ledger non-empty",
+      "ok": true
+    },
+    {
+      "label": "brom deceased pre-reset",
+      "ok": true
+    },
+    {
+      "label": "born NPC present pre-reset",
+      "ok": true
+    },
+    {
+      "label": "7 profiles pre-reset (6+1 born), got 7",
+      "ok": true
+    },
+    {
+      "label": "reset ok",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "born_removed": [
+          "born_npc_pip"
+        ],
+        "deceased_restored": [
+          "brom"
+        ],
+        "manifest_reloaded": [
+          "brom",
+          "thessa",
+          "captain_reva",
+          "finn",
+          "varro",
+          "old_bones"
+        ],
+        "tick_count": 0,
+        "initial_cast": [
+          "brom",
+          "captain_reva",
+          "finn",
+          "old_bones",
+          "thessa",
+          "varro"
+        ]
+      }
+    },
+    {
+      "label": "born removed in report",
+      "ok": true
+    },
+    {
+      "label": "brom restored in report",
+      "ok": true
+    },
+    {
+      "label": "6 profiles post-reset, got 6",
+      "ok": true
+    },
+    {
+      "label": "born NPC removed",
+      "ok": true
+    },
+    {
+      "label": "brom alive post-reset",
+      "ok": true
+    },
+    {
+      "label": "tick_count=0, got 0",
+      "ok": true
+    },
+    {
+      "label": "ledger empty",
+      "ok": true
+    },
+    {
+      "label": "arcs empty",
+      "ok": true
+    },
+    {
+      "label": "not paused",
+      "ok": true
+    },
+    {
+      "label": "budget cleared",
+      "ok": true
+    },
+    {
+      "label": "activity reset",
+      "ok": true
+    },
+    {
+      "label": "pacing cleared",
+      "ok": true
+    },
+    {
+      "label": "auto-refuse cleared",
+      "ok": true
+    },
+    {
+      "label": "feature registry cleared",
+      "ok": true
+    },
+    {
+      "label": "refusal timers cleared",
+      "ok": true
+    },
+    {
+      "label": "identity trust cleared",
+      "ok": true
+    },
+    {
+      "label": "deceased cleared",
+      "ok": true
+    },
+    {
+      "label": "birth history cleared",
+      "ok": true
+    },
+    {
+      "label": "reva player_knowledge reset",
+      "ok": true
+    },
+    {
+      "label": "reva known_as empty",
+      "ok": true
+    },
+    {
+      "label": "post-reset tick fires",
+      "ok": true,
+      "detail": {
+        "label": "post_reset",
+        "elapsed_s": 1.625,
+        "tick": 1,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "event",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "tick_count incremented to 1",
+      "ok": true
+    }
+  ],
+  "steps": [
+    {
+      "name": "accumulate_state",
+      "payload": null
+    },
+    {
+      "name": "reset",
+      "payload": null
+    },
+    {
+      "name": "verify_clean_slate",
+      "payload": null
+    },
+    {
+      "name": "post_reset_tick",
+      "payload": null
+    }
+  ]
+}

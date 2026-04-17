@@ -2118,6 +2118,145 @@ def test_postgen_allows_name_use_after_recognition():
     print("  [PASS] postgen_allows_name_use_after_recognition")
 
 
+# ── Game reset tests ─────────────────────────────────────────────
+
+def test_reset_removes_born_npcs():
+    """Born NPCs (added via _dispatch_npc_birth's add_profile path)
+    are removed from the profiles dict on reset. Only the manifest
+    cast survives."""
+    restore = _isolate_state_file("reset_born")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        initial = set(director._initial_cast)
+        assert initial == set(engine.pie.npc_knowledge.profiles.keys())
+
+        # Simulate a birth: inject a new NPC directly + record it
+        # in _birth_history so the reset can identify it.
+        engine.pie.npc_knowledge.profiles["newborn_pip"] = _StubNPC(
+            "newborn_pip", "orphan",
+        )
+        director._birth_history.append({"npc_id": "newborn_pip"})
+        assert "newborn_pip" in engine.pie.npc_knowledge.profiles
+
+        result = director.reset_to_initial_state()
+        assert result["ok"] is True, result
+        assert "newborn_pip" in result["born_removed"], result
+        assert "newborn_pip" not in engine.pie.npc_knowledge.profiles
+        # Manifest NPCs still present.
+        for npc_id in initial:
+            assert npc_id in engine.pie.npc_knowledge.profiles, npc_id
+    finally:
+        restore()
+    print("  [PASS] reset_removes_born_npcs")
+
+
+def test_reset_resurrects_deceased_npcs():
+    """Deceased NPCs return to alive status on reset. Their quests,
+    events, and dynamic knowledge are wiped to the YAML baseline."""
+    restore = _isolate_state_file("reset_resurrect")
+    try:
+        engine = _make_stub_engine(profile_specs=_LARGE_STUB_PROFILES)
+        director = StoryDirector(engine)
+        kael = engine.pie.npc_knowledge.get("kael")
+        kael.status = "deceased"
+        kael.death_tick = 5
+        kael.death_cause = "fell into a volcano"
+        director._deceased_npcs["kael"] = {
+            "death_tick": 5, "death_cause": "fell into a volcano",
+        }
+        # Add some runtime junk to verify it's wiped.
+        kael.dynamic_world_facts.append("runtime fact")
+        kael.quests.append(Quest(id="junk", name="J", description="j"))
+
+        result = director.reset_to_initial_state()
+        assert "kael" in result["deceased_restored"], result
+        assert kael.status == "alive", kael.status
+        assert kael.death_tick is None
+        assert kael.dynamic_world_facts == [], kael.dynamic_world_facts
+        # Stub NPCs have no YAML file so _load() is a no-op; the
+        # quests list was cleared by the reset. Original profiles
+        # come from stub, not YAML, so quests stays empty here.
+        assert not any(q.id == "junk" for q in kael.quests), kael.quests
+    finally:
+        restore()
+    print("  [PASS] reset_resurrects_deceased_npcs")
+
+
+def test_reset_clears_all_runtime_state():
+    """After a full session (ticks, introductions, refusals, quests,
+    arcs, identity trust, pause), reset_to_initial_state brings
+    every Director field back to its zero/default value."""
+    restore = _isolate_state_file("reset_all_state")
+    try:
+        engine = _make_stub_engine(
+            profile_specs=_LARGE_STUB_PROFILES,
+            responses=[
+                '{"action": "event", "target": "kael", "event": "x"}',
+                '{"action": "event", "target": "bess", "event": "y"}',
+            ],
+        )
+        director = StoryDirector(engine)
+        # Accumulate state across every subsystem.
+        director.tick(actions_per_tick=1)
+        director.tick(actions_per_tick=1)
+        director.introduce_player(to_npc="kael", name="Jordan")
+        director.set_player_activity("in_dungeon")
+        director.set_quest_pacing(max_unoffered=1, cooldown_ticks=5)
+        director.set_tick_budget(3.0)
+        director.pause_ticks()
+        director.set_player_auto_refuse(["cruel"])
+        director.register_visible_feature("cloak", "hero")
+        director.set_player_visible_feature("cloak")
+        director._refused_quest_timers[("kael", "q1")] = 20
+        director._npc_player_identity_trust["kael"] = {"jordan": 30}
+        director._quest_line_state["test"] = {
+            "dispatched_beats": ["a"],
+            "completed_quests": [],
+            "rewards_earned": [],
+            "line_status": "active",
+        }
+
+        result = director.reset_to_initial_state()
+        assert result["ok"] is True, result
+
+        # Tick counter
+        assert director.tick_count == 0
+        # Rotation
+        assert director._npc_last_planned_tick == {}
+        assert director._burst_focus_npc is None
+        assert director._kind_rotation_index == 0
+        # Phase 4a
+        assert director._player_activity == "unknown"
+        # Phase 4b
+        assert director._last_quest_dispatched_per_npc == {}
+        assert director._max_unoffered_quests_override is None
+        assert director._quest_cooldown_ticks_override is None
+        # Phase 4c
+        assert director._paused is False
+        assert director._tick_budget_seconds == -1.0
+        # Phase 3a
+        assert director._refused_quest_timers == {}
+        assert director._player_auto_refuse_intents == set()
+        # Phase 5
+        assert director._npc_player_identity_trust == {}
+        assert director._player_visible_feature is None
+        assert director._visible_feature_to_identity == {}
+        # Per-NPC
+        kael = engine.pie.npc_knowledge.get("kael")
+        assert kael.player_knowledge["met"] is False
+        assert kael.player_knowledge["known_as"] == []
+        # Lifecycle
+        assert director._deceased_npcs == {}
+        assert director._birth_history == []
+        # Ledger + arcs
+        assert len(director.ledger.entries) == 0
+        assert director.arc_planner.arcs == []
+    finally:
+        restore()
+    print("  [PASS] reset_clears_all_runtime_state")
+
+
 # ── GPU coordination tests (Phase 4c) ────────────────────────────
 
 def test_pause_state_blocks_ticks():
@@ -5948,6 +6087,11 @@ def main():
     test_anonymous_action_with_no_witnesses_tags_unknown_figure()
     test_visible_feature_auto_recognition_on_first_meeting()
     test_visible_feature_overrides_explicit_subject_identity()
+
+    print("\nStory Director — game reset tests")
+    test_reset_removes_born_npcs()
+    test_reset_resurrects_deceased_npcs()
+    test_reset_clears_all_runtime_state()
 
     print("\nStory Director — reputation tests (Phase 5c)")
     test_get_reputation_returns_per_identity_state()
