@@ -67,9 +67,11 @@ npc-engine/
 ├── modules/                     # Legacy NPC modules (npc_kael, npc_noah)
 ├── tests/
 │   ├── test_all.py              # Full integration tests (8 test groups)
-│   ├── test_story_director.py   # 35 tests (offline + integration smoke)
+│   ├── test_story_director.py   # 192 offline + integration smoke
 │   └── test_port_blackwater.py  # Port Blackwater scenario tests
 ├── bench_story_director.py      # Story Director model comparison + sessions
+├── stress_director.py           # Per-phase GPU stress harness (--phase {3a|4a|4b|4c|5})
+├── e2e_stress.py                # End-to-end scenario suite (gameplay, persistence, identity, reset, etc.)
 ├── dist/
 │   ├── Dockerfile               # Python 3.11 + llama-cpp-python
 │   └── docker-compose.yml       # Mounts PIE models + world data
@@ -93,7 +95,7 @@ python -m npc_engine.server --port 9000
 # Tests
 python tests/test_all.py                                    # Full suite (8 test groups)
 python tests/test_port_blackwater.py                        # Port Blackwater tests
-python tests/test_story_director.py                         # Story Director (35 tests)
+python tests/test_story_director.py                         # Story Director (192 offline + integration smoke)
 
 # Story Director bench (model comparison, scripted sessions)
 python bench_story_director.py --ticks 10 --reset --model qwen_3b
@@ -202,6 +204,26 @@ quests, drops world facts, and reacts to player behavior. **Not a
 Capability** — capabilities are per-NPC dialogue hooks; the Director
 is a top-level service owned by `NPCEngine`.
 
+**Shipped phases (v0.3.0):**
+- **Core** — tick-based LLM generation, FactLedger, narrative arcs,
+  narration mode (prose/terse), bio injection, self-rep retry.
+- **Phase 1** — zone layer (active zones, zone locality weighting).
+- **Phase 2** — lifecycle (NPC death, birth pipeline, autonomous).
+- **Phase 3a** — quest-lines (`quest_lines.yaml`), intent tagging,
+  moral-weight refusal, decay-mode timers, auto-refuse (two-layer).
+- **Phase 4a** — player activity context (pause/single-action/quest-drop).
+- **Phase 4b** — per-NPC quest pacing (cap + cooldown + main-line bypass).
+- **Phase 4c** — explicit pause, rolling LLM budget, adaptive next-tick hint.
+- **Phase 5a** — identity split (per-NPC player_knowledge, subject_identity
+  on ledger entries, witness recording, trust normalization on identity merge).
+- **Phase 5b** — visible-feature registry, auto-recognition on first meeting.
+- **Phase 5c** — reputation surfacing (`GET /player/reputation`), RUMOURS
+  dialogue hint for unrecognized NPCs.
+- **Game reset** — `POST /story/reset` (manifest-based soft reset to
+  YAML baseline: born removed, deceased revived, all state cleared).
+- **Postgen name guard** — unauthorized player-name detection/repair
+  auto-wired through `engine.process()`.
+
 ### Architectural pattern: Python plans, LLM writes
 
 Every model up to 3B fails at *deciding* which NPC and action kind to
@@ -227,9 +249,34 @@ ticks, and 4/4 player reactivity.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /story/tick` | Advance the world by one overseer decision |
-| `GET /story/state` | Tick count, recent decisions, ledger stats |
-| `POST /story/player_action` | Record a player action (text + optional npc target + trust delta) |
+| `POST /story/tick` | Advance the world by one overseer decision (returns `next_tick_recommended_in_seconds`) |
+| `GET /story/state` | Tick count, recent decisions, ledger stats, activity, arc state |
+| `POST /story/player_action` | Record a player action (text + npc + trust + quest_completed/accepted + witness_npcs + subject_identity) |
+| `POST /story/reset` | Soft-reset to YAML baseline (born NPCs removed, deceased revived, all runtime state cleared) |
+| `POST /story/activity` | Set player activity context (in_town/in_combat/in_menu/idle/in_dungeon/wandering/in_dialogue/traveling) |
+| `GET /story/activity` | Current player activity + tick at which it was set |
+| `POST /story/pause` | Hold all future ticks (explicit pause, does not bump tick_count) |
+| `POST /story/resume` | Clear explicit pause |
+| `GET /story/pause_state` | Pause flag, budget config, trailing-window LLM usage, next-tick hint |
+| `POST /story/tick_budget` | Set rolling-window LLM-time cap (max_seconds_per_minute; negative clears) |
+| `POST /story/quest_pacing` | Override per-NPC quest pacing caps (max_unoffered, cooldown_ticks) |
+| `GET /story/quest_pacing` | Effective pacing values + per-NPC last-dispatch-tick map |
+| `POST /story/player_zone` | Set the player's active zones for focus locality |
+| `POST /story/npc_zone` | Move a mobile NPC to a new zone |
+| `GET /story/zones` | Active zones + every NPC's current_zone |
+| `POST /story/npc_death` | Queue a death dispatch (game-authoritative) |
+| `GET /story/graveyard` | Deceased NPCs and their death records |
+| `POST /story/npc_birth_request` | Queue a birth request for a zone |
+| `GET /story/population` | Per-zone alive count + target + min |
+| `POST /quests/refuse` | Player refuses a quest (trust hit, ledger entry, decay timer if applicable) |
+| `POST /player/auto_refuse` | Set player's auto-refuse intent filter (list of intent tags) |
+| `GET /player/auto_refuse` | Current auto-refuse config (dev flag + player intent set) |
+| `POST /player/introduce` | Player introduces themselves to an NPC (name + titles → recognized) |
+| `POST /player/visible_feature` | Set a player-visible feature (cloak, weapon, etc.) |
+| `POST /player/register_feature` | Map a visible feature to an identity for auto-recognition |
+| `POST /player/vouched_by` | One NPC vouches the player to another (identity inheritance) |
+| `GET /player/identity_state` | Per-NPC player_knowledge + identity trust + feature registry |
+| `GET /player/reputation` | Aggregated per-identity known_by + deeds + intent summary |
 
 ### Adding new lore
 

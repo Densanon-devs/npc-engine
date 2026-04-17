@@ -48,7 +48,7 @@ def create_app():
     app = FastAPI(
         title="Anima",
         description="Every NPC has a soul. Game integration API for NPC dialogue with gossip, trust, and capabilities.",
-        version="0.2.0",
+        version="0.3.0",
     )
 
     app.add_middleware(
