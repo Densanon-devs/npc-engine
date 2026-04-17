@@ -1,0 +1,210 @@
+{
+  "scenario": "identity_accuracy",
+  "failed": 0,
+  "check_count": 18,
+  "checks": [
+    {
+      "label": "varro: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [
+          "hooded_killer"
+        ],
+        "want": [
+          "hooded_killer"
+        ]
+      }
+    },
+    {
+      "label": "finn: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [
+          "hooded_killer"
+        ],
+        "want": [
+          "hooded_killer"
+        ]
+      }
+    },
+    {
+      "label": "captain_reva: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [
+          "jordan"
+        ],
+        "want": [
+          "jordan"
+        ]
+      }
+    },
+    {
+      "label": "thessa: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [
+          "the_pilgrim"
+        ],
+        "want": [
+          "the_pilgrim"
+        ]
+      }
+    },
+    {
+      "label": "old_bones: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [],
+        "want": []
+      }
+    },
+    {
+      "label": "brom: known_as matches exactly",
+      "ok": true,
+      "detail": {
+        "got": [],
+        "want": []
+      }
+    },
+    {
+      "label": "old_bones heard all 3 deeds",
+      "ok": true,
+      "detail": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "label": "brom heard all 3 deeds",
+      "ok": true,
+      "detail": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "label": "identity hooded_killer present in reputation",
+      "ok": true,
+      "detail": [
+        "the_pilgrim",
+        "jordan",
+        "hooded_killer"
+      ]
+    },
+    {
+      "label": "identity jordan present in reputation",
+      "ok": true,
+      "detail": [
+        "the_pilgrim",
+        "jordan",
+        "hooded_killer"
+      ]
+    },
+    {
+      "label": "identity the_pilgrim present in reputation",
+      "ok": true,
+      "detail": [
+        "the_pilgrim",
+        "jordan",
+        "hooded_killer"
+      ]
+    },
+    {
+      "label": "hooded_killer known_by exactly varro+finn",
+      "ok": true
+    },
+    {
+      "label": "jordan known_by exactly captain_reva",
+      "ok": true
+    },
+    {
+      "label": "the_pilgrim known_by exactly thessa",
+      "ok": true
+    },
+    {
+      "label": "brom hint present",
+      "ok": true
+    },
+    {
+      "label": "hint mentions 'hooded killer'",
+      "ok": true,
+      "detail": "=== RUMOURS ===\nYou've heard tales of hooded killer \u2014 A hooded figure stabbed a merchant on the dock..\nYou've heard tales of jordan \u2014 Jordan delivered the harbor manifest on time..\nYou've heard tales of the pilgrim \u2014 A quiet pilgrim lit a candle at the bluffs..\nDon't assume the player is them, but you may bring up the rumour if it fits the moment."
+    },
+    {
+      "label": "hint mentions 'jordan'",
+      "ok": true,
+      "detail": "=== RUMOURS ===\nYou've heard tales of hooded killer \u2014 A hooded figure stabbed a merchant on the dock..\nYou've heard tales of jordan \u2014 Jordan delivered the harbor manifest on time..\nYou've heard tales of the pilgrim \u2014 A quiet pilgrim lit a candle at the bluffs..\nDon't assume the player is them, but you may bring up the rumour if it fits the moment."
+    },
+    {
+      "label": "hint mentions 'the pilgrim'",
+      "ok": true,
+      "detail": "=== RUMOURS ===\nYou've heard tales of hooded killer \u2014 A hooded figure stabbed a merchant on the dock..\nYou've heard tales of jordan \u2014 Jordan delivered the harbor manifest on time..\nYou've heard tales of the pilgrim \u2014 A quiet pilgrim lit a candle at the bluffs..\nDon't assume the player is them, but you may bring up the rumour if it fits the moment."
+    }
+  ],
+  "steps": [
+    {
+      "name": "assert_per_npc_known_as",
+      "payload": null
+    },
+    {
+      "name": "assert_non_witness_heard_all",
+      "payload": null
+    },
+    {
+      "name": "reputation_grouping",
+      "payload": null
+    },
+    {
+      "name": "brom_hint_covers_identities",
+      "payload": null
+    },
+    {
+      "name": "final",
+      "payload": {
+        "reputation": {
+          "known_identities": {
+            "the_pilgrim": {
+              "known_by": [
+                "thessa"
+              ],
+              "deeds": [
+                "A quiet pilgrim lit a candle at the bluffs."
+              ]
+            },
+            "jordan": {
+              "known_by": [
+                "captain_reva"
+              ],
+              "deeds": [
+                "Jordan delivered the harbor manifest on time."
+              ]
+            },
+            "hooded_killer": {
+              "known_by": [
+                "finn",
+                "varro"
+              ],
+              "deeds": [
+                "A hooded figure stabbed a merchant on the dock."
+              ]
+            }
+          },
+          "total_npcs_who_recognize_you": 4,
+          "total_npcs_aware_of_deeds_without_recognition": 2,
+          "summary_by_intent": {
+            "good": 0,
+            "neutral": 0,
+            "gray": 0,
+            "dark": 0,
+            "cruel": 0
+          },
+          "player_visible_feature": null
+        },
+        "brom_hint": "=== RUMOURS ===\nYou've heard tales of hooded killer \u2014 A hooded figure stabbed a merchant on the dock..\nYou've heard tales of jordan \u2014 Jordan delivered the harbor manifest on time..\nYou've heard tales of the pilgrim \u2014 A quiet pilgrim lit a candle at the bluffs..\nDon't assume the player is them, but you may bring up the rumour if it fits the moment."
+      }
+    }
+  ]
+}

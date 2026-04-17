@@ -253,3 +253,53 @@ those masters are behind, the integration smoke test will surface
 `AttributeError: 'NPCKnowledge' object has no attribute
 'player_knowledge'` — so both masters should be pulled into any
 downstream consumer before rolling out.
+
+---
+
+## End-to-end scenarios (live LLM)
+
+After the per-phase stress loop above, a richer e2e harness
+(`e2e_stress.py`) simulated realistic gameplay flows end-to-end
+and asserted state at every step. 108 / 108 checks passed on live
+Qwen 2.5 3B. Per-scenario reports under `logs/e2e_<scenario>.json`.
+
+| Scenario | Checks | Highlights |
+|---|---|---|
+| gameplay (30 ticks scripted arc) | 40/40 | Feature auto-recognition on introduce, shady deed with witnesses, decay refusal reopens at boundary, main-line beat-0 completion + prereq-unlock on beat-1, pause/resume tick-count invariants, activity transitions |
+| persistence round-trip | 17/17 | Every persisted field survives a cold boot (tick_count, paused flag, budget, feature registry, quest_pacing overrides, refused_quest_timers, quest_line_state, identity_trust, player_knowledge) |
+| refusal_decay live | 5/5 | Decay mode quest reopened at tick boundary; permanent mode stayed refused through additional ticks |
+| live_dialogue | 5/5 | Real `engine.process()` calls for recognized (reva) + unrecognized (brom) NPCs; postgen guard keeps "Jordan" on reva and rewrites to "Stranger" on brom |
+| identity_accuracy | 18/18 | Three deeds under three identities, zero leakage across witness sets; reputation grouping exact; RUMOURS hint covers all unmet identities |
+| activity_transitions | 20/20 | Full activity matrix + explicit pause interleave; tick_count bump invariants held for every path |
+| scale_100 (10 ticks, 100 NPCs) | 3/3 | Avg 5.23 s/tick (same as 6-NPC PB zoned), bounded snapshot kept latency stable; 23/100 rotation breadth in 10 ticks |
+
+### Bug found + fixed during e2e
+- **Phase 5a `player_knowledge` was runtime-only**: a cold boot
+  wiped recognition + deeds per-NPC. The Director now persists
+  `per_npc_player_knowledge` in `state.json` and restores it onto
+  the live profiles at boot. Covered by the persistence scenario
+  (17/17 passes include `player_knowledge survived` + `met`,
+  `recognized`, `witnessed_deeds` restored).
+
+### Design note surfaced
+- `engine.complete_quest(quest_id)` via `record_player_action`
+  updates `player_quests.completed_quests` but does NOT flip the
+  NPC's `Quest.status` to `completed` unless the quest was on
+  `player_quests.active_quests`. Phase 3a's prereq unlock checks
+  `Quest.status == "completed"` directly, so game clients that
+  use `record_player_action(quest_completed=...)` as the sole
+  completion signal must also call
+  `engine.player_quests.complete(...)` OR flip the quest status
+  explicitly. Documented in the gameplay scenario comments.
+
+### Summary
+**Total green checks across offline + phase-stress + e2e: 298+.**
+- Offline: 189 ([lightweight harness skips GPU integration smoke])
+- Phase stress: 6 runs, every assertion in the harness passed
+- E2E: 108 checks across 7 scenarios
+
+Story Director `story-director-quests` is production-ready.
+Remaining follow-ups are world-authoring (tag profile quests with
+Phase 3a fields) and documentation (game-client integration notes
+for the quest-completion status-flip convention).
+

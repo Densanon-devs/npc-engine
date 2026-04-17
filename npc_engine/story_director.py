@@ -1805,6 +1805,30 @@ class StoryDirector:
                     str(k): str(v) for k, v in raw_feature_registry.items()
                     if isinstance(v, str)
                 }
+            # Phase 5a — restore per-NPC player_knowledge onto the
+            # live profiles. The profiles are already loaded by this
+            # point (NPCKnowledge __init__ ran during engine boot),
+            # so we just splice the saved dict back onto each NPC.
+            # NPCs absent from the saved dict keep their fresh
+            # defaults — the NPC may have been born via Phase 2b
+            # mid-session and never had player interactions yet.
+            raw_pk = state.get("per_npc_player_knowledge", {}) or {}
+            if isinstance(raw_pk, dict):
+                for npc_id, pk in raw_pk.items():
+                    if not isinstance(pk, dict):
+                        continue
+                    npc = self.engine.pie.npc_knowledge.profiles.get(npc_id)
+                    if npc is None:
+                        continue
+                    npc.player_knowledge = {
+                        "met": bool(pk.get("met", False)),
+                        "recognized": bool(pk.get("recognized", False)),
+                        "known_as": list(pk.get("known_as", [])),
+                        "witnessed_deeds": list(pk.get("witnessed_deeds", [])),
+                        "heard_deeds": list(pk.get("heard_deeds", [])),
+                        "first_met_tick": pk.get("first_met_tick"),
+                        "last_interaction_tick": pk.get("last_interaction_tick"),
+                    }
             self.recent_player_actions = state.get("recent_player_actions", [])[-8:]
             raw_counts = state.get("bio_mention_counts", {}) or {}
             if isinstance(raw_counts, dict):
@@ -1853,6 +1877,16 @@ class StoryDirector:
             "npc_player_identity_trust": self._npc_player_identity_trust,
             "player_visible_feature": self._player_visible_feature,
             "visible_feature_to_identity": self._visible_feature_to_identity,
+            # Phase 5a — persist per-NPC player_knowledge so a
+            # restart preserves recognition + deeds. Runtime-only
+            # default remains the NPCKnowledge in-memory dict; state
+            # save captures it alongside identity trust.
+            "per_npc_player_knowledge": {
+                npc_id: dict(pk) for npc_id, npc in
+                self.engine.pie.npc_knowledge.profiles.items()
+                for pk in [getattr(npc, "player_knowledge", None)]
+                if isinstance(pk, dict)
+            },
             "recent_player_actions": self.recent_player_actions[-8:],
             "bio_mention_counts": self._bio_mention_counts,
         }

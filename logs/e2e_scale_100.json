@@ -1,0 +1,138 @@
+{
+  "scenario": "scale_100",
+  "failed": 0,
+  "check_count": 3,
+  "checks": [
+    {
+      "label": "cast size \u2265 100",
+      "ok": true,
+      "detail": 100
+    },
+    {
+      "label": "avg tick < 60 s",
+      "ok": true,
+      "detail": 5.2281
+    },
+    {
+      "label": "rotation touched \u226515 NPCs in 10 ticks",
+      "ok": true,
+      "detail": 23
+    }
+  ],
+  "steps": [
+    {
+      "name": "ticks",
+      "payload": [
+        {
+          "label": "t1",
+          "elapsed_s": 6.266,
+          "tick": 1,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t2",
+          "elapsed_s": 4.703,
+          "tick": 2,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t3",
+          "elapsed_s": 4.609,
+          "tick": 3,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t4",
+          "elapsed_s": 4.391,
+          "tick": 4,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t5",
+          "elapsed_s": 4.718,
+          "tick": 5,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t6",
+          "elapsed_s": 6.469,
+          "tick": 6,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t7",
+          "elapsed_s": 6.625,
+          "tick": 7,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t8",
+          "elapsed_s": 4.61,
+          "tick": 8,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t9",
+          "elapsed_s": 4.875,
+          "tick": 9,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        },
+        {
+          "label": "t10",
+          "elapsed_s": 5.015,
+          "tick": 10,
+          "paused": false,
+          "paused_reason": null,
+          "action_kind": null,
+          "next_hint_s": 300,
+          "n_subactions": 3
+        }
+      ]
+    },
+    {
+      "name": "summary",
+      "payload": {
+        "cast_size": 100,
+        "touched_count": 23,
+        "avg_latency_s": 5.2281,
+        "ledger_size": 20
+      }
+    }
+  ]
+}

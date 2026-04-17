@@ -1,0 +1,51 @@
+{
+  "scenario": "refusal_decay",
+  "failed": 0,
+  "check_count": 5,
+  "checks": [
+    {
+      "label": "decay unlock_tick set",
+      "ok": true,
+      "detail": 4
+    },
+    {
+      "label": "permanent refusal has no unlock_tick",
+      "ok": true
+    },
+    {
+      "label": "decay refusal reopened (status=available)",
+      "ok": true
+    },
+    {
+      "label": "permanent refusal stays refused (status=refused)",
+      "ok": true
+    },
+    {
+      "label": "permanent still refused after extra ticks",
+      "ok": true
+    }
+  ],
+  "steps": [
+    {
+      "name": "refuse_both",
+      "payload": null
+    },
+    {
+      "name": "run_ticks_to_unlock",
+      "payload": null
+    },
+    {
+      "name": "drive_more_ticks",
+      "payload": null
+    },
+    {
+      "name": "state_end",
+      "payload": {
+        "decay_final_status": "available",
+        "perm_final_status": "refused",
+        "refused_timers": [],
+        "tick_count": 11
+      }
+    }
+  ]
+}

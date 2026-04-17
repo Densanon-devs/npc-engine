@@ -41,6 +41,9 @@ data/worlds/*/player_quests.yaml.bak
 # Stress-harness raw console captures — keep the structured JSON
 # reports in logs/*.json, ignore the noisy *.log companions.
 logs/*.log
+logs/*.stdout
+config_stress_*.yaml
+data/cache/
 
 # Arc embedding sidecars (regenerable from arcs.json on next load)
 data/worlds/*/story/arcs.embeddings.npy

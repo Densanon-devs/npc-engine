@@ -1,0 +1,206 @@
+{
+  "scenario": "activity_transitions",
+  "failed": 0,
+  "check_count": 20,
+  "checks": [
+    {
+      "label": "activity=in_town paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_in_town",
+        "elapsed_s": 2.844,
+        "tick": 1,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "event",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_town tick bumped",
+      "ok": true,
+      "detail": "0 -> 1"
+    },
+    {
+      "label": "activity=in_combat paused=True",
+      "ok": true,
+      "detail": {
+        "label": "act_in_combat",
+        "elapsed_s": 0.0,
+        "tick": 2,
+        "paused": true,
+        "paused_reason": "activity:in_combat",
+        "action_kind": "noop",
+        "next_hint_s": 10,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_combat tick bumped",
+      "ok": true,
+      "detail": "1 -> 2"
+    },
+    {
+      "label": "activity=in_town paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_in_town",
+        "elapsed_s": 2.484,
+        "tick": 3,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "noop",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_town tick bumped",
+      "ok": true,
+      "detail": "2 -> 3"
+    },
+    {
+      "label": "activity=in_dialogue paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_in_dialogue",
+        "elapsed_s": 1.313,
+        "tick": 4,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "fact",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_dialogue tick bumped",
+      "ok": true,
+      "detail": "3 -> 4"
+    },
+    {
+      "label": "activity=in_dungeon paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_in_dungeon",
+        "elapsed_s": 3.968,
+        "tick": 5,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "event",
+        "next_hint_s": 600,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_dungeon tick bumped",
+      "ok": true,
+      "detail": "4 -> 5"
+    },
+    {
+      "label": "activity=idle paused=True",
+      "ok": true,
+      "detail": {
+        "label": "act_idle",
+        "elapsed_s": 0.0,
+        "tick": 6,
+        "paused": true,
+        "paused_reason": "activity:idle",
+        "action_kind": "noop",
+        "next_hint_s": 120,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=idle tick bumped",
+      "ok": true,
+      "detail": "5 -> 6"
+    },
+    {
+      "label": "activity=in_menu paused=True",
+      "ok": true,
+      "detail": {
+        "label": "act_in_menu",
+        "elapsed_s": 0.0,
+        "tick": 7,
+        "paused": true,
+        "paused_reason": "activity:in_menu",
+        "action_kind": "noop",
+        "next_hint_s": 30,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_menu tick bumped",
+      "ok": true,
+      "detail": "6 -> 7"
+    },
+    {
+      "label": "activity=in_town paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_in_town",
+        "elapsed_s": 2.516,
+        "tick": 8,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "noop",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=in_town tick bumped",
+      "ok": true,
+      "detail": "7 -> 8"
+    },
+    {
+      "label": "activity=wandering paused=False",
+      "ok": true,
+      "detail": {
+        "label": "act_wandering",
+        "elapsed_s": 1.11,
+        "tick": 9,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "fact",
+        "next_hint_s": 900,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "activity=wandering tick bumped",
+      "ok": true,
+      "detail": "8 -> 9"
+    },
+    {
+      "label": "explicit pause takes precedence",
+      "ok": true,
+      "detail": {
+        "label": "paused_during_town",
+        "elapsed_s": 0.0,
+        "tick": 9,
+        "paused": true,
+        "paused_reason": "explicit_pause",
+        "action_kind": "noop",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "explicit pause does NOT bump tick (9)",
+      "ok": true
+    }
+  ],
+  "steps": [
+    {
+      "name": "explicit_pause_during_town",
+      "payload": null
+    },
+    {
+      "name": "final_tick_count",
+      "payload": 9
+    }
+  ]
+}

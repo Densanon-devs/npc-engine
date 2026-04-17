@@ -1,0 +1,391 @@
+{
+  "scenario": "gameplay",
+  "failed": 0,
+  "check_count": 40,
+  "checks": [
+    {
+      "label": "t1 live tick",
+      "ok": true,
+      "detail": {
+        "label": "t1",
+        "elapsed_s": 7.468,
+        "tick": 1,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": null,
+        "next_hint_s": 300,
+        "n_subactions": 3
+      }
+    },
+    {
+      "label": "tick_count advanced to 1",
+      "ok": true
+    },
+    {
+      "label": "default activity",
+      "ok": true
+    },
+    {
+      "label": "introduce ok",
+      "ok": true
+    },
+    {
+      "label": "reva met + recognized",
+      "ok": true
+    },
+    {
+      "label": "reva knows jordan",
+      "ok": true
+    },
+    {
+      "label": "thessa auto-recognized the_dragonslayer via feature",
+      "ok": true
+    },
+    {
+      "label": "thessa knows jordan",
+      "ok": true
+    },
+    {
+      "label": "tick_count now 2 got 2",
+      "ok": true
+    },
+    {
+      "label": "record_player_action ok",
+      "ok": true
+    },
+    {
+      "label": "varro recognized hooded_killer",
+      "ok": true
+    },
+    {
+      "label": "finn recognized hooded_killer",
+      "ok": true
+    },
+    {
+      "label": "varro does NOT know jordan (no introduction)",
+      "ok": true
+    },
+    {
+      "label": "finn does NOT know jordan",
+      "ok": true
+    },
+    {
+      "label": "brom never met, just heard the gossip",
+      "ok": true
+    },
+    {
+      "label": "brom has heard_deeds entry",
+      "ok": true
+    },
+    {
+      "label": "tick advanced from reactive",
+      "ok": true
+    },
+    {
+      "label": "refusal ok",
+      "ok": true
+    },
+    {
+      "label": "trust delta scales w/moral weight, got -12",
+      "ok": true
+    },
+    {
+      "label": "quest status=refused",
+      "ok": true
+    },
+    {
+      "label": "decay timer scheduled",
+      "ok": true
+    },
+    {
+      "label": "unlock_tick present",
+      "ok": true,
+      "detail": 8
+    },
+    {
+      "label": "decayed refusal reopened (status=available)",
+      "ok": true
+    },
+    {
+      "label": "decay timer cleared after reopen",
+      "ok": true
+    },
+    {
+      "label": "main_test line state present",
+      "ok": true
+    },
+    {
+      "label": "beat 0 in completed_quests",
+      "ok": true
+    },
+    {
+      "label": "reward 0 earned",
+      "ok": true,
+      "detail": {
+        "dispatched_beats": [
+          {
+            "quest_id": "gp_beat_1",
+            "beat_index": 1,
+            "giver": "thessa",
+            "at_tick": 11,
+            "status": "locked"
+          }
+        ],
+        "completed_quests": [
+          "gp_beat_0"
+        ],
+        "rewards_earned": [
+          "Harbor seal"
+        ],
+        "line_status": "active"
+      }
+    },
+    {
+      "label": "line still active (1/2 beats)",
+      "ok": true
+    },
+    {
+      "label": "beat 1 locked (unknown prereq)",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "kind": "quest",
+        "npc_id": "thessa",
+        "quest_id": "gp_beat_1",
+        "status": "locked",
+        "auto_refused": false
+      }
+    },
+    {
+      "label": "beat 1 unlocked post-sweep",
+      "ok": true
+    },
+    {
+      "label": "unlock record present",
+      "ok": true
+    },
+    {
+      "label": "paused response",
+      "ok": true,
+      "detail": {
+        "label": "paused",
+        "elapsed_s": 0.0,
+        "tick": 10,
+        "paused": true,
+        "paused_reason": "explicit_pause",
+        "action_kind": "noop",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "tick_count unchanged (was 10)",
+      "ok": true
+    },
+    {
+      "label": "tick advances after resume",
+      "ok": true
+    },
+    {
+      "label": "dungeon dropped quest, got fact",
+      "ok": true
+    },
+    {
+      "label": "combat paused",
+      "ok": true,
+      "detail": {
+        "label": "combat",
+        "elapsed_s": 0.0,
+        "tick": 13,
+        "paused": true,
+        "paused_reason": "activity:in_combat",
+        "action_kind": "noop",
+        "next_hint_s": 10,
+        "n_subactions": 0
+      }
+    },
+    {
+      "label": "combat BUMPS tick_count per Phase 4a design",
+      "ok": true,
+      "detail": "12 -> 13"
+    },
+    {
+      "label": "hooded_killer identity recorded",
+      "ok": true
+    },
+    {
+      "label": "jordan identity recorded",
+      "ok": true
+    },
+    {
+      "label": "\u22654 NPCs recognize player, got 4",
+      "ok": true
+    }
+  ],
+  "steps": [
+    {
+      "name": "tick_1_baseline",
+      "payload": null
+    },
+    {
+      "name": "introduce_player_to_reva",
+      "payload": null
+    },
+    {
+      "name": "register_feature_and_equip",
+      "payload": null
+    },
+    {
+      "name": "tick_3_live",
+      "payload": null
+    },
+    {
+      "name": "shady_deed_no_cloak",
+      "payload": null
+    },
+    {
+      "name": "tick_5_reactive",
+      "payload": null
+    },
+    {
+      "name": "refuse_cruel_quest_decay",
+      "payload": null
+    },
+    {
+      "name": "advance_ticks_toward_refusal_unlock",
+      "payload": null
+    },
+    {
+      "name": "complete_main_line_beat_0",
+      "payload": null
+    },
+    {
+      "name": "prereq_unlock_beat_1",
+      "payload": null
+    },
+    {
+      "name": "pause_then_tick",
+      "payload": null
+    },
+    {
+      "name": "activity_transitions",
+      "payload": null
+    },
+    {
+      "name": "final_reputation",
+      "payload": null
+    },
+    {
+      "name": "final_state",
+      "payload": {
+        "tick_count": 14,
+        "ledger_size": 17,
+        "arcs_active": 2,
+        "quest_line_state": {
+          "main_test": {
+            "dispatched_beats": [
+              {
+                "quest_id": "gp_beat_1",
+                "beat_index": 1,
+                "giver": "thessa",
+                "at_tick": 11,
+                "status": "locked"
+              }
+            ],
+            "completed_quests": [
+              "gp_beat_0"
+            ],
+            "rewards_earned": [
+              "Harbor seal"
+            ],
+            "line_status": "active"
+          }
+        },
+        "reputation": {
+          "known_identities": {
+            "player": {
+              "known_by": [],
+              "deeds": [
+                "The player refused Old Bones's quest 'Cruel Task'."
+              ]
+            },
+            "hooded_killer": {
+              "known_by": [
+                "finn",
+                "varro"
+              ],
+              "deeds": [
+                "A hooded figure stabbed Old Bones in the alley."
+              ]
+            },
+            "the_dragonslayer": {
+              "known_by": [
+                "thessa"
+              ],
+              "deeds": []
+            },
+            "jordan": {
+              "known_by": [
+                "captain_reva",
+                "thessa"
+              ],
+              "deeds": []
+            }
+          },
+          "total_npcs_who_recognize_you": 4,
+          "total_npcs_aware_of_deeds_without_recognition": 2,
+          "summary_by_intent": {
+            "good": 0,
+            "neutral": 0,
+            "gray": 0,
+            "dark": 0,
+            "cruel": 1
+          },
+          "player_visible_feature": null
+        },
+        "refused_timers": [],
+        "per_npc_player_knowledge": {
+          "brom": {
+            "met": false,
+            "recognized": false,
+            "known_as": []
+          },
+          "captain_reva": {
+            "met": true,
+            "recognized": true,
+            "known_as": [
+              "jordan"
+            ]
+          },
+          "finn": {
+            "met": true,
+            "recognized": true,
+            "known_as": [
+              "hooded_killer"
+            ]
+          },
+          "old_bones": {
+            "met": false,
+            "recognized": false,
+            "known_as": []
+          },
+          "thessa": {
+            "met": true,
+            "recognized": true,
+            "known_as": [
+              "jordan",
+              "the_dragonslayer"
+            ]
+          },
+          "varro": {
+            "met": true,
+            "recognized": true,
+            "known_as": [
+              "hooded_killer"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

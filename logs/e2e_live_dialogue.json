@@ -1,0 +1,51 @@
+{
+  "scenario": "live_dialogue",
+  "failed": 0,
+  "check_count": 5,
+  "checks": [
+    {
+      "label": "reva responded",
+      "ok": true,
+      "detail": "{\"dialogue\": \"Ah, a name I do not recognize. What brings you to port_blackwater_zoned?\", \"emotion\": \"curious\", \"action\": null}"
+    },
+    {
+      "label": "brom responded",
+      "ok": true,
+      "detail": "{\"dialogue\": \"Ah, Jordan. Welcome. I have a small request for you. The melted lantern on the path needs examining.\", \"emotion\": \"patient\", \"action\": null}"
+    },
+    {
+      "label": "reva kept Jordan (recognized)",
+      "ok": true,
+      "detail": "{\"dialogue\": \"Good morning, Jordan. The docks are quiet.\", \"emotion\": \"friendly\", \"action\": null}"
+    },
+    {
+      "label": "brom stripped Jordan (unrecognized)",
+      "ok": true,
+      "detail": "{\"dialogue\": \"Welcome, stranger. The lighthouse calls to me.\", \"emotion\": \"neutral\", \"action\": null}"
+    },
+    {
+      "label": "brom rewrote to stranger",
+      "ok": true,
+      "detail": "{\"dialogue\": \"Welcome, stranger. The lighthouse calls to me.\", \"emotion\": \"neutral\", \"action\": null}"
+    }
+  ],
+  "steps": [
+    {
+      "name": "reva_dialogue_with_name",
+      "payload": null
+    },
+    {
+      "name": "brom_dialogue_unrecognized",
+      "payload": null
+    },
+    {
+      "name": "live_responses",
+      "payload": {
+        "reva_response": "{\"dialogue\": \"Ah, a name I do not recognize. What brings you to port_blackwater_zoned?\", \"emotion\": \"curious\", \"action\": null}",
+        "brom_response": "{\"dialogue\": \"Ah, Jordan. Welcome. I have a small request for you. The melted lantern on the path needs examining.\", \"emotion\": \"patient\", \"action\": null}",
+        "reva_repaired": "{\"dialogue\": \"Good morning, Jordan. The docks are quiet.\", \"emotion\": \"friendly\", \"action\": null}",
+        "brom_repaired": "{\"dialogue\": \"Welcome, stranger. The lighthouse calls to me.\", \"emotion\": \"neutral\", \"action\": null}"
+      }
+    }
+  ]
+}

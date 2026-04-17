@@ -1,0 +1,185 @@
+{
+  "scenario": "persistence",
+  "failed": 0,
+  "check_count": 17,
+  "checks": [
+    {
+      "label": "tick_count survived",
+      "ok": true,
+      "detail": [
+        0,
+        0
+      ]
+    },
+    {
+      "label": "paused flag survived",
+      "ok": true
+    },
+    {
+      "label": "paused_at_tick survived",
+      "ok": true
+    },
+    {
+      "label": "tick_budget survived",
+      "ok": true,
+      "detail": 12.5
+    },
+    {
+      "label": "visible_feature survived",
+      "ok": true
+    },
+    {
+      "label": "feature registry survived",
+      "ok": true
+    },
+    {
+      "label": "auto_refuse intents survived",
+      "ok": true
+    },
+    {
+      "label": "quest_line_state survived",
+      "ok": true
+    },
+    {
+      "label": "quest_pacing override survived",
+      "ok": true
+    },
+    {
+      "label": "cooldown override survived",
+      "ok": true
+    },
+    {
+      "label": "refused_quest_timers survived",
+      "ok": true,
+      "detail": [
+        [
+          "old_bones",
+          "persist_ref"
+        ]
+      ]
+    },
+    {
+      "label": "player_knowledge survived",
+      "ok": true,
+      "detail": [
+        "jordan",
+        "the_red"
+      ]
+    },
+    {
+      "label": "met survived",
+      "ok": true
+    },
+    {
+      "label": "recognized survived",
+      "ok": true
+    },
+    {
+      "label": "finn witnessed_deeds survived",
+      "ok": true,
+      "detail": [
+        0
+      ]
+    },
+    {
+      "label": "identity trust survived",
+      "ok": true,
+      "detail": {
+        "captain_reva": {
+          "jordan": 0,
+          "the_red": 0
+        },
+        "finn": {
+          "the_red": 0
+        }
+      }
+    },
+    {
+      "label": "post-restore tick fires",
+      "ok": true,
+      "detail": {
+        "label": "post_restore_tick",
+        "elapsed_s": 1.672,
+        "tick": 1,
+        "paused": false,
+        "paused_reason": null,
+        "action_kind": "event",
+        "next_hint_s": 300,
+        "n_subactions": 0
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "session_1_setup",
+      "payload": null
+    },
+    {
+      "name": "session_2_boot_and_compare",
+      "payload": null
+    },
+    {
+      "name": "snapshot",
+      "payload": {
+        "tick_count": 0,
+        "paused": true,
+        "paused_at_tick": 0,
+        "tick_budget_seconds": 12.5,
+        "player_visible_feature": "cloak_red",
+        "visible_feature_to_identity": {
+          "cloak_red": "the_red"
+        },
+        "player_auto_refuse_intents": [
+          "cruel"
+        ],
+        "quest_line_state": {
+          "persist_line": {
+            "dispatched_beats": [],
+            "completed_quests": [],
+            "rewards_earned": [],
+            "line_status": "active"
+          }
+        },
+        "refused_quest_timers": [
+          [
+            "old_bones",
+            "persist_ref",
+            7
+          ]
+        ],
+        "npc_player_identity_trust": {
+          "captain_reva": {
+            "jordan": 0,
+            "the_red": 0
+          },
+          "finn": {
+            "the_red": 0
+          }
+        },
+        "max_unoffered_override": 3,
+        "quest_cooldown_override": 7,
+        "reva_known_as": [
+          "jordan",
+          "the_red"
+        ],
+        "finn_witnessed": [
+          0
+        ],
+        "old_bones_quests": [
+          [
+            "persist_ref",
+            "refused",
+            "decay"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "session2_after_resume",
+      "payload": {
+        "tick_count": 1,
+        "paused": false
+      }
+    }
+  ]
+}
