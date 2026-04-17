@@ -1,0 +1,16 @@
+# Creation Today Museum — NPC Engine config
+# Start with: python -m npc_engine.server --port 8000
+# (set NPC_ENGINE_CONFIG=config_museum.yaml before starting)
+
+world_dir: "data/worlds/creation_museum"
+world_name: "Creation Today Museum"
+active_npc: "noah"
+pie_config: "../plug-in-intelligence-engine/config.yaml"
+
+gossip_rules:
+  max_hops: 0          # No gossip — curators are independent
+  decay_per_hop: 0
+  min_significance: 1.0
+
+trust_ripple:
+  enabled: false       # No inter-NPC trust ripple

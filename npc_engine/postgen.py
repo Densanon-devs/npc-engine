@@ -683,7 +683,9 @@ def validate_and_repair(raw: str, npc_id: str = "",
                         events: Optional[list[str]] = None,
                         *,
                         player_known_names: Optional[set[str]] = None,
-                        all_player_names: Optional[set[str]] = None) -> str:
+                        all_player_names: Optional[set[str]] = None,
+                        topic_redirect: Optional[str] = None,
+                        topic_gate_active: bool = False) -> str:
     """
     Parse, validate, and repair a model response.
     Returns a clean JSON string ready to send back to the game.
@@ -697,7 +699,38 @@ def validate_and_repair(raw: str, npc_id: str = "",
       6. Quest injection (if user asked for work and no quest in response)
       7. Otherwise → normalized response
     """
+    # Museum / curator topic gate — must run BEFORE the JSON parse
+    # so that off-topic redirects and parse-failure fallbacks both
+    # respect the topic context. When the topic gate fired a
+    # redirect, we don't even need to parse the model output — just
+    # return the redirect. When on-topic, we do a lenient parse and
+    # return whatever the model said (even if it's not perfect JSON).
+    if topic_redirect:
+        return json.dumps({
+            "dialogue": topic_redirect,
+            "emotion": "warm",
+            "action": None,
+        })
+
     obj = parse_json_loose(raw)
+
+    if topic_gate_active:
+        # Museum/curator mode — lenient handling. If the model's
+        # output doesn't parse as JSON, extract the raw text as
+        # dialogue rather than returning SAFE_FALLBACK. The model
+        # IS in character; it just didn't format as JSON.
+        if obj is None or not validate_schema(obj):
+            cleaned = raw.strip()
+            # Strip any JSON fencing artifacts
+            if cleaned.startswith("```"):
+                cleaned = cleaned.strip("`").strip()
+                if cleaned.lower().startswith("json"):
+                    cleaned = cleaned[4:].strip()
+            # If we can't extract JSON, use the raw text as dialogue
+            obj = {"dialogue": cleaned[:500], "emotion": "neutral", "action": None}
+        obj = normalize_schema(obj)
+        return json.dumps(obj)
+
     if obj is None or not validate_schema(obj):
         return json.dumps(SAFE_FALLBACK)
 

@@ -1,0 +1,6 @@
+# Creation Today Museum — world definition
+# Each NPC is a curator on a specific floor. No social connections
+# between curators (they don't gossip — each stands alone on their
+# floor). The social graph is intentionally empty.
+
+connections: []

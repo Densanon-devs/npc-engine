@@ -48,25 +48,97 @@ class KnowledgeGateCapability(Capability):
                 "reveal_style": entry.get("reveal_style", ""),
             })
 
+        # Topic gate (museum mode) — when enabled, the NPC only
+        # discusses topics in the allowed list. Everything else gets
+        # a polite redirect. The gate injects a system directive
+        # into the prompt AND provides a redirect message the
+        # postgen layer can use to replace off-topic model output.
+        topic_cfg = yaml_config.get("topic_gate", {}) or {}
+        self.topic_gate_enabled: bool = bool(topic_cfg.get("enabled", False))
+        self.allowed_topics: list[str] = [
+            str(t).lower().strip()
+            for t in (topic_cfg.get("allowed_topics") or [])
+            if isinstance(t, str) and t.strip()
+        ]
+        self.redirect_message: str = str(
+            topic_cfg.get("redirect_message", "")
+        ).strip()
+        # Optional cross-references for the redirect template.
+        self.suggested_curator: str = str(
+            topic_cfg.get("suggested_curator", "another curator")
+        ).strip()
+        self.suggested_floor: str = str(
+            topic_cfg.get("suggested_floor", "another floor")
+        ).strip()
+
         shared_state["knowledge_gate"] = {"unlocked": list(self.unlocked_ids)}
 
     def build_context(self, query: str, shared_state: dict) -> CapabilityContext:
-        unlocked_facts = self._get_unlocked_facts(shared_state)
+        parts: list[str] = []
 
-        if not unlocked_facts:
+        # Topic gate directive — highest-priority instruction that
+        # tells the model to stay on-topic. Placed BEFORE any
+        # unlocked secrets so the fence is the first thing the
+        # model reads in the knowledge section.
+        if self.topic_gate_enabled and self.allowed_topics:
+            redirect = self._format_redirect()
+            topics_str = ", ".join(self.allowed_topics[:20])
+            parts.append(
+                f"[IMPORTANT — TOPIC GATE: You may ONLY discuss "
+                f"the following topics: {topics_str}. "
+                f"If the visitor asks about ANYTHING outside these "
+                f"topics, respond EXACTLY with: \"{redirect}\" "
+                f"Do NOT answer off-topic questions. Do NOT "
+                f"improvise. Stay in character and redirect.]"
+            )
+
+            # Quick on-topic check — if the query has zero overlap
+            # with allowed topics, flag it in shared_state so the
+            # postgen layer can enforce the redirect even if the
+            # model ignores the directive.
+            query_lower = query.lower() if query else ""
+            on_topic = any(
+                topic in query_lower for topic in self.allowed_topics
+            )
+            # Also count general museum/conversation openers as on-topic
+            if any(w in query_lower for w in (
+                "hello", "hi", "hey", "tell me", "what", "how",
+                "who are you", "your name", "this floor", "this gallery",
+                "thank", "goodbye", "bye",
+            )):
+                on_topic = True
+            shared_state.setdefault("knowledge_gate", {})["query_on_topic"] = on_topic
+            if not on_topic:
+                shared_state["knowledge_gate"]["redirect_message"] = redirect
+
+        # Unlocked gated facts (original knowledge_gate behavior).
+        unlocked_facts = self._get_unlocked_facts(shared_state)
+        if unlocked_facts:
+            secrets = "; ".join(f["fact"] for f in unlocked_facts)
+            parts.append(f"[Secrets you can share: {secrets}]")
+
+        if not parts:
             return CapabilityContext("", 0, 50, "knowledge")
 
-        # Format unlocked facts as secrets the NPC can now share
-        secrets = "; ".join(f["fact"] for f in unlocked_facts)
-        fragment = f"[Secrets you can share: {secrets}]"
-
+        fragment = "\n".join(parts)
         token_est = len(fragment) // 4 + 1
         return CapabilityContext(
             context_fragment=fragment,
-            token_estimate=min(token_est, self.default_token_budget),
+            token_estimate=min(token_est, max(self.default_token_budget, 80)),
             priority=50,
             section="knowledge",
         )
+
+    def _format_redirect(self) -> str:
+        """Build the redirect message with curator/floor substitution."""
+        msg = self.redirect_message or (
+            "That is a wonderful question, but it falls outside my "
+            "gallery. Is there anything else about my topic I can "
+            "help you with?"
+        )
+        msg = msg.replace("{suggested_curator}", self.suggested_curator)
+        msg = msg.replace("{suggested_floor}", self.suggested_floor)
+        return msg
 
     def process_response(self, response: str, query: str,
                          shared_state: dict) -> CapabilityUpdate:

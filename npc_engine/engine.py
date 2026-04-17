@@ -45,11 +45,18 @@ class NPCEngine:
         # Create PIE engine instance
         self.pie = PluginIntelligenceEngine(config_path=pie_config, dry_run=False)
 
-        # Override PIE's NPC paths with our world directory
+        # Override PIE's NPC paths with our world directory. PIE's
+        # __init__ already created an NPCKnowledgeManager from PIE's
+        # own config, so we must also re-create the manager pointing
+        # at our world's profiles directory — otherwise PIE loads
+        # the wrong NPC set.
         self.pie.config.npc.enabled = True
         self.pie.config.npc.profiles_dir = self.config.profiles_dir
         self.pie.config.npc.state_dir = self.config.state_dir
         self.pie.config.npc.world_name = self.config.world_name
+
+        from npc_engine.knowledge import NPCKnowledgeManager
+        self.pie.npc_knowledge = NPCKnowledgeManager(self.config.profiles_dir)
 
         if self.config.active_npc:
             self.pie.config.npc.active_profile = self.config.active_npc
@@ -130,6 +137,12 @@ class NPCEngine:
 
         active_npc = self.pie.config.npc.active_profile
 
+        # Ensure the capability manager exists BEFORE process() so
+        # build_context runs and populates shared_state (especially
+        # the topic_gate fields that postgen reads).
+        if active_npc:
+            self._ensure_capability_manager(active_npc)
+
         # Delegate to PIE's full pipeline (handles routing, experts,
         # capabilities, quest injection, caching, memory — everything)
         response = self.pie.process(user_input)
@@ -176,11 +189,29 @@ class NPCEngine:
                     for _name in _pk.get("known_as", []):
                         if isinstance(_name, str):
                             all_player_names.add(str(_name).lower())
+                # Museum topic gate — if the knowledge_gate
+                # capability flagged the query as off-topic, pull
+                # the redirect message from the shared_state so the
+                # postgen layer can enforce it. Also signal
+                # topic_gate_active so postgen skips the
+                # hallucination + OOD detectors (museum content is
+                # the NPC's domain, not a hallucination).
+                topic_redirect: str | None = None
+                topic_gate_active = False
+                mgr = self.pie.capability_managers.get(active_npc)
+                if mgr:
+                    kg_state = mgr.shared_state.get("knowledge_gate", {})
+                    if "query_on_topic" in kg_state:
+                        topic_gate_active = True
+                        if not kg_state.get("query_on_topic", True):
+                            topic_redirect = kg_state.get("redirect_message")
                 response = validate_and_repair(
                     response, npc_id=active_npc, profile=profile,
                     user_input=user_input, events=events,
                     player_known_names=player_known_names,
                     all_player_names=all_player_names,
+                    topic_redirect=topic_redirect,
+                    topic_gate_active=topic_gate_active,
                 )
             except Exception as e:
                 logger.debug(f"Postgen error (using raw response): {e}")
