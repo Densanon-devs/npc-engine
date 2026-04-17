@@ -178,6 +178,13 @@ class _StubEngine:
         self.calls.append(("complete_quest", quest_id))
         # Mark on the player_quests stub so the snapshot reflects it
         self.pie.player_quests.completed_quests.append({"id": quest_id, "name": quest_id})
+        # Flip the NPC's Quest.status to "completed" — mirrors the
+        # real engine.complete_quest behavior after the Phase 3a fix.
+        for npc in self.pie.npc_knowledge.profiles.values():
+            for q in getattr(npc, "quests", []):
+                if q.id == quest_id:
+                    q.status = "completed"
+                    return {"completed": quest_id}
         return {"completed": quest_id}
 
     def accept_quest(self, quest_id: str, quest_name: str, given_by: str) -> dict:

@@ -155,9 +155,32 @@ class NPCEngine:
                         ],
                     }
                     events = [e.description for e in npc.events[-3:]]
+                # Phase 5a — build identity sets for the postgen
+                # name guard. player_known_names is what THIS NPC
+                # is allowed to call the player; all_player_names
+                # is every identity any NPC knows the player under
+                # (the detection pool). Both are empty when no NPC
+                # has met the player yet, which makes the guard a
+                # no-op — backward-compat with pre-5a callers.
+                player_known_names: set[str] = set()
+                all_player_names: set[str] = set()
+                if npc:
+                    pk = getattr(npc, "player_knowledge", None) or {}
+                    player_known_names = {
+                        str(n).lower()
+                        for n in pk.get("known_as", [])
+                        if isinstance(n, str)
+                    }
+                for _nid, _n in self.pie.npc_knowledge.profiles.items():
+                    _pk = getattr(_n, "player_knowledge", None) or {}
+                    for _name in _pk.get("known_as", []):
+                        if isinstance(_name, str):
+                            all_player_names.add(str(_name).lower())
                 response = validate_and_repair(
                     response, npc_id=active_npc, profile=profile,
                     user_input=user_input, events=events,
+                    player_known_names=player_known_names,
+                    all_player_names=all_player_names,
                 )
             except Exception as e:
                 logger.debug(f"Postgen error (using raw response): {e}")
@@ -274,23 +297,45 @@ class NPCEngine:
         return {"accepted": quest_id, "given_by": given_by}
 
     def complete_quest(self, quest_id: str) -> dict:
-        """Player completes a quest. Triggers trust boost and gossip."""
-        # Find which NPC gave this quest
+        """Player completes a quest. Triggers trust boost and gossip.
+
+        Tries the ``player_quests`` tracker first (formal accept →
+        complete pathway). If the quest isn't tracked there — common
+        when the Director dispatches a quest that the player completes
+        without a formal ``/quests/accept`` step — the method STILL
+        scans every NPC's quest list and flips any matching quest to
+        ``completed``. This ensures the Director's Phase 3a prereq
+        checks (which read ``Quest.status`` directly) see the
+        completion regardless of the player-tracker pathway.
+        """
+        # Find which NPC gave this quest — check both the tracker
+        # AND the NPC quest lists so we can flip status even when
+        # the tracker doesn't have it.
         given_by = None
         for q in self.pie.player_quests.active_quests:
             if q["id"] == quest_id:
                 given_by = q.get("given_by", "")
                 break
 
-        success = self.pie.player_quests.complete_quest(quest_id)
-        if not success:
-            return {"error": f"Quest '{quest_id}' not found in active quests"}
+        tracker_ok = self.pie.player_quests.complete_quest(quest_id)
 
-        # Update NPC's quest status
+        # Always try to flip the NPC's Quest.status to "completed".
+        # Walk all profiles if given_by is unknown — the quest might
+        # live on an NPC the tracker never recorded.
+        npc_flipped = False
         if given_by:
             npc = self.pie.npc_knowledge.get(given_by)
             if npc:
-                npc.update_quest(quest_id, "completed")
+                npc_flipped = npc.update_quest(quest_id, "completed")
+        if not npc_flipped:
+            for _nid, _npc in self.pie.npc_knowledge.profiles.items():
+                if _npc.update_quest(quest_id, "completed"):
+                    given_by = given_by or _nid
+                    npc_flipped = True
+                    break
+
+        if not tracker_ok and not npc_flipped:
+            return {"error": f"Quest '{quest_id}' not found"}
 
             # Trust boost for completing a quest
             mgr = self._ensure_capability_manager(given_by)

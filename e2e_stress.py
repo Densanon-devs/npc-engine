@@ -278,10 +278,17 @@ def scenario_gameplay(out: Path) -> dict:
             target="captain_reva",
             quest_completed="gp_beat_0",
         )
-        # Flip status so prereq sweep sees it as completed.
-        for q in reva.quests:
-            if q.id == "gp_beat_0":
-                q.status = "completed"
+        # engine.complete_quest now flips NPC Quest.status directly
+        # (even without a formal accept step), so no manual flip
+        # needed. Verify the status actually flipped.
+        q_beat0 = next(
+            (q for q in reva.quests if q.id == "gp_beat_0"), None
+        )
+        log.check(
+            q_beat0 is not None and q_beat0.status == "completed",
+            "engine.complete_quest flipped NPC status",
+            q_beat0.status if q_beat0 else "quest not found",
+        )
         st = sd._quest_line_state.get("main_test")
         log.check(st is not None, "main_test line state present")
         log.check("gp_beat_0" in (st or {}).get("completed_quests", []),
@@ -654,9 +661,13 @@ def scenario_live_dialogue(out: Path) -> dict:
         log.check(False, "brom dialogue errored", str(e))
         brom_response = ""
 
-    # Apply the Phase 5a postgen guard manually the way a game
-    # client would. In production the engine's postgen hook would
-    # thread all_player_names / player_known_names through.
+    # engine.process() now auto-threads player_known_names and
+    # all_player_names into validate_and_repair (wired in engine.py).
+    # The deterministic test below uses hand-crafted JSON to verify
+    # the guard logic independently of model randomness — the model
+    # may or may not use "Jordan" in free-form output, so checking
+    # the live response is flaky. This manual path proves the
+    # helpers fire correctly regardless.
     from npc_engine.postgen import validate_and_repair
     all_names = {"jordan"}
     # Reva's known_as includes jordan.
