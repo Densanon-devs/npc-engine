@@ -4,7 +4,7 @@
 
 world_dir: "data/worlds/creation_museum"
 world_name: "Creation Today Museum"
-active_npc: "noah"
+active_npc: "solomon"
 pie_config: "../plug-in-intelligence-engine/config.yaml"
 
 gossip_rules:
