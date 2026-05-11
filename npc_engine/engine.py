@@ -17,8 +17,16 @@ from npc_engine.config import NPCEngineConfig
 from npc_engine.experts.examples import FewShotLoader
 from npc_engine.experts.npc_experts import register_npc_experts
 from npc_engine.postgen import (
+    load_world_fabrication_blocklist,
+    load_world_fallbacks,
     load_world_known_terms,
+    load_world_real_world_blocklist,
+    register_world_npcs,
+    reset_fabrication_blocklist,
+    reset_real_world_blocklist,
+    reset_world_fallbacks,
     reset_world_known_terms,
+    reset_world_npcs,
     validate_and_repair,
 )
 from npc_engine.social.network import SocialGraph
@@ -62,13 +70,59 @@ class NPCEngine:
         from npc_engine.knowledge import NPCKnowledgeManager
         self.pie.npc_knowledge = NPCKnowledgeManager(self.config.profiles_dir)
 
-        # Load per-world hallucination-check vocabulary. Resets to the
-        # generic baseline first so terms from a previously-loaded
-        # world don't leak into this one (relevant when multiple
-        # NPCEngine instances are created in the same process — e.g.
-        # tests, multi-world hosts).
+        # ── Per-world postgen configuration ──────────────────────
+        # Five layers are configurable per world. Each resets to a
+        # documented default first so previous-world state doesn't
+        # bleed (multi-world processes — tests, multi-world hosts).
+        # All loaders are graceful on missing YAML.
+
+        # 1. Vocabulary for the hallucination detector (Layer 15)
         reset_world_known_terms()
         load_world_known_terms(self.config.world_dir)
+
+        # 2. NPC name registry for wrong-identity / wrong-addressee
+        # (Layers 2 + 3). Auto-derived from loaded profiles — no
+        # per-world YAML needed. Previously hardcoded to Ashenvale.
+        reset_world_npcs()
+        npc_names = []
+        try:
+            profiles = getattr(self.pie.npc_knowledge, "profiles", {}) or {}
+            for npc in profiles.values():
+                # Each value can be an NPCKnowledge instance or a raw
+                # dict depending on the manager's storage choice; try
+                # both.
+                profile_data = getattr(npc, "profile", None) or (
+                    npc if isinstance(npc, dict) else None
+                )
+                if not profile_data:
+                    continue
+                name = profile_data.get("identity", {}).get("name", "")
+                if name:
+                    npc_names.append(name)
+        except Exception:
+            logger.exception("Failed to enumerate NPC names for wrong-identity registry")
+        if npc_names:
+            register_world_npcs(npc_names)
+            logger.info(f"Registered {len(npc_names)} NPC names for wrong-identity detection")
+
+        # 3. Fallback dialogues (5 canonical responses for guard-fired
+        # paths). Per-world override lets pirate/sci-fi/biblical worlds
+        # ship theme-appropriate fallbacks instead of medieval-fantasy.
+        reset_world_fallbacks()
+        load_world_fallbacks(self.config.world_dir)
+
+        # 4. Real-world entity blocklist (the Putin/London/Tesla
+        # backstop). Per-world override supports card-game worlds
+        # (`remove: [trump]`), historical-fiction (`remove: [biden,
+        # obama, ...]`), and customer-specific extensions.
+        reset_real_world_blocklist()
+        load_world_real_world_blocklist(self.config.world_dir)
+
+        # 5. Fabrication blocklist (Vexnoria / chosen one / etc.).
+        # Per-world override for high-fantasy games where "the chosen
+        # one" is canonical lore.
+        reset_fabrication_blocklist()
+        load_world_fabrication_blocklist(self.config.world_dir)
 
         if self.config.active_npc:
             self.pie.config.npc.active_profile = self.config.active_npc

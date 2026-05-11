@@ -202,6 +202,55 @@ def reset_world_known_terms() -> None:
     WORLD_KNOWN_TERMS.clear()
     WORLD_KNOWN_TERMS.update(_GENERIC_KNOWN_TERMS)
 
+
+# ── Per-world NPC name registry ─────────────────────────────────
+#
+# Used by `detect_wrong_identity` and `detect_wrong_addressee` to spot
+# few-shot bleed where an NPC erroneously claims another NPC's identity
+# ("I am Mara" said by Noah) or addresses the player with another NPC's
+# name ("Greetings, Kael").
+#
+# Was: a hardcoded `_ALL_NPC_NAMES = {"noah", "kael", ...}` set baked
+# with the Ashenvale roster. Non-Ashenvale worlds (Port Blackwater,
+# Creation Museum, synthetics) got zero coverage — `detect_wrong_*`
+# checked against Ashenvale names that don't exist in those worlds.
+#
+# Now: a mutable set populated at engine init by `register_world_npcs()`,
+# called by NPCEngine.__init__ after profiles load. Each world's NPC
+# names are automatically picked up from `identity.name` in the
+# profile YAML — no per-world config needed.
+
+WORLD_NPC_NAMES: set[str] = set()
+
+
+def register_world_npcs(npc_names) -> int:
+    """Register the active world's NPC names for wrong-identity detection.
+
+    Pass an iterable of NPC display names (any case — they're
+    lowercased on insert). Names are also added to WORLD_KNOWN_TERMS
+    so the hallucination layer doesn't flag legitimate cross-NPC
+    references. Returns the count added.
+
+    Idempotent — re-registering the same names is safe.
+    """
+    added = 0
+    for name in npc_names:
+        if not isinstance(name, str):
+            continue
+        clean = name.strip().lower()
+        if not clean:
+            continue
+        if clean not in WORLD_NPC_NAMES:
+            WORLD_NPC_NAMES.add(clean)
+            added += 1
+        WORLD_KNOWN_TERMS.add(clean)
+    return added
+
+
+def reset_world_npcs() -> None:
+    """Clear the world NPC registry. Call before switching worlds."""
+    WORLD_NPC_NAMES.clear()
+
 # Stop-words / common words we never count as proper-noun candidates
 COMMON_PROPER_WORDS = {
     "i", "you", "he", "she", "they", "we", "the", "and", "but", "or",
@@ -338,9 +387,6 @@ def is_identity_question(user_input: str) -> bool:
     return any(q in u for q in _IDENTITY_QUESTIONS)
 
 
-_ALL_NPC_NAMES = {"noah", "kael", "mara", "roderick", "elara", "bess", "pip"}
-
-
 def inject_identity(obj: dict, profile: Optional[dict]) -> dict:
     """If identity response is generic or uses the WRONG NPC's name, fix it."""
     if not profile:
@@ -364,8 +410,10 @@ def detect_wrong_identity(dialogue: str, profile: Optional[dict]) -> bool:
         return False
     correct_name = profile.get("identity", {}).get("name", "").lower()
     d = dialogue.lower()
-    # Check if any OTHER NPC name appears and the correct one doesn't
-    other_names = _ALL_NPC_NAMES - {correct_name}
+    # Check if any OTHER NPC name appears and the correct one doesn't.
+    # WORLD_NPC_NAMES is populated at engine init by
+    # `register_world_npcs()` — see the registry block above.
+    other_names = WORLD_NPC_NAMES - {correct_name}
     has_wrong = any(f"i am {n}" in d or f"i'm {n}" in d for n in other_names)
     has_correct = correct_name in d
     return has_wrong and not has_correct
@@ -521,7 +569,9 @@ def detect_wrong_addressee(dialogue: str,
     if not profile:
         return False, None
     speaker_name = profile.get("identity", {}).get("name", "").lower()
-    other_names = _ALL_NPC_NAMES - {speaker_name}
+    # Per-world NPC names registered at engine init (see WORLD_NPC_NAMES
+    # block above). Was hardcoded `_ALL_NPC_NAMES`.
+    other_names = WORLD_NPC_NAMES - {speaker_name}
 
     for pattern in _ADDRESS_PATTERNS:
         for match in re.finditer(pattern, dialogue, flags=re.IGNORECASE):
@@ -675,6 +725,61 @@ _META_KEYWORDS = {
     "rng", "random number", "clip through", "wall clip", "glitch",
     "inventory screen", "pause menu", "settings menu",
     "what level", "your level", "my level",
+}
+
+# ── Fallback dialogues ────────────────────────────────────────
+#
+# Five canonical fallback responses returned when the model's output
+# fails one of the postgen guards (meta-gaming, fabrication,
+# out-of-distribution modern jargon, real-world entity leak, generic
+# malformed JSON). The dialogue strings are hardcoded medieval-fantasy
+# English by default — fine for Ashenvale, but jarring for
+# Port Blackwater (pirate setting), Creation Museum (biblical
+# curators), or any sci-fi / contemporary world.
+#
+# Per-world override: ship `<world_dir>/fallbacks.yaml` with any of the
+# five sections (meta, safe, hallucination, ood, real_world). Loaded
+# at engine init by `load_world_fallbacks()`. The constants below are
+# mutable dicts; the loader mutates them in place so existing call
+# sites (`return json.dumps(META_FALLBACK)`) keep their references
+# intact and pick up the override automatically.
+#
+# Schema example (`data/worlds/port_blackwater/fallbacks.yaml`):
+#     meta:
+#       dialogue: "Bah! Speak plain words, ye landlubber."
+#       emotion: "annoyed"
+#       action: null
+#     real_world:
+#       dialogue: "Never heard of 'em. Me ship sails only these waters."
+#       emotion: "puzzled"
+#       action: null
+
+_FALLBACK_DEFAULTS = {
+    "meta": {
+        "dialogue": "I do not understand these words. Speak plainly, traveler.",
+        "emotion": "confused",
+        "action": None,
+    },
+    "safe": {
+        "dialogue": "I am uncertain what you mean. Speak plainly, traveler.",
+        "emotion": "puzzled",
+        "action": None,
+    },
+    "hallucination": {
+        "dialogue": "I have not heard of such things. My knowledge is of this place only.",
+        "emotion": "puzzled",
+        "action": None,
+    },
+    "ood": {
+        "dialogue": "I know not of such things. I deal only in matters of this village.",
+        "emotion": "confused",
+        "action": None,
+    },
+    "real_world": {
+        "dialogue": "I know nothing of such people or places. My world is small, and I have not wandered far.",
+        "emotion": "puzzled",
+        "action": None,
+    },
 }
 
 META_FALLBACK = {
@@ -892,6 +997,64 @@ def rebuild_real_world_pattern() -> None:
     _REAL_WORLD_PATTERN = _compile_real_world_pattern()
 
 
+# Snapshot of the original blocklist so reset/load can restore +
+# diff against the baseline. Frozen — never mutated.
+_REAL_WORLD_BLOCKLIST_DEFAULT = frozenset(_REAL_WORLD_BLOCKLIST)
+
+
+def load_world_real_world_blocklist(world_dir) -> int:
+    """Apply per-world overrides to `_REAL_WORLD_BLOCKLIST` from YAML.
+
+    Reads `<world_dir>/real_world_blocklist.yaml`. Schema:
+
+        add: [...]      # terms to ADD to the blocklist
+        remove: [...]   # terms to REMOVE from the blocklist
+
+    Both sections optional. After applying changes, automatically calls
+    `rebuild_real_world_pattern()` so the compiled regex reflects the
+    new state. Returns total mutations (additions + removals).
+
+    Use cases:
+      - Card-game world: `remove: [trump]` (the verb / card term)
+      - Historical-fiction world: `remove: [biden, putin, obama, ...]`
+      - Customer-specific moat: `add: [acmecorp, internal_codename]`
+
+    Missing or malformed YAML is a no-op (defaults stay).
+    """
+    path = Path(world_dir) / "real_world_blocklist.yaml"
+    if not path.exists():
+        return 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        logger.warning(f"Failed to load {path}: {e}. Real-world blocklist unchanged.")
+        return 0
+
+    mutations = 0
+    for term in (data.get("remove") or []):
+        if isinstance(term, str) and term.strip().lower() in _REAL_WORLD_BLOCKLIST:
+            _REAL_WORLD_BLOCKLIST.discard(term.strip().lower())
+            mutations += 1
+    for term in (data.get("add") or []):
+        if isinstance(term, str) and term.strip() and term.strip().lower() not in _REAL_WORLD_BLOCKLIST:
+            _REAL_WORLD_BLOCKLIST.add(term.strip().lower())
+            mutations += 1
+    if mutations:
+        rebuild_real_world_pattern()
+        logger.info(f"Applied {mutations} real-world blocklist override(s) from {path}")
+    return mutations
+
+
+def reset_real_world_blocklist() -> None:
+    """Restore `_REAL_WORLD_BLOCKLIST` to the built-in default and
+    recompile the pattern. Call before switching worlds."""
+    _REAL_WORLD_BLOCKLIST.clear()
+    _REAL_WORLD_BLOCKLIST.update(_REAL_WORLD_BLOCKLIST_DEFAULT)
+    rebuild_real_world_pattern()
+
+
 # ── Fabrication blocklist (fake-fantasy terms) ────────────────
 #
 # Catches the canonical 3B-model fantasy hallucinations: when the model
@@ -947,6 +1110,60 @@ def rebuild_fabrication_pattern() -> None:
     _FABRICATION_PATTERN = _compile_fabrication_pattern()
 
 
+_FABRICATION_BLOCKLIST_DEFAULT = frozenset(_FABRICATION_BLOCKLIST)
+
+
+def load_world_fabrication_blocklist(world_dir) -> int:
+    """Apply per-world overrides to `_FABRICATION_BLOCKLIST` from YAML.
+
+    Reads `<world_dir>/fabrication_blocklist.yaml`. Schema mirrors
+    `load_world_real_world_blocklist`:
+
+        add: [...]      # generic-fantasy terms to flag (e.g. game-
+                        # specific fake-lore phrases the model leaks)
+        remove: [...]   # default terms a high-fantasy world legitimately
+                        # uses (e.g. "chosen one" is canonical in some
+                        # narratives)
+
+    Use cases:
+      - A game where "the Chosen One" is canonical lore: `remove: [chosen one]`
+      - A game tracking specific fake-lore phrases the model has hallucinated
+        in previous sessions: `add: [the void council, ...]`
+    """
+    path = Path(world_dir) / "fabrication_blocklist.yaml"
+    if not path.exists():
+        return 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        logger.warning(f"Failed to load {path}: {e}. Fabrication blocklist unchanged.")
+        return 0
+
+    mutations = 0
+    for term in (data.get("remove") or []):
+        if isinstance(term, str) and term.strip().lower() in _FABRICATION_BLOCKLIST:
+            _FABRICATION_BLOCKLIST.discard(term.strip().lower())
+            mutations += 1
+    for term in (data.get("add") or []):
+        if isinstance(term, str) and term.strip() and term.strip().lower() not in _FABRICATION_BLOCKLIST:
+            _FABRICATION_BLOCKLIST.add(term.strip().lower())
+            mutations += 1
+    if mutations:
+        rebuild_fabrication_pattern()
+        logger.info(f"Applied {mutations} fabrication blocklist override(s) from {path}")
+    return mutations
+
+
+def reset_fabrication_blocklist() -> None:
+    """Restore `_FABRICATION_BLOCKLIST` to the built-in default and
+    recompile the pattern. Call before switching worlds."""
+    _FABRICATION_BLOCKLIST.clear()
+    _FABRICATION_BLOCKLIST.update(_FABRICATION_BLOCKLIST_DEFAULT)
+    rebuild_fabrication_pattern()
+
+
 def detect_fabrication(dialogue: str) -> tuple[bool, Optional[str]]:
     """Returns (is_fabrication, matched_term).
 
@@ -965,6 +1182,80 @@ REAL_WORLD_FALLBACK = {
     "emotion": "puzzled",
     "action": None,
 }
+
+
+def load_world_fallbacks(world_dir) -> int:
+    """Override fallback dialogues from `<world_dir>/fallbacks.yaml`.
+
+    YAML schema (all 5 sections optional, all 3 fields per section
+    optional — missing fields keep the default):
+
+        meta:
+          dialogue: "..."
+          emotion: "..."
+          action: null     # or a string like "shrugs"
+        safe: {...}
+        hallucination: {...}
+        ood: {...}
+        real_world: {...}
+
+    Mutates the module-level fallback dicts IN PLACE so existing
+    `json.dumps(META_FALLBACK)` call sites pick up the new values
+    without rebinding. Returns the count of sections updated.
+
+    If the YAML file is missing or malformed, returns 0 and the
+    defaults stay in effect. Logged at INFO/WARNING.
+    """
+    path = Path(world_dir) / "fallbacks.yaml"
+    if not path.exists():
+        logger.debug(f"No fallbacks.yaml at {path} — using default fallbacks")
+        return 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        logger.warning(f"Failed to load {path}: {e}. Using default fallbacks.")
+        return 0
+
+    target_map = {
+        "meta": META_FALLBACK,
+        "safe": SAFE_FALLBACK,
+        "hallucination": HALLUCINATION_FALLBACK,
+        "ood": OOD_FALLBACK,
+        "real_world": REAL_WORLD_FALLBACK,
+    }
+    updated = 0
+    for key, target in target_map.items():
+        section = data.get(key)
+        if not isinstance(section, dict):
+            continue
+        for field in ("dialogue", "emotion", "action"):
+            if field in section:
+                target[field] = section[field]
+        updated += 1
+    if updated:
+        logger.info(f"Loaded {updated} fallback override(s) from {path}")
+    return updated
+
+
+def reset_world_fallbacks() -> None:
+    """Restore all 5 fallback dialogues to their built-in defaults.
+
+    Call before switching worlds within the same process so the
+    previous world's themed fallbacks don't bleed into the next.
+    """
+    META_FALLBACK.clear()
+    META_FALLBACK.update(_FALLBACK_DEFAULTS["meta"])
+    SAFE_FALLBACK.clear()
+    SAFE_FALLBACK.update(_FALLBACK_DEFAULTS["safe"])
+    HALLUCINATION_FALLBACK.clear()
+    HALLUCINATION_FALLBACK.update(_FALLBACK_DEFAULTS["hallucination"])
+    OOD_FALLBACK.clear()
+    OOD_FALLBACK.update(_FALLBACK_DEFAULTS["ood"])
+    REAL_WORLD_FALLBACK.clear()
+    REAL_WORLD_FALLBACK.update(_FALLBACK_DEFAULTS["real_world"])
+
 
 
 def detect_real_world_entity(dialogue: str) -> tuple[bool, Optional[str]]:
@@ -1103,10 +1394,13 @@ def validate_and_repair(raw: str, npc_id: str = "",
                           "hear anything", "going on", "the situation", "latest news",
                           "last night", "report", "did you see", "what did you see",
                           "everyone alright", "is everyone"]
-    # Common words that appear in both events AND normal NPC dialogue — skip these
-    _EVENT_SKIP_WORDS = {"village", "ashenvale", "forest", "well", "guard", "merchant",
+    # Common words that appear in both events AND normal NPC dialogue — skip these.
+    # World-specific place names (e.g. "ashenvale") would also be skip-words, but
+    # they're picked up dynamically from WORLD_KNOWN_TERMS (loaded per-world via
+    # known_terms.yaml) — we union them in below.
+    _EVENT_SKIP_WORDS = {"village", "forest", "well", "guard", "merchant",
                           "traveler", "morning", "night", "heard", "just", "been",
-                          "have", "with", "from", "that", "this", "what", "about"}
+                          "have", "with", "from", "that", "this", "what", "about"} | WORLD_KNOWN_TERMS
     if events and any(kw in user_input.lower() for kw in _EVENT_QUESTION_KW):
         # Check if model already mentioned event-SPECIFIC content (skip common words)
         event_text = " ".join(events).lower()

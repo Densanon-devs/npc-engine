@@ -27,9 +27,18 @@ sys.path.insert(0, str(NPC_ROOT))
 from npc_engine.postgen import (  # noqa: E402
     detect_wrong_identity,
     detect_wrong_addressee,
+    register_world_npcs,
     repair_wrong_addressee,
     validate_and_repair,
 )
+
+# Register the Ashenvale NPC roster for wrong-identity / wrong-addressee
+# tests. These tests target detection logic on Ashenvale data; engine
+# init normally does this registration, but unit tests bypass engine
+# init and call the detectors directly. Was: hardcoded module-level
+# `_ALL_NPC_NAMES` set; now: explicit registration matching what
+# NPCEngine.__init__ does at runtime.
+register_world_npcs(["Noah", "Kael", "Mara", "Roderick", "Elara", "Bess", "Pip"])
 
 
 def _noah_profile() -> dict:

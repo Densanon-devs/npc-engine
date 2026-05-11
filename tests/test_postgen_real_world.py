@@ -50,17 +50,34 @@ if __name__ == "__main__":
 sys.path.insert(0, str(NPC_ROOT))
 
 from npc_engine.postgen import (  # noqa: E402
+    HALLUCINATION_FALLBACK,
+    META_FALLBACK,
+    OOD_FALLBACK,
     REAL_WORLD_FALLBACK,
+    SAFE_FALLBACK,
     WORLD_KNOWN_TERMS,
+    WORLD_NPC_NAMES,
     _FABRICATION_BLOCKLIST,
+    _FABRICATION_BLOCKLIST_DEFAULT,
     _GENERIC_KNOWN_TERMS,
     _REAL_WORLD_BLOCKLIST,
+    _REAL_WORLD_BLOCKLIST_DEFAULT,
     detect_fabrication,
     detect_real_world_entity,
+    detect_wrong_addressee,
+    detect_wrong_identity,
+    load_world_fabrication_blocklist,
+    load_world_fallbacks,
     load_world_known_terms,
+    load_world_real_world_blocklist,
     rebuild_fabrication_pattern,
     rebuild_real_world_pattern,
+    register_world_npcs,
+    reset_fabrication_blocklist,
+    reset_real_world_blocklist,
+    reset_world_fallbacks,
     reset_world_known_terms,
+    reset_world_npcs,
     validate_and_repair,
 )
 
@@ -599,13 +616,12 @@ def test_load_world_known_terms_from_ashenvale():
 
 
 def test_load_world_known_terms_missing_yaml_is_graceful():
-    """A world without a known_terms.yaml falls back to the generic
-    baseline without raising."""
+    """A directory without a known_terms.yaml falls back to the
+    generic baseline without raising."""
+    import tempfile
     reset_world_known_terms()
-    # Use a directory that exists but has no known_terms.yaml
-    creation_museum_dir = NPC_ROOT / "data" / "worlds" / "creation_museum"
-    if creation_museum_dir.exists():
-        added = load_world_known_terms(creation_museum_dir)
+    with tempfile.TemporaryDirectory() as td:
+        added = load_world_known_terms(Path(td))
         assert added == 0, "missing YAML should add 0 terms"
         # Generic baseline still intact
         assert "merchant" in WORLD_KNOWN_TERMS
@@ -654,6 +670,299 @@ def test_load_idempotent():
     )
     assert second_added == 0, "second load should report 0 new entries"
     print(f"  [PASS] load_idempotent ({first_added} first, {second_added} second)")
+
+
+# ── WORLD_NPC_NAMES auto-derivation ─────────────────────────────
+
+
+def test_register_world_npcs_populates_registry():
+    """register_world_npcs() should populate WORLD_NPC_NAMES and
+    also extend WORLD_KNOWN_TERMS so the hallucination layer
+    doesn't flag legitimate cross-NPC references."""
+    reset_world_npcs()
+    reset_world_known_terms()
+    added = register_world_npcs(["Noah", "Kael", "Captain Reva"])
+    assert added == 3
+    assert "noah" in WORLD_NPC_NAMES
+    assert "kael" in WORLD_NPC_NAMES
+    assert "captain reva" in WORLD_NPC_NAMES
+    # Also added to known-terms so hallucination doesn't flag
+    assert "noah" in WORLD_KNOWN_TERMS
+    print("  [PASS] register_world_npcs_populates_registry")
+
+
+def test_register_world_npcs_idempotent():
+    reset_world_npcs()
+    first = register_world_npcs(["Noah", "Kael"])
+    second = register_world_npcs(["Noah", "Kael"])
+    assert first == 2
+    assert second == 0, "re-registering same names should report 0 new"
+    print("  [PASS] register_world_npcs_idempotent")
+
+
+def test_register_world_npcs_handles_garbage_input():
+    reset_world_npcs()
+    added = register_world_npcs(["Noah", "", None, 42, "  ", "  Kael  "])  # type: ignore[list-item]
+    assert added == 2  # Noah + Kael (whitespace stripped)
+    assert "noah" in WORLD_NPC_NAMES
+    assert "kael" in WORLD_NPC_NAMES
+    print("  [PASS] register_world_npcs_handles_garbage_input")
+
+
+def test_detect_wrong_identity_uses_world_npc_names():
+    """Wrong-identity detection must work for the active world's
+    NPCs only — not a hardcoded Ashenvale set."""
+    reset_world_npcs()
+    register_world_npcs(["Captain Reva", "Finn", "Old Bones"])
+    pirate_profile = {
+        "identity": {"name": "Finn", "role": "deck hand"},
+        "world_facts": [], "personal_knowledge": [],
+        "active_quests": [], "recent_events": [],
+    }
+    # Finn says "I am Captain Reva" — wrong identity
+    assert detect_wrong_identity("I am Captain Reva, master of this ship.",
+                                  pirate_profile) is True
+    # Finn says "I am Finn" — correct
+    assert detect_wrong_identity("I am Finn, deck hand.", pirate_profile) is False
+    print("  [PASS] detect_wrong_identity_uses_world_npc_names")
+
+
+def test_detect_wrong_identity_skips_unregistered_world():
+    """If no NPCs are registered, detect_wrong_identity returns False
+    (no false positives)."""
+    reset_world_npcs()
+    profile = {"identity": {"name": "Anyone", "role": "merchant"}}
+    assert detect_wrong_identity("I am Noah, the elder.", profile) is False, (
+        "with empty WORLD_NPC_NAMES, no detection should fire"
+    )
+    print("  [PASS] detect_wrong_identity_skips_unregistered_world")
+
+
+def test_reset_world_npcs_clears_registry():
+    reset_world_npcs()
+    register_world_npcs(["Noah", "Kael"])
+    assert len(WORLD_NPC_NAMES) > 0
+    reset_world_npcs()
+    assert len(WORLD_NPC_NAMES) == 0
+    print("  [PASS] reset_world_npcs_clears_registry")
+
+
+# ── Per-world fallback dialogues ────────────────────────────────
+
+
+def test_load_world_fallbacks_from_port_blackwater():
+    """Port Blackwater ships a pirate-themed fallbacks.yaml that
+    overrides all 5 sections."""
+    reset_world_fallbacks()
+    pb_dir = NPC_ROOT / "data" / "worlds" / "port_blackwater"
+    updated = load_world_fallbacks(pb_dir)
+    assert updated == 5, f"expected 5 sections updated, got {updated}"
+    # Pirate flavor leaks into every fallback
+    assert "landlubber" in META_FALLBACK["dialogue"].lower()
+    assert "sail" in SAFE_FALLBACK["dialogue"].lower()
+    assert "sea" in HALLUCINATION_FALLBACK["dialogue"].lower()
+    assert "port blackwater" in OOD_FALLBACK["dialogue"].lower()
+    assert "ship" in REAL_WORLD_FALLBACK["dialogue"].lower()
+    # Cleanup
+    reset_world_fallbacks()
+    print("  [PASS] load_world_fallbacks_from_port_blackwater")
+
+
+def test_load_world_fallbacks_missing_yaml_is_graceful():
+    """A world without a fallbacks.yaml keeps default fallbacks."""
+    reset_world_fallbacks()
+    default_meta = META_FALLBACK["dialogue"]
+    # Creation Museum doesn't ship fallbacks.yaml — should be no-op
+    cm_dir = NPC_ROOT / "data" / "worlds" / "creation_museum"
+    updated = load_world_fallbacks(cm_dir)
+    assert updated == 0
+    assert META_FALLBACK["dialogue"] == default_meta, (
+        "missing YAML should not modify fallbacks"
+    )
+    print("  [PASS] load_world_fallbacks_missing_yaml_is_graceful")
+
+
+def test_reset_world_fallbacks_restores_defaults():
+    """After loading Port Blackwater fallbacks, reset should restore
+    the medieval-fantasy defaults."""
+    reset_world_fallbacks()
+    default_meta = META_FALLBACK["dialogue"]
+    load_world_fallbacks(NPC_ROOT / "data" / "worlds" / "port_blackwater")
+    assert META_FALLBACK["dialogue"] != default_meta, "load should have changed it"
+    reset_world_fallbacks()
+    assert META_FALLBACK["dialogue"] == default_meta, "reset should restore default"
+    print("  [PASS] reset_world_fallbacks_restores_defaults")
+
+
+def test_fallback_dict_identity_preserved_after_reset():
+    """The fallback constants are the SAME dict object before and
+    after reset/load — only their contents change. Existing callers
+    holding the reference (e.g. `META_FALLBACK = postgen.META_FALLBACK`
+    at module import) still see the updated values."""
+    saved_id = id(META_FALLBACK)
+    reset_world_fallbacks()
+    load_world_fallbacks(NPC_ROOT / "data" / "worlds" / "port_blackwater")
+    assert id(META_FALLBACK) == saved_id, (
+        "load_world_fallbacks must mutate META_FALLBACK in place, not rebind"
+    )
+    reset_world_fallbacks()
+    print("  [PASS] fallback_dict_identity_preserved_after_reset")
+
+
+def test_port_blackwater_real_world_fallback_when_pirate_says_putin():
+    """End-to-end: with Port Blackwater fallbacks loaded, a model that
+    leaks 'Putin' gets the pirate-themed fallback, not the medieval
+    default."""
+    reset_world_fallbacks()
+    load_world_fallbacks(NPC_ROOT / "data" / "worlds" / "port_blackwater")
+    raw = json.dumps({
+        "dialogue": "Putin sails the eastern seas, they say.",
+        "emotion": "wary", "action": None,
+    })
+    out = json.loads(validate_and_repair(
+        raw, npc_id="finn", profile={
+            "identity": {"name": "Finn", "role": "deck hand"},
+            "world_facts": [], "personal_knowledge": [],
+            "active_quests": [], "recent_events": [],
+        }, user_input="Who sails these waters?",
+    ))
+    # Pirate flavor in the fallback
+    assert "ship" in out["dialogue"].lower() or "waters" in out["dialogue"].lower(), (
+        f"expected pirate-flavored fallback, got {out['dialogue']!r}"
+    )
+    # NOT the medieval default
+    assert "wandered" not in out["dialogue"].lower()
+    reset_world_fallbacks()
+    print("  [PASS] port_blackwater_real_world_fallback_when_pirate_says_putin")
+
+
+# ── Per-world blocklist YAML overrides ──────────────────────────
+
+
+def test_load_world_real_world_blocklist_remove():
+    """A YAML with `remove: [biden]` should drop biden from the
+    blocklist + recompile pattern."""
+    reset_real_world_blocklist()
+    assert "biden" in _REAL_WORLD_BLOCKLIST
+
+    # Write a temp YAML
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        (td_path / "real_world_blocklist.yaml").write_text(
+            "remove:\n  - biden\n", encoding="utf-8"
+        )
+        mutations = load_world_real_world_blocklist(td_path)
+        assert mutations == 1
+        assert "biden" not in _REAL_WORLD_BLOCKLIST
+        # Pattern recompiled — detection no longer fires on Biden
+        is_rw, _ = detect_real_world_entity("Biden arrived at the dock")
+        assert not is_rw, "after remove + rebuild, biden should not match"
+
+    reset_real_world_blocklist()
+    print("  [PASS] load_world_real_world_blocklist_remove")
+
+
+def test_load_world_real_world_blocklist_add():
+    """A YAML with `add: [acmecorp]` should add custom entries."""
+    reset_real_world_blocklist()
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        (td_path / "real_world_blocklist.yaml").write_text(
+            "add:\n  - acmecorp\n", encoding="utf-8"
+        )
+        mutations = load_world_real_world_blocklist(td_path)
+        assert mutations == 1
+        assert "acmecorp" in _REAL_WORLD_BLOCKLIST
+        is_rw, _ = detect_real_world_entity("AcmeCorp will save us all")
+        assert is_rw, "after add + rebuild, acmecorp should match"
+
+    reset_real_world_blocklist()
+    print("  [PASS] load_world_real_world_blocklist_add")
+
+
+def test_reset_real_world_blocklist_restores_default():
+    """After loading a YAML override, reset should restore the
+    original default set."""
+    reset_real_world_blocklist()
+    _REAL_WORLD_BLOCKLIST.discard("biden")
+    rebuild_real_world_pattern()
+    assert "biden" not in _REAL_WORLD_BLOCKLIST
+    reset_real_world_blocklist()
+    assert "biden" in _REAL_WORLD_BLOCKLIST
+    # Default set is the same as what we shipped
+    assert _REAL_WORLD_BLOCKLIST == set(_REAL_WORLD_BLOCKLIST_DEFAULT)
+    print("  [PASS] reset_real_world_blocklist_restores_default")
+
+
+def test_load_world_fabrication_blocklist_remove_chosen_one():
+    """A high-fantasy game can remove 'chosen one' from the
+    fabrication blocklist when it's canonical lore."""
+    reset_fabrication_blocklist()
+    assert "chosen one" in _FABRICATION_BLOCKLIST
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        (td_path / "fabrication_blocklist.yaml").write_text(
+            "remove:\n  - chosen one\n", encoding="utf-8"
+        )
+        mutations = load_world_fabrication_blocklist(td_path)
+        assert mutations == 1
+        is_fab, _ = detect_fabrication("thou art the chosen one")
+        assert not is_fab, "after removal, 'chosen one' should pass"
+
+    reset_fabrication_blocklist()
+    is_fab_restored, _ = detect_fabrication("thou art the chosen one")
+    assert is_fab_restored, "reset should restore default behavior"
+    print("  [PASS] load_world_fabrication_blocklist_remove_chosen_one")
+
+
+def test_world_yaml_loaders_all_graceful_on_missing():
+    """All four loaders should be no-ops when the YAML file is missing."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        td_path = Path(td)
+        assert load_world_known_terms(td_path) == 0
+        assert load_world_fallbacks(td_path) == 0
+        assert load_world_real_world_blocklist(td_path) == 0
+        assert load_world_fabrication_blocklist(td_path) == 0
+    print("  [PASS] world_yaml_loaders_all_graceful_on_missing")
+
+
+# ── Other-worlds integration smoke ──────────────────────────────
+
+
+def test_creation_museum_known_terms_load():
+    """Creation Museum's known_terms.yaml should register the biblical
+    figures + places."""
+    reset_world_known_terms()
+    added = load_world_known_terms(NPC_ROOT / "data" / "worlds" / "creation_museum")
+    assert added > 0
+    # Biblical NPCs
+    for name in ("adam", "moses", "noah", "paul"):
+        assert name in WORLD_KNOWN_TERMS, f"{name} missing"
+    # Biblical geography
+    for place in ("eden", "egypt", "jerusalem", "canaan"):
+        assert place in WORLD_KNOWN_TERMS, f"{place} missing"
+    # Cleanup
+    reset_world_known_terms()
+    print(f"  [PASS] creation_museum_known_terms_load ({added} added)")
+
+
+def test_port_blackwater_known_terms_load():
+    reset_world_known_terms()
+    added = load_world_known_terms(NPC_ROOT / "data" / "worlds" / "port_blackwater")
+    assert added > 0
+    # Pirate NPCs
+    for name in ("reva", "finn", "bones"):
+        assert name in WORLD_KNOWN_TERMS, f"{name} missing"
+    # Pirate places + items
+    for term in ("tortuga", "cutlass", "doubloon", "rum"):
+        assert term in WORLD_KNOWN_TERMS, f"{term} missing"
+    reset_world_known_terms()
+    print(f"  [PASS] port_blackwater_known_terms_load ({added} added)")
 
 
 # ── Runner ──────────────────────────────────────────────────────
@@ -714,6 +1023,32 @@ def main():
     test_load_world_known_terms_nonexistent_path_is_graceful()
     test_reset_world_known_terms_clears_world_specific()
     test_load_idempotent()
+
+    print("\nPostgen — WORLD_NPC_NAMES auto-derivation")
+    test_register_world_npcs_populates_registry()
+    test_register_world_npcs_idempotent()
+    test_register_world_npcs_handles_garbage_input()
+    test_detect_wrong_identity_uses_world_npc_names()
+    test_detect_wrong_identity_skips_unregistered_world()
+    test_reset_world_npcs_clears_registry()
+
+    print("\nPostgen — per-world fallback dialogues")
+    test_load_world_fallbacks_from_port_blackwater()
+    test_load_world_fallbacks_missing_yaml_is_graceful()
+    test_reset_world_fallbacks_restores_defaults()
+    test_fallback_dict_identity_preserved_after_reset()
+    test_port_blackwater_real_world_fallback_when_pirate_says_putin()
+
+    print("\nPostgen — per-world blocklist YAML overrides")
+    test_load_world_real_world_blocklist_remove()
+    test_load_world_real_world_blocklist_add()
+    test_reset_real_world_blocklist_restores_default()
+    test_load_world_fabrication_blocklist_remove_chosen_one()
+    test_world_yaml_loaders_all_graceful_on_missing()
+
+    print("\nPostgen — other-worlds integration smoke")
+    test_creation_museum_known_terms_load()
+    test_port_blackwater_known_terms_load()
 
     print("\nAll postgen real-world tests passed.")
 

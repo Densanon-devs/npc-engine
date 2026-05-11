@@ -1,0 +1,41 @@
+# Port Blackwater — Themed fallback dialogues
+#
+# Loaded by postgen.py:load_world_fallbacks() at engine init.
+# Overrides the medieval-fantasy default fallbacks (in
+# postgen._FALLBACK_DEFAULTS) with pirate-voice equivalents.
+#
+# All 5 sections optional; missing sections fall back to medieval
+# defaults. All 3 fields per section optional; missing fields keep
+# the default value for that field.
+
+# Fires when the model uses game-mechanic language (save game, XP,
+# respawn, etc.) — meta-gaming break
+meta:
+  dialogue: "Bah! Speak plain words, ye landlubber. None o' that strange tongue here."
+  emotion: "annoyed"
+  action: "spits"
+
+# Generic JSON-malformed / output-broken fallback
+safe:
+  dialogue: "Eh? I dinnae catch yer meaning. Speak plain or sail on."
+  emotion: "puzzled"
+  action: null
+
+# Fires on the fabrication blocklist (Vexnoria / chosen one / etc.)
+# + the hallucination heuristic (>=2 unknown caps)
+hallucination:
+  dialogue: "Never heard o' such things, friend. The sea be wide, but me ears ne'er met those tales."
+  emotion: "puzzled"
+  action: null
+
+# Modern-world keywords (bitcoin / email / social media)
+ood:
+  dialogue: "Aye, I deal in coin an' cargo. None o' yer strange newfangled talk reaches Port Blackwater."
+  emotion: "wary"
+  action: null
+
+# Real-world entity blocklist (Putin / London / Tesla)
+real_world:
+  dialogue: "Never heard o' that one, friend. Me ship sails only these waters."
+  emotion: "puzzled"
+  action: null

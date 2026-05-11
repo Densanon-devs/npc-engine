@@ -1,0 +1,64 @@
+# Creation Museum — World-specific known terms
+#
+# Loaded by postgen.py:load_world_known_terms() at engine init.
+# NPC names auto-register from profile YAML; this file covers
+# biblical places, names, and concepts the hallucination detector
+# (Layer 15) shouldn't flag.
+
+# NPC names (also auto-registered from npc_profiles/)
+npcs:
+  - adam
+  - david
+  - eve
+  - moses
+  - noah
+  - paul
+  - solomon
+
+# Biblical geography
+places:
+  - eden
+  - egypt
+  - sinai
+  - jerusalem
+  - jordan
+  - red sea
+  - canaan
+  - galilee
+  - bethlehem
+  - nazareth
+  - jericho
+  - babylon
+  - mesopotamia
+  - judea
+  - israel
+
+# Biblical items, concepts, narrative elements
+items:
+  - ark
+  - covenant
+  - tablet
+  - tabernacle
+  - manna
+  - psalm
+  - proverb
+  - parable
+  - sacrifice
+  - prophet
+  - apostle
+  - disciple
+  - gospel
+  - testament
+
+# Common biblical-narrative descriptors
+extras:
+  - genesis
+  - exodus
+  - patriarch
+  - judge
+  - shepherd
+  - scribe
+  - rabbi
+  - pharaoh
+  - jew
+  - gentile

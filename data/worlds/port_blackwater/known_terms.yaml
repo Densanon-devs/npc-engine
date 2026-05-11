@@ -1,0 +1,45 @@
+# Port Blackwater — World-specific known terms
+#
+# Loaded by postgen.py:load_world_known_terms() at engine init.
+# NPC names auto-register from profile YAML, so this file covers
+# places, ships, items, and crew-slang that the hallucination detector
+# (Layer 15) shouldn't flag.
+
+# NPC names (auto-registered from npc_profiles/, listed here for
+# the hallucination-vocabulary set + documentation)
+npcs:
+  - reva       # "Captain Reva"
+  - captain
+  - finn
+  - bones      # "Old Bones"
+
+# Port Blackwater geography
+places:
+  - blackwater
+  - port
+  - tortuga
+  - harbor
+  - tavern
+  - docks
+  - reef
+
+# Pirate-life items, jargon, ship parts
+items:
+  - cutlass
+  - doubloon
+  - galleon
+  - sloop
+  - rum
+  - shanty
+  - parley
+  - keelhaul
+
+# Sea-faring adjectives and dialogue particles that appear capitalized
+# in narrative voice
+extras:
+  - matey
+  - aye
+  - arr
+  - landlubber
+  - scurvy
+  - briny
