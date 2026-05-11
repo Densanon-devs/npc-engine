@@ -53,6 +53,7 @@ from npc_engine.postgen import (  # noqa: E402
     REAL_WORLD_FALLBACK,
     _REAL_WORLD_BLOCKLIST,
     detect_real_world_entity,
+    rebuild_real_world_pattern,
     validate_and_repair,
 )
 
@@ -105,18 +106,11 @@ def test_detect_real_world_catches_biden_single():
     print("  [PASS] detect_real_world_catches_biden_single")
 
 
-def test_detect_real_world_catches_trump_single():
-    is_rw, term = detect_real_world_entity("Trump was here")
-    assert is_rw
-    assert term == "trump"
-    print("  [PASS] detect_real_world_catches_trump_single")
-
-
 def test_detect_real_world_catches_multi_word():
-    is_rw, term = detect_real_world_entity("They marched on the White House")
-    assert is_rw, "'white house' should match"
+    is_rw, term = detect_real_world_entity("Reports came from the Silicon Valley")
+    assert is_rw, "'silicon valley' should match"
     # Match returns lowercased
-    assert term == "white house"
+    assert term == "silicon valley"
     print("  [PASS] detect_real_world_catches_multi_word")
 
 
@@ -156,10 +150,38 @@ def test_detect_real_world_catches_celebrity():
 
 
 def test_detect_real_world_does_not_match_trumpet():
-    """'Trump' must not match 'trumpet' due to word boundary."""
-    is_rw, term = detect_real_world_entity("The bard played a trumpet at the inn")
-    assert not is_rw, f"trumpet should NOT match — got term={term!r}"
+    """Word-boundary check: a hypothetical 'trump' entry must not match
+    'trumpet'. Currently 'trump' has been DROPPED from the blocklist
+    because it's a real English card term and verb (see the blocklist
+    comment in postgen.py), so this is now testing the general
+    word-boundary invariant — even after future re-addition, 'trumpet'
+    must remain safe."""
+    # Add 'trump' temporarily to verify the word boundary works
+    _REAL_WORLD_BLOCKLIST.add("trump")
+    rebuild_real_world_pattern()
+    try:
+        is_rw, term = detect_real_world_entity("The bard played a trumpet at the inn")
+        assert not is_rw, f"trumpet should NOT match — got term={term!r}"
+        # And confirm 'Trump' alone would match if it were on the list
+        is_rw2, _ = detect_real_world_entity("Trump arrived at dawn")
+        assert is_rw2, "with 'trump' in blocklist, 'Trump arrived' should match"
+    finally:
+        _REAL_WORLD_BLOCKLIST.discard("trump")
+        rebuild_real_world_pattern()
     print("  [PASS] detect_real_world_does_not_match_trumpet")
+
+
+def test_card_term_trump_is_NOT_in_blocklist():
+    """'trump' was deliberately dropped because of the card-term
+    overlap. Card-game NPCs using 'play your trump card' must NOT
+    fire the real-world fallback."""
+    assert "trump" not in _REAL_WORLD_BLOCKLIST
+    is_rw, term = detect_real_world_entity("Play your trump card now, friend!")
+    assert not is_rw, (
+        f"'trump card' must not match — would false-positive in "
+        f"card-game worlds. Got term={term!r}"
+    )
+    print("  [PASS] card_term_trump_is_NOT_in_blocklist")
 
 
 def test_detect_real_world_does_not_match_londoner():
@@ -281,6 +303,33 @@ def test_validate_and_repair_lets_clean_response_through():
     print("  [PASS] validate_and_repair_lets_clean_response_through")
 
 
+def test_validate_and_repair_lets_clean_deflection_through():
+    """A correct in-character deflection (model successfully refusing
+    the real-world topic WITHOUT echoing the trigger word back) must
+    pass through cleanly. This is the desired output that the few-shot
+    deflection examples teach the model to produce. If the few-shots
+    correctly echo-free, the model's output reaches the player intact;
+    only the postgen backstop fires when the model fails."""
+    raw = json.dumps({
+        "dialogue": "I have not heard of this person you mention. Such a name is unknown in these lands.",
+        "emotion": "puzzled",
+        "action": None,
+    })
+    out = json.loads(
+        validate_and_repair(raw, npc_id="noah", profile=_noah_profile(),
+                            user_input="What do you think of Putin?")
+    )
+    assert "have not heard" in out["dialogue"], (
+        f"clean deflection was swapped — got {out['dialogue']!r}"
+    )
+    # Specifically: the user's trigger word ("Putin") is NOT in the output,
+    # so the backstop should NOT fire. The deflection passes through.
+    assert "putin" not in out["dialogue"].lower(), (
+        "deflection should not echo the trigger word"
+    )
+    print("  [PASS] validate_and_repair_lets_clean_deflection_through")
+
+
 # ── System prompt + few-shot integration smoke ──────────────────
 
 
@@ -319,42 +368,95 @@ def test_ashenvale_examples_include_real_world_deflection():
 # ── Sanity checks on the blocklist itself ───────────────────────
 
 
-def test_blocklist_has_no_duplicates():
-    """The blocklist is a set — duplicates would be silently deduped,
-    but we still want to flag accidental ones from the source list."""
+def test_blocklist_size_sanity():
+    """Size check on the blocklist. The blocklist is a set, so
+    duplicate entries in the source literal would be silently deduped
+    by Python — this test cannot detect them. The size range below is
+    a copy-paste-mistake / runaway-growth guard, not a duplicate
+    detector."""
     assert isinstance(_REAL_WORLD_BLOCKLIST, set)
-    # Size sanity: between 30 and 100 entries — anything outside this
-    # range suggests a copy-paste mistake or unbounded list growth.
     assert 30 <= len(_REAL_WORLD_BLOCKLIST) <= 100, (
         f"blocklist size {len(_REAL_WORLD_BLOCKLIST)} is outside sanity range"
     )
-    print(f"  [PASS] blocklist_has_no_duplicates ({len(_REAL_WORLD_BLOCKLIST)} entries)")
+    print(f"  [PASS] blocklist_size_sanity ({len(_REAL_WORLD_BLOCKLIST)} entries)")
 
 
 def test_blocklist_excludes_known_false_positive_terms():
     """Terms that overlap fantasy/common-noun usage must NOT be in
     the blocklist. This guards against regression — if someone adds
-    'apple' or 'amazon' back, the test fires."""
+    one of these back, the test fires."""
     ambiguous = {
-        "apple",   # fruit
-        "amazon",  # river/forest
-        "drake",   # dragon term
-        "musk",    # perfume / animal scent
-        "uber",    # German prefix
-        "claude",  # a name
-        "cook",    # verb
-        "gates",   # city/castle gates
-        "xi",      # too short
-        "gpt",     # too short
-        "rome",    # fantasy overlap
-        "paris",   # fantasy overlap
-        "berlin",  # fantasy overlap
+        "apple",       # fruit
+        "amazon",      # river/forest
+        "drake",       # dragon term
+        "musk",        # perfume / animal scent
+        "uber",        # German prefix
+        "claude",      # a name
+        "cook",        # verb
+        "gates",       # city/castle gates
+        "xi",          # too short
+        "gpt",         # too short
+        "rome",        # fantasy overlap
+        "paris",       # fantasy overlap
+        "berlin",      # fantasy overlap
+        "trump",       # card term ("trump card"), verb ("to trump")
+        "pentagon",    # geometric shape used in fantasy magic
+        "white house", # generic phrase ("a white house at the edge of the village")
+        "altman",      # German "old man" — common in Germanic-themed worlds
     }
     overlap = ambiguous & _REAL_WORLD_BLOCKLIST
     assert not overlap, (
         f"blocklist contains ambiguous terms that would cause false positives: {overlap}"
     )
     print("  [PASS] blocklist_excludes_known_false_positive_terms")
+
+
+def test_per_world_override_via_rebuild():
+    """Per-world override: mutating the set + calling
+    rebuild_real_world_pattern() must take effect for detection."""
+    # Sanity check: 'biden' is on the list, so it should match
+    is_rw, _ = detect_real_world_entity("Biden arrived at the village")
+    assert is_rw, "Biden should match before override"
+
+    # Remove 'biden' and rebuild
+    _REAL_WORLD_BLOCKLIST.discard("biden")
+    rebuild_real_world_pattern()
+    try:
+        is_rw_after, _ = detect_real_world_entity("Biden arrived at the village")
+        assert not is_rw_after, "Biden should NOT match after override + rebuild"
+    finally:
+        # Restore for subsequent tests
+        _REAL_WORLD_BLOCKLIST.add("biden")
+        rebuild_real_world_pattern()
+
+    # Confirm restored
+    is_rw_restored, _ = detect_real_world_entity("Biden arrived at the village")
+    assert is_rw_restored, "Biden should match again after restore"
+    print("  [PASS] per_world_override_via_rebuild")
+
+
+def test_rebuild_without_mutation_still_works():
+    """Calling rebuild_real_world_pattern() on an unchanged set must
+    not break detection."""
+    rebuild_real_world_pattern()
+    is_rw, _ = detect_real_world_entity("Putin says peace")
+    assert is_rw, "detection broken after no-op rebuild"
+    print("  [PASS] rebuild_without_mutation_still_works")
+
+
+def test_rebuild_with_empty_blocklist_disables_detection():
+    """Edge case: a game can disable real-world detection entirely
+    by clearing the blocklist."""
+    saved = set(_REAL_WORLD_BLOCKLIST)
+    _REAL_WORLD_BLOCKLIST.clear()
+    rebuild_real_world_pattern()
+    try:
+        is_rw, _ = detect_real_world_entity("Biden arrived with Tesla and Putin")
+        assert not is_rw, "empty blocklist should match nothing"
+    finally:
+        _REAL_WORLD_BLOCKLIST.update(saved)
+        rebuild_real_world_pattern()
+    print("  [PASS] rebuild_with_empty_blocklist_disables_detection")
 
 
 # ── Runner ──────────────────────────────────────────────────────
@@ -366,7 +468,6 @@ def main():
     test_detect_real_world_catches_london()
     test_detect_real_world_catches_tesla()
     test_detect_real_world_catches_biden_single()
-    test_detect_real_world_catches_trump_single()
     test_detect_real_world_catches_multi_word()
     test_detect_real_world_catches_kremlin()
     test_detect_real_world_catches_case_insensitive()
@@ -375,6 +476,7 @@ def main():
 
     print("\nPostgen — real-world entity detection (true negatives)")
     test_detect_real_world_does_not_match_trumpet()
+    test_card_term_trump_is_NOT_in_blocklist()
     test_detect_real_world_does_not_match_londoner()
     test_detect_real_world_does_not_match_in_world_content()
     test_detect_real_world_does_not_match_empty()
@@ -385,14 +487,20 @@ def main():
     test_validate_and_repair_swaps_in_fallback_for_london()
     test_validate_and_repair_swaps_in_fallback_for_tesla()
     test_validate_and_repair_lets_clean_response_through()
+    test_validate_and_repair_lets_clean_deflection_through()
 
     print("\nPostgen — system prompt + few-shot integration")
     test_system_prompt_includes_modern_world_clause()
     test_ashenvale_examples_include_real_world_deflection()
 
     print("\nPostgen — blocklist sanity checks")
-    test_blocklist_has_no_duplicates()
+    test_blocklist_size_sanity()
     test_blocklist_excludes_known_false_positive_terms()
+
+    print("\nPostgen — per-world override mechanism")
+    test_per_world_override_via_rebuild()
+    test_rebuild_without_mutation_still_works()
+    test_rebuild_with_empty_blocklist_disables_detection()
 
     print("\nAll postgen real-world tests passed.")
 

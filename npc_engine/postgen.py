@@ -717,28 +717,31 @@ _REAL_WORLD_BLOCKLIST = {
     # (a) very likely to surface from model training data as a
     # real-world reference, AND (b) unlikely to legitimately appear
     # in a generic medieval/fantasy game world. Entries that overlap
-    # common nouns or fantasy archetypes have been REJECTED here:
-    #   apple   → fruit
-    #   amazon  → river/forest
-    #   drake   → dragon term
-    #   musk    → perfume / animal scent
-    #   uber    → German prefix
-    #   claude  → a name
-    #   cook    → verb
-    #   gates   → city/castle gates
-    #   xi      → too short, false-positive prone
-    #   gpt     → too short, false-positive prone
+    # common nouns, fantasy archetypes, or English words/verbs have
+    # been REJECTED here:
+    #   apple       → fruit
+    #   amazon      → river/forest
+    #   drake       → dragon term
+    #   musk        → perfume / animal scent
+    #   uber        → German prefix
+    #   claude      → a name
+    #   cook        → verb
+    #   gates       → city/castle gates
+    #   xi          → too short, false-positive prone
+    #   gpt         → too short, false-positive prone
+    #   trump       → card term ("trump card") and verb ("to trump")
+    #   pentagon    → geometric shape used in fantasy magic
+    #   white house → generic phrase ("a white house at the edge of the village")
+    #   altman      → German "old man", common in Germanic-themed worlds
     #   paris/rome/berlin/madrid/tokyo/beijing/delhi/seoul → fantasy-overlap risk
-    # Per-world override: a game can extend or clear this set at
-    # runtime (it's a module-level mutable set).
 
     # Heads of state and world leaders (distinctive single-token names;
     # multi-word names like "Joe Biden" already hit Layer 15's 2-cap rule)
-    "biden", "trump", "obama", "clinton", "putin", "zelensky",
+    "biden", "obama", "clinton", "putin", "zelensky",
     "modi", "macron", "merkel", "scholz", "sunak", "starmer", "trudeau",
     "netanyahu", "erdogan", "orban", "milei", "lula", "kim jong",
     # Mega-tech billionaires and figureheads (distinctive surnames)
-    "bezos", "zuckerberg", "buffett", "thiel", "altman",
+    "bezos", "zuckerberg", "buffett", "thiel",
     "nadella", "pichai",
     # Mega-brands that are also single distinctive words
     "tesla", "google", "facebook", "microsoft",
@@ -752,18 +755,58 @@ _REAL_WORLD_BLOCKLIST = {
     "london", "moscow", "washington", "kyiv", "kiev",
     # Real-world geographic concepts (multi-word — unambiguous)
     "wall street",  # also in MODERN_WORLD_KEYWORDS — defense in depth
-    "silicon valley", "hollywood", "white house", "kremlin", "pentagon",
+    "silicon valley", "hollywood", "kremlin",
 }
 
-# Pre-compile a single regex with word boundaries for efficiency. The
-# `\b` anchors prevent "trumpet" matching "trump", "londoner" matching
-# "london", "appleseed" matching "apple", etc. Multi-word entries like
-# "wall street" don't use \b boundaries internally (the space is its
-# own anchor).
-_REAL_WORLD_PATTERN = re.compile(
-    r"\b(?:" + "|".join(re.escape(term) for term in sorted(_REAL_WORLD_BLOCKLIST, key=len, reverse=True)) + r")\b",
-    re.IGNORECASE,
-)
+
+def _compile_real_world_pattern() -> "re.Pattern[str]":
+    """Compile the word-boundary regex from the current blocklist.
+
+    Sorts terms by length descending so longer phrases (e.g. "wall
+    street", "kim jong") match before any single-word prefix would.
+    Word boundaries (`\\b`) prevent "trumpet" matching a hypothetical
+    "trump" entry, "londoner" matching "london", etc.
+    """
+    if not _REAL_WORLD_BLOCKLIST:
+        # Empty set → match-nothing pattern. The "(?!)" is the standard
+        # never-match construct.
+        return re.compile(r"(?!)")
+    alternation = "|".join(
+        re.escape(term)
+        for term in sorted(_REAL_WORLD_BLOCKLIST, key=len, reverse=True)
+    )
+    return re.compile(r"\b(?:" + alternation + r")\b", re.IGNORECASE)
+
+
+# Module-level compiled pattern. Initial value derived from the blocklist
+# above. If a game world mutates _REAL_WORLD_BLOCKLIST at runtime, the
+# caller MUST also call `rebuild_real_world_pattern()` for the change to
+# take effect — `detect_real_world_entity()` uses the pre-compiled
+# pattern for performance.
+_REAL_WORLD_PATTERN = _compile_real_world_pattern()
+
+
+def rebuild_real_world_pattern() -> None:
+    """Recompile the real-world entity regex from the current blocklist.
+
+    Call this after mutating `_REAL_WORLD_BLOCKLIST` at runtime. Without
+    this call, the pre-compiled pattern still reflects the original
+    blocklist and mutations have no effect on detection.
+
+    Example (per-world override for a card-game world that legitimately
+    uses the word "trump"):
+
+        from npc_engine import postgen
+        postgen._REAL_WORLD_BLOCKLIST.discard("trump")
+        postgen.rebuild_real_world_pattern()
+
+    Example (extending the list with a customer-specific term):
+
+        postgen._REAL_WORLD_BLOCKLIST.add("acmecorp")
+        postgen.rebuild_real_world_pattern()
+    """
+    global _REAL_WORLD_PATTERN
+    _REAL_WORLD_PATTERN = _compile_real_world_pattern()
 
 REAL_WORLD_FALLBACK = {
     "dialogue": "I know nothing of such people or places. My world is small, and I have not wandered far.",
