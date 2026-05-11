@@ -28,11 +28,14 @@ Set config `postgen_enabled: false` to disable and get raw model output.
 """
 
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 # ── Profile loading ───────────────────────────────────────────
@@ -99,25 +102,105 @@ def normalize_schema(obj: dict) -> dict:
 
 
 # ── Hallucination detection ───────────────────────────────────
+#
+# WORLD_KNOWN_TERMS is the set of "expected proper nouns" — words
+# that, if the model says them, should NOT count as hallucinated
+# fabrications. Layer 15 (`detect_hallucination`) flags responses
+# containing >=2 unknown capitalized words; this set defines what's
+# "known" so the threshold isn't tripped by legitimate in-world
+# dialogue.
+#
+# Two layers:
+#   1. _GENERIC_KNOWN_TERMS — world-agnostic medieval/fantasy vocabulary
+#      (roles, generic place words, common items). Always present;
+#      every world inherits these.
+#   2. World-specific entries — NPC names, specific place/item names —
+#      loaded at engine init from `<world_dir>/known_terms.yaml` via
+#      `load_world_known_terms()`. Previously hardcoded to Ashenvale,
+#      which caused leakage when running other worlds (Port Blackwater,
+#      Creation Museum, synthetic worlds). The per-world loader closes
+#      that gap.
+#
+# Per-world override: a game world can extend the set at runtime by
+# mutating WORLD_KNOWN_TERMS directly OR by shipping a known_terms.yaml
+# in its world directory. The set is queried directly inside
+# `_profile_known_terms()`, so no rebuild step is required (unlike
+# the regex-based blocklists above).
 
-# Common in-world entities — extend if needed for new worlds.
-# Keeps the heuristic from flagging known names as fabrications.
-WORLD_KNOWN_TERMS = {
-    # NPC names
-    "ashenvale", "noah", "kael", "mara", "elena", "tam", "elara", "bess", "pip",
-    "mira", "roderick",
-    # Places and landmarks
-    "border", "eastern", "kingdoms", "forbidden", "forest", "village", "well",
-    "iron", "ridge", "northern", "port", "blackwater",
+# Generic medieval/fantasy vocabulary that any world inherits. Should
+# contain only terms that are universally medieval/fantasy and unlikely
+# to be NPC-specific or world-specific. NPC names + specific lore
+# belong in per-world YAML.
+_GENERIC_KNOWN_TERMS = frozenset({
     # Roles and titles (models frequently use these in identity responses)
     "merchant", "guild", "blacksmith", "healer", "guard", "captain", "elder",
     "innkeeper", "urchin", "traveler",
-    # Items and concepts
-    "moonpetal", "weary", "dragon", "stone", "cellar", "tunnel", "granary",
-    "caravan", "spices", "herbs", "forge", "sword", "patrol",
+    # Generic medieval items and concepts
+    "dragon", "stone", "cellar", "tunnel", "granary", "caravan", "spices",
+    "herbs", "forge", "sword", "patrol",
+    # Common medieval geography (generic noun, not a proper name)
+    "border", "forest", "village", "well", "ridge", "kingdom", "kingdoms",
     # Common NPC dialogue words that look like proper nouns
     "sir", "dear", "friend", "stranger", "adventurer",
-}
+})
+
+# Mutable runtime set — initialized with the generic baseline, extended
+# at engine init via `load_world_known_terms()`. Existing callers that
+# read this set directly (e.g. `_profile_known_terms`) need no change.
+WORLD_KNOWN_TERMS = set(_GENERIC_KNOWN_TERMS)
+
+
+def load_world_known_terms(world_dir) -> int:
+    """Extend WORLD_KNOWN_TERMS with entries from `<world_dir>/known_terms.yaml`.
+
+    YAML schema (all keys optional, all values lists of strings):
+        npcs: [noah, kael, mara, ...]      # NPC proper names
+        places: [ashenvale, blackwater]    # Specific place names
+        items: [moonpetal, ...]            # Specific item names
+        extras: [weary, forbidden, ...]    # Anything else world-specific
+
+    All values are lowercased before insertion. Returns the count of
+    entries added. If the YAML file is missing, returns 0 (graceful
+    fallback for worlds that haven't been migrated yet).
+
+    Called once per engine init. Idempotent — re-running with the same
+    world is safe (set deduplicates).
+    """
+    path = Path(world_dir) / "known_terms.yaml"
+    if not path.exists():
+        logger.debug(f"No known_terms.yaml at {path} — using generic baseline only")
+        return 0
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        logger.warning(f"Failed to load {path}: {e}. Using generic baseline only.")
+        return 0
+
+    added = 0
+    for section in ("npcs", "places", "items", "extras"):
+        entries = data.get(section) or []
+        for entry in entries:
+            if isinstance(entry, str) and entry.strip():
+                term = entry.strip().lower()
+                if term not in WORLD_KNOWN_TERMS:
+                    WORLD_KNOWN_TERMS.add(term)
+                    added += 1
+    logger.info(f"Loaded {added} world-specific known terms from {path}")
+    return added
+
+
+def reset_world_known_terms() -> None:
+    """Reset WORLD_KNOWN_TERMS to the generic baseline.
+
+    Call before switching worlds within the same process. Without this,
+    terms from the previous world bleed into the new world's
+    hallucination check (likely causing false negatives — the new
+    world's model could mention old-world NPCs without being flagged).
+    """
+    WORLD_KNOWN_TERMS.clear()
+    WORLD_KNOWN_TERMS.update(_GENERIC_KNOWN_TERMS)
 
 # Stop-words / common words we never count as proper-noun candidates
 COMMON_PROPER_WORDS = {
@@ -808,6 +891,75 @@ def rebuild_real_world_pattern() -> None:
     global _REAL_WORLD_PATTERN
     _REAL_WORLD_PATTERN = _compile_real_world_pattern()
 
+
+# ── Fabrication blocklist (fake-fantasy terms) ────────────────
+#
+# Catches the canonical 3B-model fantasy hallucinations: when the model
+# doesn't have specific lore, it falls back to generic fake-fantasy
+# tropes like "Vexnoria", "the chosen one", "Shadow Council". These
+# are the indicator phrases for "model is making things up about the
+# game world."
+#
+# Promoted from an inline-list-in-function (formerly recreated on every
+# `validate_and_repair` call) to a module-level set with word-boundary
+# regex matching, matching the structure of `_REAL_WORLD_BLOCKLIST`
+# above. Word-boundary matching prevents future entries from substring-
+# matching legitimate words (e.g. a future addition "rune" would not
+# match "fortunate").
+#
+# Per-world override: same mechanism as the real-world blocklist —
+# mutate the set and call `rebuild_fabrication_pattern()`. A high-
+# fantasy game that legitimately uses "the chosen one" as canonical
+# lore should remove that entry.
+
+_FABRICATION_BLOCKLIST = {
+    "vexnoria", "drath'nul", "shadow council",
+    "underdark", "lor'anath", "seven kingdoms",
+    "chosen one", "prophecy of the",
+}
+
+
+def _compile_fabrication_pattern() -> "re.Pattern[str]":
+    """Compile the word-boundary regex for the fabrication blocklist.
+
+    Sorts terms by length descending so multi-word phrases match
+    before any shorter prefix would.
+    """
+    if not _FABRICATION_BLOCKLIST:
+        return re.compile(r"(?!)")
+    alternation = "|".join(
+        re.escape(term)
+        for term in sorted(_FABRICATION_BLOCKLIST, key=len, reverse=True)
+    )
+    return re.compile(r"\b(?:" + alternation + r")\b", re.IGNORECASE)
+
+
+_FABRICATION_PATTERN = _compile_fabrication_pattern()
+
+
+def rebuild_fabrication_pattern() -> None:
+    """Recompile the fabrication regex from the current blocklist.
+
+    Call after mutating `_FABRICATION_BLOCKLIST` at runtime. Mirrors
+    `rebuild_real_world_pattern()`.
+    """
+    global _FABRICATION_PATTERN
+    _FABRICATION_PATTERN = _compile_fabrication_pattern()
+
+
+def detect_fabrication(dialogue: str) -> tuple[bool, Optional[str]]:
+    """Returns (is_fabrication, matched_term).
+
+    Catches generic fake-fantasy filler the model produces when it
+    lacks specific lore. Same shape as `detect_real_world_entity`.
+    """
+    if not dialogue:
+        return (False, None)
+    m = _FABRICATION_PATTERN.search(dialogue)
+    if m is None:
+        return (False, None)
+    return (True, m.group(0).lower())
+
 REAL_WORLD_FALLBACK = {
     "dialogue": "I know nothing of such people or places. My world is small, and I have not wandered far.",
     "emotion": "puzzled",
@@ -995,11 +1147,12 @@ def validate_and_repair(raw: str, npc_id: str = "",
     if detect_ood_leak(dialogue):
         return json.dumps(OOD_FALLBACK)
 
-    # Hallucination — model invented facts about unknown entities
-    _FABRICATION_BLOCKLIST = ["vexnoria", "drath'nul", "shadow council",
-                              "underdark", "lor'anath", "seven kingdoms",
-                              "chosen one", "prophecy of the"]
-    if any(fake in dialogue.lower() for fake in _FABRICATION_BLOCKLIST):
+    # Hallucination — model invented facts about unknown entities.
+    # Uses the module-level _FABRICATION_BLOCKLIST + word-boundary regex
+    # (see `detect_fabrication` above). Promoted from an inline list
+    # recreated per-call to a compiled pattern for efficiency.
+    is_fabrication, _matched_fab = detect_fabrication(dialogue)
+    if is_fabrication:
         return json.dumps(HALLUCINATION_FALLBACK)
     # Real-world entity backstop — catches single-word real-world
     # references that Layers 14 and 15 miss (e.g. "He went to London",

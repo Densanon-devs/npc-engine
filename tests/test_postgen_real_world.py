@@ -51,9 +51,16 @@ sys.path.insert(0, str(NPC_ROOT))
 
 from npc_engine.postgen import (  # noqa: E402
     REAL_WORLD_FALLBACK,
+    WORLD_KNOWN_TERMS,
+    _FABRICATION_BLOCKLIST,
+    _GENERIC_KNOWN_TERMS,
     _REAL_WORLD_BLOCKLIST,
+    detect_fabrication,
     detect_real_world_entity,
+    load_world_known_terms,
+    rebuild_fabrication_pattern,
     rebuild_real_world_pattern,
+    reset_world_known_terms,
     validate_and_repair,
 )
 
@@ -459,6 +466,196 @@ def test_rebuild_with_empty_blocklist_disables_detection():
     print("  [PASS] rebuild_with_empty_blocklist_disables_detection")
 
 
+# ── Fabrication blocklist (promoted from inline list) ───────────
+
+
+def test_detect_fabrication_catches_canonical_terms():
+    """Each entry in _FABRICATION_BLOCKLIST should be detected when
+    it appears in dialogue."""
+    cases = {
+        "vexnoria": "I have seen Vexnoria fall to the dragon",
+        "drath'nul": "Drath'nul rises from the shadow",
+        "shadow council": "the Shadow Council watches us all",
+        "underdark": "we ventured into the underdark",
+        "lor'anath": "Lor'anath was the first to speak",
+        "seven kingdoms": "across the Seven Kingdoms",
+        "chosen one": "thou art the chosen one",
+        "prophecy of the": "fulfill the prophecy of the ancients",
+    }
+    for term, text in cases.items():
+        is_fab, matched = detect_fabrication(text)
+        assert is_fab, f"failed to catch {term!r} in {text!r}"
+        assert matched == term, f"matched {matched!r}, expected {term!r}"
+    print("  [PASS] detect_fabrication_catches_canonical_terms")
+
+
+def test_detect_fabrication_word_boundary_safety():
+    """Word boundary prevents fabrication terms from substring-matching
+    legitimate longer words. Tests against future-expansion concerns —
+    none of the current entries have known substring collisions."""
+    safe_cases = [
+        "fortunate son of the king",  # 'rune' is not on the list, but a guard
+        "underdarken sky at dusk",    # underdarken should NOT match underdark
+        "vexnorian artifacts",        # 'vexnorian' should NOT match 'vexnoria'
+    ]
+    for text in safe_cases:
+        is_fab, matched = detect_fabrication(text)
+        assert not is_fab, f"false positive on {text!r} — matched {matched!r}"
+    print("  [PASS] detect_fabrication_word_boundary_safety")
+
+
+def test_detect_fabrication_safe_content_passes():
+    """Legitimate in-world dialogue should not trip fabrication."""
+    safe_cases = [
+        "Aye, the village is quiet today",
+        "I tend to the sick and wounded",
+        "Greetings, traveler",
+        "The well water has turned bitter",
+    ]
+    for text in safe_cases:
+        is_fab, _ = detect_fabrication(text)
+        assert not is_fab, f"false positive on {text!r}"
+    print("  [PASS] detect_fabrication_safe_content_passes")
+
+
+def test_fabrication_rebuild_works():
+    """Mutating the fabrication blocklist + rebuild takes effect."""
+    is_fab_before, _ = detect_fabrication("the chosen one rises")
+    assert is_fab_before, "'chosen one' should match before override"
+
+    _FABRICATION_BLOCKLIST.discard("chosen one")
+    rebuild_fabrication_pattern()
+    try:
+        is_fab_after, _ = detect_fabrication("the chosen one rises")
+        assert not is_fab_after, "'chosen one' should NOT match after discard"
+    finally:
+        _FABRICATION_BLOCKLIST.add("chosen one")
+        rebuild_fabrication_pattern()
+    print("  [PASS] fabrication_rebuild_works")
+
+
+def test_validate_and_repair_uses_new_fabrication_path():
+    """End-to-end: a fabricated-fantasy response should still fire the
+    hallucination fallback (preserving the prior behavior after the
+    inline→module refactor)."""
+    raw = json.dumps({
+        "dialogue": "I have heard tales of the Shadow Council in distant lands.",
+        "emotion": "wary", "action": None,
+    })
+    out = json.loads(validate_and_repair(
+        raw, npc_id="noah", profile=_noah_profile(),
+        user_input="Tell me of distant lands",
+    ))
+    # Fabrication path uses HALLUCINATION_FALLBACK
+    assert "have not heard of such things" in out["dialogue"].lower(), (
+        f"expected HALLUCINATION_FALLBACK, got {out['dialogue']!r}"
+    )
+    print("  [PASS] validate_and_repair_uses_new_fabrication_path")
+
+
+# ── Per-world WORLD_KNOWN_TERMS loader ──────────────────────────
+
+
+def test_generic_known_terms_excludes_world_specific():
+    """The generic baseline must NOT contain world-specific NPC names
+    or place names — those belong in per-world YAML."""
+    world_specific = {"noah", "kael", "mara", "ashenvale", "moonpetal", "elara"}
+    leaked = world_specific & _GENERIC_KNOWN_TERMS
+    assert not leaked, (
+        f"world-specific terms leaked into generic baseline: {leaked}"
+    )
+    print("  [PASS] generic_known_terms_excludes_world_specific")
+
+
+def test_generic_known_terms_includes_universal_medieval_vocab():
+    """The generic baseline must include common medieval-fantasy
+    vocabulary that any world will use."""
+    must_have = {"merchant", "guard", "elder", "traveler", "village",
+                 "forest", "sword", "dragon", "stranger"}
+    missing = must_have - _GENERIC_KNOWN_TERMS
+    assert not missing, f"generic baseline missing universal terms: {missing}"
+    print("  [PASS] generic_known_terms_includes_universal_medieval_vocab")
+
+
+def test_load_world_known_terms_from_ashenvale():
+    """Loading Ashenvale's YAML should add NPC names + place names
+    to WORLD_KNOWN_TERMS."""
+    reset_world_known_terms()
+    # Pre-condition: Ashenvale-specific names not in the set yet
+    assert "noah" not in WORLD_KNOWN_TERMS
+    assert "ashenvale" not in WORLD_KNOWN_TERMS
+    assert "moonpetal" not in WORLD_KNOWN_TERMS
+
+    ashenvale_dir = NPC_ROOT / "data" / "worlds" / "ashenvale"
+    added = load_world_known_terms(ashenvale_dir)
+    assert added > 0, "Ashenvale YAML should add at least 1 term"
+
+    # Post-condition: NPC names + places now present
+    assert "noah" in WORLD_KNOWN_TERMS
+    assert "kael" in WORLD_KNOWN_TERMS
+    assert "ashenvale" in WORLD_KNOWN_TERMS
+    assert "moonpetal" in WORLD_KNOWN_TERMS
+    print(f"  [PASS] load_world_known_terms_from_ashenvale ({added} added)")
+
+
+def test_load_world_known_terms_missing_yaml_is_graceful():
+    """A world without a known_terms.yaml falls back to the generic
+    baseline without raising."""
+    reset_world_known_terms()
+    # Use a directory that exists but has no known_terms.yaml
+    creation_museum_dir = NPC_ROOT / "data" / "worlds" / "creation_museum"
+    if creation_museum_dir.exists():
+        added = load_world_known_terms(creation_museum_dir)
+        assert added == 0, "missing YAML should add 0 terms"
+        # Generic baseline still intact
+        assert "merchant" in WORLD_KNOWN_TERMS
+    # Cleanup: restore Ashenvale terms for downstream tests
+    load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    print("  [PASS] load_world_known_terms_missing_yaml_is_graceful")
+
+
+def test_load_world_known_terms_nonexistent_path_is_graceful():
+    """Loading from a nonexistent path is a no-op, not an error."""
+    reset_world_known_terms()
+    added = load_world_known_terms(NPC_ROOT / "definitely-does-not-exist")
+    assert added == 0
+    # Generic baseline intact
+    assert "merchant" in WORLD_KNOWN_TERMS
+    # Restore Ashenvale for downstream tests
+    load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    print("  [PASS] load_world_known_terms_nonexistent_path_is_graceful")
+
+
+def test_reset_world_known_terms_clears_world_specific():
+    """Resetting should remove world-specific entries but keep
+    the generic baseline."""
+    # Make sure Ashenvale is loaded
+    load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    assert "noah" in WORLD_KNOWN_TERMS
+
+    reset_world_known_terms()
+    assert "noah" not in WORLD_KNOWN_TERMS, "world-specific should be cleared"
+    assert "merchant" in WORLD_KNOWN_TERMS, "generic baseline should remain"
+
+    # Restore Ashenvale for downstream tests
+    load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    print("  [PASS] reset_world_known_terms_clears_world_specific")
+
+
+def test_load_idempotent():
+    """Loading the same world twice should not duplicate or break."""
+    reset_world_known_terms()
+    first_added = load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    size_after_first = len(WORLD_KNOWN_TERMS)
+    second_added = load_world_known_terms(NPC_ROOT / "data" / "worlds" / "ashenvale")
+    size_after_second = len(WORLD_KNOWN_TERMS)
+    assert size_after_first == size_after_second, (
+        "second load should not change set size"
+    )
+    assert second_added == 0, "second load should report 0 new entries"
+    print(f"  [PASS] load_idempotent ({first_added} first, {second_added} second)")
+
+
 # ── Runner ──────────────────────────────────────────────────────
 
 
@@ -501,6 +698,22 @@ def main():
     test_per_world_override_via_rebuild()
     test_rebuild_without_mutation_still_works()
     test_rebuild_with_empty_blocklist_disables_detection()
+
+    print("\nPostgen — fabrication blocklist (module-level)")
+    test_detect_fabrication_catches_canonical_terms()
+    test_detect_fabrication_word_boundary_safety()
+    test_detect_fabrication_safe_content_passes()
+    test_fabrication_rebuild_works()
+    test_validate_and_repair_uses_new_fabrication_path()
+
+    print("\nPostgen — per-world WORLD_KNOWN_TERMS loader")
+    test_generic_known_terms_excludes_world_specific()
+    test_generic_known_terms_includes_universal_medieval_vocab()
+    test_load_world_known_terms_from_ashenvale()
+    test_load_world_known_terms_missing_yaml_is_graceful()
+    test_load_world_known_terms_nonexistent_path_is_graceful()
+    test_reset_world_known_terms_clears_world_specific()
+    test_load_idempotent()
 
     print("\nAll postgen real-world tests passed.")
 

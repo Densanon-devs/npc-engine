@@ -1,0 +1,49 @@
+# Ashenvale — World-specific known terms
+#
+# Loaded by postgen.py:load_world_known_terms() at engine init.
+# Extends the generic medieval/fantasy baseline in postgen._GENERIC_KNOWN_TERMS
+# with proper nouns specific to this world's lore.
+#
+# These terms are treated as "expected" by the hallucination detector
+# (Layer 15) — if the model says them, they DON'T count toward the
+# >=2 unknown-proper-noun fabrication threshold. Without them in
+# this list, legitimate Ashenvale dialogue ("I serve Noah, elder of
+# Ashenvale") would trip the hallucination layer.
+#
+# Schema: four optional sections, each a list of strings. All values
+# lowercased on load. Missing sections OK.
+
+# Core NPC roster — primary character names
+npcs:
+  - noah
+  - kael
+  - mara
+  - elena
+  - tam
+  - elara
+  - bess
+  - pip
+  - mira
+  - roderick
+
+# World-specific place names. Generic medieval-fantasy terms
+# (forest, village, ridge, etc.) are in postgen._GENERIC_KNOWN_TERMS;
+# this list is just Ashenvale-specific.
+places:
+  - ashenvale
+  - blackwater   # Port Blackwater, the sister demo world's namesake
+  - eastern      # "the Eastern Kingdoms"
+  - forbidden    # "the Forbidden Forest"
+  - iron         # "Iron Ridge"
+  - northern     # "the Northern Reach"
+  - port         # "Port Blackwater"
+
+# Items unique to Ashenvale lore
+items:
+  - moonpetal    # Elara's healing herb
+
+# Adjectives and descriptors that appear frequently as Capitalized
+# words in this world's narrative voice (would otherwise be flagged
+# as unknown proper nouns)
+extras:
+  - weary        # appears in NPC identity strings ("weary innkeeper")

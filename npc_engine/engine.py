@@ -16,7 +16,11 @@ from npc_engine.bridge import PluginIntelligenceEngine, NPC_ENGINE_ROOT
 from npc_engine.config import NPCEngineConfig
 from npc_engine.experts.examples import FewShotLoader
 from npc_engine.experts.npc_experts import register_npc_experts
-from npc_engine.postgen import validate_and_repair
+from npc_engine.postgen import (
+    load_world_known_terms,
+    reset_world_known_terms,
+    validate_and_repair,
+)
 from npc_engine.social.network import SocialGraph
 from npc_engine.social.propagation import GossipPropagator
 from npc_engine.social.reputation import ReputationRipple
@@ -57,6 +61,14 @@ class NPCEngine:
 
         from npc_engine.knowledge import NPCKnowledgeManager
         self.pie.npc_knowledge = NPCKnowledgeManager(self.config.profiles_dir)
+
+        # Load per-world hallucination-check vocabulary. Resets to the
+        # generic baseline first so terms from a previously-loaded
+        # world don't leak into this one (relevant when multiple
+        # NPCEngine instances are created in the same process — e.g.
+        # tests, multi-world hosts).
+        reset_world_known_terms()
+        load_world_known_terms(self.config.world_dir)
 
         if self.config.active_npc:
             self.pie.config.npc.active_profile = self.config.active_npc
@@ -142,6 +154,16 @@ class NPCEngine:
         # the topic_gate fields that postgen reads).
         if active_npc:
             self._ensure_capability_manager(active_npc)
+            # Force knowledge_gate.build_context NOW so that
+            # query_on_topic + redirect_message are set in
+            # shared_state BEFORE postgen runs. PIE's router may
+            # skip the NPC capability path for some queries (routing
+            # to math/code), which means build_context never fires
+            # during process(). We call it explicitly here.
+            mgr = self.pie.capability_managers.get(active_npc)
+            if mgr and "knowledge_gate" in mgr.capabilities:
+                kg = mgr.capabilities["knowledge_gate"]
+                kg.build_context(user_input, mgr.shared_state)
 
         # Delegate to PIE's full pipeline (handles routing, experts,
         # capabilities, quest injection, caching, memory — everything)
