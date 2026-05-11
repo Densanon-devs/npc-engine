@@ -675,6 +675,131 @@ OOD_FALLBACK = {
 }
 
 
+# ── Real-world entity backstop ────────────────────────────────
+#
+# Layer 14 (`detect_ood_leak`) catches modern *concepts* (crypto, email,
+# social media). Layer 15 (`detect_hallucination`) catches >=2 unknown
+# capitalized proper nouns. The gap is a SINGLE real-world proper noun
+# in a sentence where the first word is sentence-initial and skipped —
+# e.g. "Putin says peace" or "He went to London". These leak through
+# both layers and reach the player intact.
+#
+# This is the "AI doxxing / Gemini hallucination → harassment" surface
+# (May 2026 incidents, multiple lawsuits): when a player injects free
+# text mentioning a real-world person, place, or brand, the model has
+# rich training-data knowledge of those entities and can break
+# character to discuss them. The first line of defense is the few-shot
+# deflection examples in shared_examples.yaml + the strengthened
+# system prompt in npc_experts.py — both teach the model to respond
+# correctly in-character. This blocklist is the backstop that fires
+# when those first two layers fail.
+#
+# Pattern: parallel to the existing `_FABRICATION_BLOCKLIST` slot
+# below, but uses word-boundary regex so "Trump" doesn't match
+# "Trumpet" or "trumpeter". Case-insensitive. Threshold = 1 hit fires
+# the fallback (same shape as HALLUCINATION_FALLBACK / OOD_FALLBACK).
+#
+# Selection criteria for the list: real-world entities the model is
+# (a) very likely to surface from training data, (b) very unlikely
+# to legitimately appear in any reasonable game world. Heads of state,
+# mega-celebrities-as-cultural-icons, mega-brands. Single-word names
+# only — multi-word brands like "Wall Street" already covered by
+# _MODERN_WORLD_KEYWORDS, and multi-word person names (e.g., "Joe
+# Biden") hit Layer 15's >=2 unknown caps threshold.
+#
+# Per-world override path: a game world can clear or extend this list
+# at runtime by writing to `_REAL_WORLD_BLOCKLIST` after import. For
+# historical-fiction or alt-history games where these names are
+# legitimately part of the setting, prune the relevant entries.
+
+_REAL_WORLD_BLOCKLIST = {
+    # Selection criteria: include entries only when the term is
+    # (a) very likely to surface from model training data as a
+    # real-world reference, AND (b) unlikely to legitimately appear
+    # in a generic medieval/fantasy game world. Entries that overlap
+    # common nouns or fantasy archetypes have been REJECTED here:
+    #   apple   → fruit
+    #   amazon  → river/forest
+    #   drake   → dragon term
+    #   musk    → perfume / animal scent
+    #   uber    → German prefix
+    #   claude  → a name
+    #   cook    → verb
+    #   gates   → city/castle gates
+    #   xi      → too short, false-positive prone
+    #   gpt     → too short, false-positive prone
+    #   paris/rome/berlin/madrid/tokyo/beijing/delhi/seoul → fantasy-overlap risk
+    # Per-world override: a game can extend or clear this set at
+    # runtime (it's a module-level mutable set).
+
+    # Heads of state and world leaders (distinctive single-token names;
+    # multi-word names like "Joe Biden" already hit Layer 15's 2-cap rule)
+    "biden", "trump", "obama", "clinton", "putin", "zelensky",
+    "modi", "macron", "merkel", "scholz", "sunak", "starmer", "trudeau",
+    "netanyahu", "erdogan", "orban", "milei", "lula", "kim jong",
+    # Mega-tech billionaires and figureheads (distinctive surnames)
+    "bezos", "zuckerberg", "buffett", "thiel", "altman",
+    "nadella", "pichai",
+    # Mega-brands that are also single distinctive words
+    "tesla", "google", "facebook", "microsoft",
+    "netflix", "spotify", "airbnb", "spacex", "openai",
+    "anthropic", "chatgpt",
+    # Cultural mega-references most likely to surface from training
+    "kardashian", "beyonce", "taylor swift",
+    "kanye", "rihanna", "pope francis",
+    # Real-world capitals/famous cities — leak via "He went to X" pattern;
+    # restricted to those with very low fantasy-overlap risk
+    "london", "moscow", "washington", "kyiv", "kiev",
+    # Real-world geographic concepts (multi-word — unambiguous)
+    "wall street",  # also in MODERN_WORLD_KEYWORDS — defense in depth
+    "silicon valley", "hollywood", "white house", "kremlin", "pentagon",
+}
+
+# Pre-compile a single regex with word boundaries for efficiency. The
+# `\b` anchors prevent "trumpet" matching "trump", "londoner" matching
+# "london", "appleseed" matching "apple", etc. Multi-word entries like
+# "wall street" don't use \b boundaries internally (the space is its
+# own anchor).
+_REAL_WORLD_PATTERN = re.compile(
+    r"\b(?:" + "|".join(re.escape(term) for term in sorted(_REAL_WORLD_BLOCKLIST, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE,
+)
+
+REAL_WORLD_FALLBACK = {
+    "dialogue": "I know nothing of such people or places. My world is small, and I have not wandered far.",
+    "emotion": "puzzled",
+    "action": None,
+}
+
+
+def detect_real_world_entity(dialogue: str) -> tuple[bool, Optional[str]]:
+    """
+    Returns (is_real_world, matched_term).
+
+    Catches single-word real-world references that Layers 14 and 15
+    miss. Word-boundary matching avoids false positives on legitimate
+    in-world words that contain a real-world entity as a substring.
+
+    Example matches:
+        "He went to London" -> (True, "london")
+        "Putin says peace" -> (True, "putin")
+        "Tesla is amazing" -> (True, "tesla")
+
+    Example non-matches:
+        "The bard played a trumpet" -> (False, None)   # "trumpet" not "trump"
+        "She was a londoner once" -> (False, None)     # "londoner" not "london"
+        "An apple a day" -> (True, "apple")            # "apple" is on the list
+                                                       # (acceptable false positive
+                                                       # given threat-model)
+    """
+    if not dialogue:
+        return (False, None)
+    m = _REAL_WORLD_PATTERN.search(dialogue)
+    if m is None:
+        return (False, None)
+    return (True, m.group(0).lower())
+
+
 # ── Main entry ────────────────────────────────────────────────
 
 def validate_and_repair(raw: str, npc_id: str = "",
@@ -833,6 +958,14 @@ def validate_and_repair(raw: str, npc_id: str = "",
                               "chosen one", "prophecy of the"]
     if any(fake in dialogue.lower() for fake in _FABRICATION_BLOCKLIST):
         return json.dumps(HALLUCINATION_FALLBACK)
+    # Real-world entity backstop — catches single-word real-world
+    # references that Layers 14 and 15 miss (e.g. "He went to London",
+    # "Putin says peace"). Word-boundary regex match. See the
+    # `_REAL_WORLD_BLOCKLIST` block above for selection criteria and
+    # the threat-model rationale.
+    is_real_world, _matched = detect_real_world_entity(dialogue)
+    if is_real_world:
+        return json.dumps(REAL_WORLD_FALLBACK)
     is_hallucinated, _unknown = detect_hallucination(dialogue, profile)
     if is_hallucinated:
         return json.dumps(HALLUCINATION_FALLBACK)
