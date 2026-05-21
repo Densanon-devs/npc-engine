@@ -524,3 +524,61 @@ scorer; KG-ASG is the *generation-time* attribution constraint) and
 the SDOF FSM pre-condition gate (2026-05-18 — pre-hoc dispatchability
 check). Pipeline ordering: SDOF gate → KG-ASG attribution → LLM writes
 → SKG-Eval/NLI scores → failure-type-specific retry.
+
+## Design input added 2026-05-21 — SUGAR candidate-state pool + coherence scoring
+
+Source: SUGAR (arXiv 2605.20373, "Scalable Human-Video-Driven
+Generalizable Humanoid Loco-Manipulation"). The paper is humanoid
+robot skill learning, but two of its architectural devices transfer to
+the predictive lane. Filed as design input for *how the predictive
+prior is represented and committed*, not the v1 target above.
+
+**Candidate-state pool instead of a single committed prediction.**
+SUGAR's middle stage maintains a *progressive state pool* — a set of
+candidate states refined against a coherence prior — rather than
+greedily committing to one trajectory, which is what lets it convert
+noisy human-video priors into physically feasible motion. The
+narrative analogue: the predictive layer should hold N candidate
+near-future world-states (each a small bundle of likely-next
+FactLedger entries) and *score* each against a coherence prior, rather
+than emitting a single predicted next beat. This directly hardens the
+warm-up window described under "Data flow" above — instead of one
+prior that biases arc proposal, carry a small ranked pool (suggest
+3-5) so a low-coherence top candidate can lose to a runner-up without a
+re-prediction round-trip.
+
+**The coherence prior is already in the tree: the NLI pass.** We do
+not need a new scorer. The existing `ContradictionChecker` NLI pass
+*is* the coherence prior — score each candidate state by how few
+contradictions it introduces against the committed FactLedger (and,
+optionally, how well it satisfies open quest/arc obligations). The
+candidate with the best coherence score is promoted; the others are
+retained as fallbacks for the failure-type-specific retry path (see
+the 2026-05-20 KG-ASG entry above — a rejected primary-attribution beat
+can fall back to the next candidate in the pool instead of a cold
+re-generation).
+
+**Hierarchical command→tracking split = the existing "Python plans,
+LLM writes" split.** SUGAR distills to a two-tier policy (high-level
+command generation → low-level tracking). Story Director already has
+this shape (`_pick_focus_npc`/`_pick_action_kind` → LLM realizes the
+beat). No change needed here — noting it only because it confirms the
+candidate-pool device sits cleanly at the *command-generation* tier
+(pool of candidate beats) and leaves the realization tier untouched.
+
+**Action when the predictive lane is built:**
+1. Represent the predictive prior as a ranked pool of 3-5 candidate
+   next-states, not a single prediction.
+2. Reuse `ContradictionChecker` NLI as the coherence scorer over the
+   pool; promote the lowest-contradiction candidate.
+3. Wire pool fallback into the KG-ASG failure-type-specific retry: on
+   rejection, advance to the next pooled candidate before re-generating.
+
+Premise caveat (why this is "input," not "must-do"): the paper's
+"smaller models benefit most from decomposition" framing did NOT hold
+in a sibling ALM experiment (the parked PExA decomposed-parallel branch
+regressed its 3B gauntlet -0.096 — "3B needs full context"). The pool
+device is cheap here because it reuses the NLI scorer and adds no
+context-splitting, but validate that maintaining N candidates doesn't
+blow the per-tick latency budget on the local Qwen 2.5 3B before
+committing to a large pool.
