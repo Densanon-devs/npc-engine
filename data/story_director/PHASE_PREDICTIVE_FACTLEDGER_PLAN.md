@@ -443,3 +443,84 @@ decomposition of the sequence-prediction task by narrative domain.
 
 Total scope estimate: ~600-800 LOC + ~200-300 LOC tests. No model
 training. No new dependencies. No public API changes.
+
+## Design input added 2026-05-20 — KG-ASG primary-support attribution
+
+Source: KG-ASG (arXiv 2605.18895, "Collision-Knowledge-Guided
+Closed-Loop Adversarial Scenario Generation With Primary-Support
+Attribution"). The paper is autonomous-driving scenario generation,
+but its event-descriptor schema and single-collider constraint map
+cleanly onto the Story Director tick. Filed here as design input for
+the predictive-lane arc-proposal step (not the v1 implementation
+target above — this informs how arcs are *shaped* once the prior
+biases which arcs to consider).
+
+**The schema mapping.** KG-ASG's "Collision Expert" (a small fine-tuned
+LLM) emits a structured descriptor before any scenario is generated:
+
+```
+KG-ASG:           (collision_mode, primary_adversary_idx,
+                   support_vehicles[≤2], conflict_time_window,
+                   behavior_template)
+
+Story Director:   (event_kind,      primary_actor,
+                   support_actors[≤N], tick_window,
+                   guidance/arc_template)
+```
+
+This is the *same shape* as the existing "Python plans, LLM writes"
+split — `_pick_focus_npc` already chooses the primary actor and
+`_pick_action_kind` chooses `event/quest/fact`. KG-ASG's contribution
+is the **explicit support-actor slot + single-primary causal
+constraint**, which the current tick descriptor does not carry. When
+`_propose_arcs(edge_prior_boost=...)` shapes a multi-action beat, it
+should emit this full descriptor, not just (focus_npc, action_kind).
+
+**The single-collider constraint → single-primary-agent FactLedger
+rule.** KG-ASG enforces `Σ_j I{Collide(o_j, o_0)} ≤ 1` so every
+generated scenario has exactly one cause and unambiguous attribution;
+this drove their multi-collision rate from 43.6% → 0.00%. The
+narrative analogue is a FactLedger validation rule:
+
+> Each narrative event has exactly ONE primary actor whose action
+> *causes* the world-state transition recorded in the ledger. Support
+> actors may only *modulate context* (witness, react, color the scene)
+> — they may not author additional state transitions in the same beat.
+
+This is a concrete, testable invariant for the predictive lane: when
+the prior boosts a multi-NPC arc, the dispatch path must tag exactly
+one `primary_actor` on the resulting `FactLedger` entry and mark any
+other involved NPCs as `support` (≈ the existing `witness_npcs` field
+on `/story/player_action`, generalized to Director-authored events).
+Prevents the "who actually did this?" causal tangle that makes
+long-run ledgers contradict themselves — and it composes with the
+existing `ContradictionChecker` NLI pass (clear single-cause
+attribution makes contradiction classification easier, not harder).
+
+**The closed-loop retry → existing `_enforce_*` + NLI-retry path.**
+KG-ASG uses 5 retry rounds with *failure-type-specific* retry profiles
+(timing / steering / brake-delay variants), lifting valid-primary-attack
+from 68.8% → 92.2%. Story Director already has the substrate: the
+`_enforce_*` schema-override methods + the NLI contradiction retry.
+The KG-ASG refinement is to make the retry **failure-type-specific** —
+when an NLI contradiction fires, branch the retry prompt on *what kind*
+of failure it was (contradicts a prior fact / wrong primary actor /
+support actor authored a transition), rather than a single generic
+"try again." Bounded retry count (KG-ASG uses 5; Story Director should
+cap lower given the per-tick latency budget — suggest 2-3) then
+surface/skip on exhaustion.
+
+**Action when the predictive lane is built:**
+1. Extend the tick descriptor to `(event_kind, primary_actor,
+   support_actors, tick_window, guidance)`.
+2. Add the single-primary-agent invariant as a `FactLedger`
+   validation rule + a unit test that rejects a beat tagging two
+   primaries.
+3. Make the NLI-retry path failure-type-specific (2-3 bounded rounds).
+
+Composes with the SKG-Eval geometric contradiction engine (filed in
+`project_story_director.md` 2026-05-19 — the *post-hoc* consistency
+scorer; KG-ASG is the *generation-time* attribution constraint) and
+the SDOF FSM pre-condition gate (2026-05-18 — pre-hoc dispatchability
+check). Pipeline ordering: SDOF gate → KG-ASG attribution → LLM writes
+→ SKG-Eval/NLI scores → failure-type-specific retry.
