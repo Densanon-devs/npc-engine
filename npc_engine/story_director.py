@@ -648,6 +648,51 @@ class FactLedger:
         # entry; reputation queries treat that as ``"player"``.
         if subject_identity:
             entry["subject_identity"] = subject_identity
+
+        # Observer-conflict (OSCToM insight, 2026-05-22): when a NEW
+        # observation/fact CONTRADICTS an existing belief for the SAME
+        # subject, we want to flag the conflict rather than let it slide
+        # in silently next to the stale belief. This models the gap
+        # between what a character now OBSERVES and what they previously
+        # BELIEVED (e.g. saw the player steal, but believed them
+        # trustworthy). We do NOT delete or overwrite the prior belief —
+        # the ledger is append-only — we just mark the incoming entry so
+        # a downstream "belief update" layer (out of scope for v1) can
+        # surface it.
+        #
+        # Gating, deliberately tight:
+        #   • the NLI must have fired ``is_contradiction`` (real semantic
+        #     conflict, not mere lexical similarity), and
+        #   • the prior belief must concern the SAME subject — same
+        #     ``subject_identity`` when both carry one, else falling back
+        #     to same ``npc_id``. Cross-subject contradictions (two
+        #     different NPCs' unrelated facts) are NOT observer-conflicts.
+        # Additive: the key is only ever set when both conditions hold,
+        # so the non-conflict path and every legacy consumer are
+        # untouched.
+        if warning is not None and warning.get("contradiction"):
+            prior_idx = warning.get("matches_index")
+            prior_subject = warning.get("matches_subject_identity")
+            prior_npc = warning.get("matches_npc")
+            if subject_identity is not None and prior_subject is not None:
+                same_subject = (subject_identity == prior_subject)
+            else:
+                # No explicit identity on one/both sides — fall back to
+                # the owning NPC as the subject proxy.
+                same_subject = (prior_npc == npc_id)
+            if same_subject:
+                entry["observer_conflict"] = True
+                entry["conflicts_with"] = {
+                    "index": prior_idx,
+                    "text": warning.get("matches_text"),
+                    "tick": warning.get("matches_tick"),
+                    "npc_id": prior_npc,
+                    "subject_identity": prior_subject,
+                }
+                # Mirror onto the returned warning so the dispatch-path
+                # caller can react in-line without re-reading the entry.
+                warning["observer_conflict"] = True
+
         self.entries.append(entry)
         # Bound memory — keep last 200 entries (largest a typical session reaches)
         if len(self.entries) > 200:
@@ -736,12 +781,23 @@ class FactLedger:
         if max_sim < self.threshold:
             return None
         match = candidates[max_idx]
+        # ``matches_index`` is the position of the matched entry in the
+        # *full* self.entries list (not the filtered candidates list), so
+        # downstream consumers can reference the prior belief by stable
+        # index. ``matches_subject_identity`` mirrors the entry's optional
+        # subject_identity (absent key = legacy "player").
+        try:
+            matches_index = self.entries.index(match)
+        except ValueError:
+            matches_index = None
         return {
             "similarity": round(max_sim, 3),
             "matches_text": match["text"][:240],
             "matches_npc": match["npc_id"],
             "matches_kind": match["kind"],
             "matches_tick": match["tick"],
+            "matches_index": matches_index,
+            "matches_subject_identity": match.get("subject_identity"),
         }
 
     @property

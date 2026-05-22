@@ -1706,6 +1706,175 @@ def test_fact_ledger_entry_carries_subject_identity():
     print("  [PASS] fact_ledger_entry_carries_subject_identity")
 
 
+# ── Observer-conflict tests (OSCToM insight, 2026-05-22) ─────────
+#
+# These exercise the FactLedger.observer_conflict flag — the mechanism
+# that flags a new observation contradicting a prior belief for the SAME
+# subject. The flag-mechanics tests below are MODEL-FREE: they build a
+# bare FactLedger and inject a fake embedder + a stub NLI checker so the
+# contradiction signal is deterministic and the suite always runs.
+
+class _FakeContradictionChecker:
+    """Stub NLI that returns a caller-supplied verdict, no model needed.
+    Mirrors ContradictionChecker.check()'s return shape just enough for
+    FactLedger.add() to read ``is_contradiction``."""
+
+    def __init__(self, is_contradiction: bool):
+        self._verdict = is_contradiction
+        # FactLedger.stats() pokes at these; keep them model-less-safe.
+        self._model = False
+
+    def check(self, premise: str, hypothesis: str):
+        if not premise or not hypothesis:
+            return None
+        return {
+            "label": "contradiction" if self._verdict else "neutral",
+            "confidence": 0.95,
+            "is_contradiction": self._verdict,
+            "scores": {"contradiction": 0.95, "entailment": 0.02, "neutral": 0.03},
+        }
+
+
+def _make_ledger_with_fakes(tag: str, *, is_contradiction: bool):
+    """Build a FactLedger whose embedder + similarity layer are faked so
+    the only variable is the NLI verdict + subject matching. Returns
+    (ledger, restore)."""
+    import numpy as np
+    from npc_engine.story_director import FactLedger
+
+    tmp = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_oc_ledger.json"
+    if tmp.exists():
+        tmp.unlink()
+    ledger = FactLedger(
+        tmp, contradiction_checker=_FakeContradictionChecker(is_contradiction),
+    )
+
+    # Fake the embedder: every text encodes to the same unit vector, so
+    # cosine similarity is always 1.0 and _check_similarity always fires
+    # against the most-recent prior entry of the relevant candidate set.
+    vec = np.array([1.0, 0.0, 0.0], dtype="float32")
+    ledger._encode = lambda text: (vec if text and isinstance(text, str) else None)
+    # _check_similarity needs numpy; the real impl is fine, but force np
+    # to be available even in a numpy-light env.
+    ledger._np = np
+
+    def restore():
+        if tmp.exists():
+            try:
+                tmp.unlink()
+            except Exception:
+                pass
+        sidecar = tmp.with_suffix(".embeddings.npy")
+        if sidecar.exists():
+            try:
+                sidecar.unlink()
+            except Exception:
+                pass
+    return ledger, restore
+
+
+def test_observer_conflict_flags_contradicting_belief_same_subject():
+    """A new observation that the NLI calls a contradiction, for the same
+    subject_identity as a stored belief, is flagged observer_conflict with
+    a reference back to the prior belief. MODEL-FREE (stubbed NLI)."""
+    ledger, restore = _make_ledger_with_fakes(
+        "oc_same_subject", is_contradiction=True,
+    )
+    try:
+        ledger.add(
+            text="The player is honest and trustworthy.",
+            npc_id="kael", kind="fact", tick=1,
+            subject_identity="jordan",
+        )
+        warning = ledger.add(
+            text="The player just stole from the shop.",
+            npc_id="kael", kind="fact", tick=2,
+            subject_identity="jordan",
+        )
+        new_entry = ledger.entries[-1]
+        assert new_entry.get("observer_conflict") is True, new_entry
+        cw = new_entry.get("conflicts_with")
+        assert cw is not None, new_entry
+        assert cw["index"] == 0, cw
+        assert cw["subject_identity"] == "jordan", cw
+        assert "honest" in cw["text"], cw
+        # Prior belief is NOT mutated — ledger stays append-only.
+        assert "observer_conflict" not in ledger.entries[0], ledger.entries[0]
+        # Warning mirrors the flag for inline dispatch-path reaction.
+        assert warning is not None and warning.get("observer_conflict") is True, warning
+    finally:
+        restore()
+    print("  [PASS] observer_conflict_flags_contradicting_belief_same_subject")
+
+
+def test_observer_conflict_not_flagged_when_no_contradiction():
+    """High similarity but NLI says neutral → no observer_conflict, no
+    conflicts_with key. The non-conflict path is untouched. MODEL-FREE."""
+    ledger, restore = _make_ledger_with_fakes(
+        "oc_no_contra", is_contradiction=False,
+    )
+    try:
+        ledger.add(
+            text="The player is honest and trustworthy.",
+            npc_id="kael", kind="fact", tick=1,
+            subject_identity="jordan",
+        )
+        ledger.add(
+            text="The player is honest and reliable.",
+            npc_id="kael", kind="fact", tick=2,
+            subject_identity="jordan",
+        )
+        new_entry = ledger.entries[-1]
+        assert "observer_conflict" not in new_entry, new_entry
+        assert "conflicts_with" not in new_entry, new_entry
+    finally:
+        restore()
+    print("  [PASS] observer_conflict_not_flagged_when_no_contradiction")
+
+
+def test_observer_conflict_not_flagged_across_different_subjects():
+    """A contradiction between facts about DIFFERENT subjects is not an
+    observer-conflict — the flag is subject-scoped. MODEL-FREE."""
+    ledger, restore = _make_ledger_with_fakes(
+        "oc_diff_subject", is_contradiction=True,
+    )
+    try:
+        ledger.add(
+            text="Jordan is the rightful heir.",
+            npc_id="kael", kind="fact", tick=1,
+            subject_identity="jordan",
+        )
+        ledger.add(
+            text="The stranger is the rightful heir.",
+            npc_id="kael", kind="fact", tick=2,
+            subject_identity="hooded_stranger",
+        )
+        new_entry = ledger.entries[-1]
+        assert "observer_conflict" not in new_entry, new_entry
+    finally:
+        restore()
+    print("  [PASS] observer_conflict_not_flagged_across_different_subjects")
+
+
+def test_observer_conflict_falls_back_to_npc_when_no_subject():
+    """When neither entry carries a subject_identity, the owning npc_id is
+    the subject proxy: same NPC + contradiction → flagged; different NPC →
+    not flagged. MODEL-FREE."""
+    ledger, restore = _make_ledger_with_fakes(
+        "oc_npc_fallback", is_contradiction=True,
+    )
+    try:
+        ledger.add(text="Kael guards the north gate.",
+                   npc_id="kael", kind="fact", tick=1)
+        # Same NPC, contradicting belief, no subject_identity → flagged.
+        ledger.add(text="Kael abandoned the north gate.",
+                   npc_id="kael", kind="fact", tick=2)
+        assert ledger.entries[-1].get("observer_conflict") is True, ledger.entries[-1]
+    finally:
+        restore()
+    print("  [PASS] observer_conflict_falls_back_to_npc_when_no_subject")
+
+
 def test_unmet_npc_has_empty_player_knowledge():
     """Fresh NPCs start with player_knowledge.met = False and empty
     deed / identity lists. This is the pre-recognition baseline the
@@ -6079,6 +6248,12 @@ def main():
     print("\nStory Director — identity split tests (Phase 5a-1)")
     test_fact_ledger_entry_carries_subject_identity()
     test_unmet_npc_has_empty_player_knowledge()
+
+    print("\nStory Director — observer-conflict tests (OSCToM)")
+    test_observer_conflict_flags_contradicting_belief_same_subject()
+    test_observer_conflict_not_flagged_when_no_contradiction()
+    test_observer_conflict_not_flagged_across_different_subjects()
+    test_observer_conflict_falls_back_to_npc_when_no_subject()
 
     print("\nStory Director — recognition tests (Phase 5a-2)")
     test_player_introduce_flips_met_and_recognized()

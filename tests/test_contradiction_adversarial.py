@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from npc_engine.story_director import ContradictionChecker
+from npc_engine.story_director import ContradictionChecker, FactLedger
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +97,35 @@ def test_ceiling_unrelated_misread_as_contradiction(checker):
     assert _label(
         checker, "The festival begins at dawn.", "The river floods every spring."
     ) == "contradiction"
+
+
+# ---------------------------------------------------------------------------
+# OBSERVER-CONFLICT (OSCToM insight) — end-to-end through FactLedger with the
+# REAL NLI. Model-gated via the `checker` fixture (skips offline). The
+# always-running flag-mechanics tests live in test_story_director.py.
+# ---------------------------------------------------------------------------
+
+
+def test_observer_conflict_fires_on_real_nli_contradiction(checker, tmp_path):
+    # The embedder may also be unavailable offline; if so, FactLedger.add
+    # returns None (no similarity match → no NLI → no flag), so gate on it.
+    ledger = FactLedger(tmp_path / "oc_ledger.json")
+    if ledger.embedder is None:
+        pytest.skip("FactLedger embedder unavailable (offline / not cached)")
+    # Reuse the already-loaded NLI from the fixture to avoid a second load.
+    ledger.contradiction_checker = checker
+
+    ledger.add(
+        text="The king is alive and rules the realm.",
+        npc_id="herald", kind="fact", tick=1, subject_identity="king",
+    )
+    ledger.add(
+        text="The king is dead.",
+        npc_id="herald", kind="fact", tick=2, subject_identity="king",
+    )
+    new_entry = ledger.entries[-1]
+    assert new_entry.get("observer_conflict") is True, new_entry
+    assert new_entry["conflicts_with"]["subject_identity"] == "king"
 
 
 if __name__ == "__main__":
