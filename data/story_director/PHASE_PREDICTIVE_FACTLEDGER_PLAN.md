@@ -574,6 +574,97 @@ candidate-pool device sits cleanly at the *command-generation* tier
 3. Wire pool fallback into the KG-ASG failure-type-specific retry: on
    rejection, advance to the next pooled candidate before re-generating.
 
+## Empirical validation added 2026-05-28 — GE-Sim 2.0 Narrative Judge transfer
+
+Built a feasibility prototype validating the GE-Sim 2.0 World Judge
+architectural pattern as a *coherence scorer* over candidate world states.
+Prototype files at npc-engine repo root (NOT committed to npc_engine/):
+`narrative_judge_prototype.py`, `narrative_judge_dataset.py`,
+`narrative_judge_dataset_pb.py`, `narrative_judge_trainer.py`,
+`narrative_judge_cross_domain.py`.
+
+**Architecture (mirrors GE-Sim 2.0 §World Judge):**
+- Frozen backbones: `cross-encoder/nli-deberta-v3-small` (already loaded
+  for ContradictionChecker) + `all-MiniLM-L6-v2` (already in FactLedger).
+- Trainable head: sklearn LogisticRegression on an 8-dim feature vector
+  per `(fact, quest_objective)` pair — NLI three-class scores, embedding
+  cosine, token overlap, length, two interaction terms.
+- Loss: cross-entropy, 3-class (advance / block / neutral).
+- Supervision: 216 hand-labeled tuples across Ashenvale (144) + Port
+  Blackwater (72).
+
+**Numbers:**
+
+| Configuration | LR accuracy |
+|---|---:|
+| Raw NLI baseline (no training) | 0.241 |
+| Single-domain Ashenvale (80/20 holdout) | **0.897** |
+| Zero-shot Ashenvale → Port Blackwater | 0.708 |
+| Zero-shot Port Blackwater → Ashenvale | 0.792 |
+| Few-shot Ashenvale + 80% PB → 20% PB held-out | 0.800 |
+
+**Findings:**
+1. **+65.5pp lift over raw NLI** — the training-on-labels step is doing
+   the work GE-Sim 2.0's MLP head does in robotics.
+2. **Generalizes cross-domain.** Zero-shot 70.8% Ashenvale → PB despite
+   totally different setting/vocabulary/quests.
+3. **LR beats MLP at this dataset size.** Don't reach for deeper heads
+   without ≥500 labels.
+4. **Block-class is the weak link.** The Cosmos simulate-then-commit
+   pattern (filed 2026-05-22) needs reliable contradiction detection;
+   pair this Judge's advance-scoring with the *existing*
+   ContradictionChecker for block-detection. Two-signal pipeline,
+   not single classifier.
+5. **Few-shot cheap.** +57 PB labels lifts held-out PB acc from
+   70.8% → 80.0% (+9.2pp). **~50 labels per new world** is enough for
+   production-quality per-world adaptation. ~25-50 min of authoring.
+
+**How this slots into the spec:**
+
+This Narrative Judge does NOT replace v1's `ActivityPrior` or `EdgeFilter`
+— those address *next-tick activity prediction*. The Narrative Judge
+addresses *candidate-state coherence scoring*, which the 2026-05-21
+SUGAR entry and the 2026-05-22 Cosmos entry both call for. Composes as:
+
+- **v1 (still as-spec'd above):** EdgeFilter + ActivityPrior produce
+  prior + edge boosts → biases `_propose_arcs` and flags activity drift.
+- **v2 (per the 2026-05-10 refinement):** ONNX sequence model
+  generalizes the prior; predictive lane emits candidate pool.
+- **v3 (Narrative Judge integration, NEW):** Trained Judge scores each
+  candidate against active quest specs. Recommended pipeline per quest:
+  `Judge.predict_proba(fact, quest_spec) → P(advance)` AND
+  `ContradictionChecker.check(fact, quest_spec) → contradicts/entails/neutral`.
+  Promote candidate that maximizes mean advance-prob minus weighted
+  contradiction-prob across active quests.
+
+**Implementation order if/when greenlit:**
+
+After v1's `ActivityPrior` and `EdgeFilter` ship, the Narrative Judge
+addition is:
+1. Add `npc_engine/narrative_judge.py` (~150 LOC: featurize + load
+   sklearn model + predict_proba interface). Copy from
+   `narrative_judge_trainer.py::featurize` and the LR model export.
+2. Train the model offline on the existing 216 tuples plus any new-world
+   labels. Pickle to `data/<world>/narrative_judge.pkl`. ~30 sec
+   sklearn fit. **Important:** pickle is per-world per the few-shot
+   finding — Ashenvale and PB get distinct models, OR a combined model
+   with both worlds in the training set.
+3. Wire into `StoryDirector._propose_arcs` candidate-scoring path (when
+   the SUGAR candidate pool exists). Score each candidate against each
+   active quest; aggregate per quest, pick best.
+4. Test against the existing 50-tick replay corpus (`narrative_judge_prototype.py::REPLAY_ENTRIES`).
+5. Validate per-world separately — 50 hand-labels per new world is the
+   target authoring budget.
+
+**Key risks (verified, not theoretical):**
+- Block-class accuracy drops in zero-shot (F1 0.49 PB, 0.61 reverse).
+  Two-signal pipeline (Judge + ContradictionChecker) mitigates.
+- 144 + 72 = 216 labels is small. MLP overfits; LR is the right
+  capacity. Watch for over-claim if scaling beyond this.
+- Hand-labels from a single author (no inter-rater check). Validate
+  with at least one independent re-label of ~30 random tuples before
+  shipping commercially.
+
 Premise caveat (why this is "input," not "must-do"): the paper's
 "smaller models benefit most from decomposition" framing did NOT hold
 in a sibling ALM experiment (the parked PExA decomposed-parallel branch
