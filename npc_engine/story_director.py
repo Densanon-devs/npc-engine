@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -35,6 +36,13 @@ if TYPE_CHECKING:
     from npc_engine.engine import NPCEngine
 
 logger = logging.getLogger("NPCEngine.story_director")
+
+# NarrativeJudge passive observer — off by default (zero risk to the
+# existing 192 test suite). Set NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE=1 to
+# log per-dispatch coherence scores against active quest specs to
+# <runtime_dir>/narrative_judge_observations.jsonl. Logging only —
+# never affects dispatch behavior. See npc_engine/narrative_judge.py.
+_NARRATIVE_JUDGE_OBSERVE_ENV = "NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE"
 
 
 DATA_DIR = NPC_ENGINE_ROOT / "data" / "story_director"
@@ -1562,6 +1570,141 @@ class StoryDirector:
             npc_id for npc_id in self.engine.pie.npc_knowledge.profiles
             if npc_id not in born_ids
         )
+
+        # NarrativeJudge passive observer (off by default, env-gated).
+        # Logs per-dispatch coherence scores to a per-world sidecar JSONL.
+        # Behavior-neutral — only logging.
+        self._narrative_judge: Optional[Any] = None
+        self._narrative_judge_log_path: Optional[Path] = None
+        if os.environ.get(_NARRATIVE_JUDGE_OBSERVE_ENV) == "1":
+            try:
+                from npc_engine.narrative_judge import NarrativeJudge
+                self._narrative_judge = NarrativeJudge()
+                self._narrative_judge_log_path = (
+                    self._runtime_dir / "narrative_judge_observations.jsonl"
+                )
+                logger.info(
+                    f"NarrativeJudge observer enabled. Logging to "
+                    f"{self._narrative_judge_log_path}"
+                )
+            except Exception as e:
+                logger.warning(f"NarrativeJudge observer init failed: {e}")
+                self._narrative_judge = None
+                self._narrative_judge_log_path = None
+
+    def _judge_observe(self, action: dict, dispatch_result: dict) -> None:
+        """Passive observer: score the dispatched action against every
+        active quest spec via NarrativeJudge and log to sidecar JSONL.
+
+        Behavior-neutral — never raises, never affects dispatch.
+        Activated only when NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE=1.
+        """
+        if self._narrative_judge is None or self._narrative_judge_log_path is None:
+            return
+        if not self._narrative_judge.available:
+            return
+
+        # Extract the dispatched fact text from the action dict
+        kind = action.get("action")
+        fact_text = ""
+        if kind == "quest":
+            q = action.get("quest") or {}
+            name = str(q.get("name") or "").strip()
+            desc = str(q.get("description") or "").strip()
+            fact_text = (name + " — " + desc).strip(" —")
+        elif kind == "event":
+            fact_text = str(action.get("event") or action.get("description") or "").strip()
+        elif kind == "fact":
+            fact_text = str(action.get("fact") or "").strip()
+        if not fact_text:
+            return
+
+        # Collect every active/available quest spec across the cast
+        try:
+            active_specs: dict[str, str] = {}
+            for npc_id, npc in self.engine.pie.npc_knowledge.profiles.items():
+                for q in getattr(npc, "quests", []):
+                    if getattr(q, "status", None) not in ("available", "active"):
+                        continue
+                    spec = str(getattr(q, "description", "") or "").strip()
+                    if not spec:
+                        spec = str(getattr(q, "name", "") or "").strip()
+                    if not spec:
+                        continue
+                    key = f"{npc_id}:{getattr(q, 'id', '?')}"
+                    active_specs[key] = spec
+        except Exception as e:
+            logger.warning(f"NarrativeJudge observer: spec collection failed: {e}")
+            return
+
+        if not active_specs:
+            # No active quests = nothing to score against. Still record so
+            # the analysis sees the empty case.
+            record = {
+                "tick": self.tick_count,
+                "action_kind": kind,
+                "dispatched_target": (action.get("npc_id")
+                                       or action.get("target")
+                                       or "*"),
+                "dispatch_ok": bool(dispatch_result.get("ok")),
+                "fact_text": fact_text[:500],
+                "active_quest_count": 0,
+                "scores": {},
+            }
+        else:
+            try:
+                ranked = self._narrative_judge.score_against_quests_ranked(
+                    fact_text, active_specs
+                )
+            except Exception as e:
+                logger.warning(f"NarrativeJudge observer: score failed: {e}")
+                return
+            if ranked is None:
+                return
+            # Decision-quality classification (post-hoc analysis on PB
+            # gameplay session: margin >= 0.15 -> 2/15 specific,
+            # 0.05 <= margin < 0.15 -> 8/15 plurality,
+            # margin < 0.05 -> 5/15 ambiguous/multi-thread).
+            margin = ranked["margin"]
+            if margin >= 0.15:
+                decision = "specific"
+            elif margin >= 0.05:
+                decision = "plurality"
+            else:
+                decision = "ambiguous"
+            score_payload = {}
+            for qid, res in ranked["per_quest"].items():
+                if res is None:
+                    continue
+                score_payload[qid] = {
+                    "label": res.get("label"),
+                    "scores": res.get("scores"),
+                }
+            record = {
+                "tick": self.tick_count,
+                "action_kind": kind,
+                "dispatched_target": (action.get("npc_id")
+                                       or action.get("target")
+                                       or "*"),
+                "dispatch_ok": bool(dispatch_result.get("ok")),
+                "fact_text": fact_text[:500],
+                "active_quest_count": len(active_specs),
+                "best_quest": ranked["best_quest"],
+                "best_advance": ranked["best_advance"],
+                "runner_up_quest": ranked["runner_up_quest"],
+                "runner_up_advance": ranked["runner_up_advance"],
+                "margin": ranked["margin"],
+                "softmax_peak": ranked["softmax_peak"],
+                "decision": decision,
+                "scores": score_payload,
+            }
+
+        try:
+            self._narrative_judge_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self._narrative_judge_log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record) + "\n")
+        except Exception as e:
+            logger.warning(f"NarrativeJudge observer: log write failed: {e}")
 
     def _resolve_paths(self) -> None:
         """
@@ -5673,17 +5816,28 @@ class StoryDirector:
         kind = action.get("action")
         try:
             if kind == "quest":
-                return self._dispatch_quest(action)
-            if kind == "event":
-                return self._dispatch_event(action)
-            if kind == "fact":
-                return self._dispatch_fact(action)
-            if kind == "noop":
-                return {"ok": True, "kind": "noop"}
-            return {"ok": False, "reason": f"unknown_action_kind: {kind}"}
+                result = self._dispatch_quest(action)
+            elif kind == "event":
+                result = self._dispatch_event(action)
+            elif kind == "fact":
+                result = self._dispatch_fact(action)
+            elif kind == "noop":
+                result = {"ok": True, "kind": "noop"}
+            else:
+                result = {"ok": False, "reason": f"unknown_action_kind: {kind}"}
         except Exception as e:
             logger.exception("Story Director dispatch failed")
-            return {"ok": False, "reason": f"dispatch_error: {e}"}
+            result = {"ok": False, "reason": f"dispatch_error: {e}"}
+
+        # Passive Narrative Judge observer — no-op unless env-enabled.
+        # Skipped for noop and dispatch_error since there's no fact to score.
+        if kind in ("quest", "event", "fact"):
+            try:
+                self._judge_observe(action, result)
+            except Exception as e:
+                logger.warning(f"_judge_observe failed (non-fatal): {e}")
+
+        return result
 
     def _dispatch_quest(self, action: dict) -> dict:
         npc_id = action.get("npc_id")
