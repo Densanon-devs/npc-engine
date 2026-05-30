@@ -7,17 +7,42 @@ After each player-NPC conversation, the propagator:
 3. Walks the social graph from the source NPC
 4. At each hop, checks gossip_filter and injects matching facts as events
 5. Applies decay and significance thresholds
+
+Passive latent-alignment observer (off by default, env-gated):
+Set NPC_ENGINE_LATENT_ALIGN_OBSERVE=1 to log per-injection latent
+similarity scores against the last N facts already delivered to the
+same NPC. Uses densanon.core.latent_align (frozen MiniLM + cosine).
+Logging only — never changes propagation behavior. Output goes to
+<world>/story/latent_align_observations.jsonl (or the equivalent
+runtime dir if story_director already chose one).
+
+Adapts SCALE-COMM (arXiv 2605.27532, May 2026) — cross-agent semantic
+consistency for cheap via a shared frozen encoder. See
+project_npc_engine.md 2026-05-28 for the design rationale.
 """
 
 import json
 import logging
+import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
+from npc_engine.bridge import NPC_ENGINE_ROOT
 from npc_engine.config import GossipRules
 from npc_engine.social.network import SocialGraph
 
 logger = logging.getLogger(__name__)
+
+# Latent-align observer config
+_LATENT_OBSERVE_ENV = "NPC_ENGINE_LATENT_ALIGN_OBSERVE"
+# Per-NPC ring buffer cap. 30 recent gossip facts is enough to catch
+# drift cascades over a typical play session without unbounded memory.
+_LATENT_OBSERVE_BUFFER_PER_NPC = 30
+_LATENT_OBSERVE_LOG_DEFAULT = (
+    NPC_ENGINE_ROOT / "data" / "story_director" / "latent_align_observations.jsonl"
+)
 
 
 @dataclass
@@ -83,6 +108,22 @@ class GossipPropagator:
         self.rules = rules or GossipRules()
         self._pending: list[tuple[str, GossipFact, int]] = []  # (target_npc, fact, deliver_at_turn)
         self._turn: int = 0
+
+        # Latent-align observer state (env-gated). Per-NPC ring buffer of
+        # recently-delivered gossip texts so a new injection can be
+        # scored for semantic duplication against the NPC's actual
+        # received history. Behavior-neutral — only logging.
+        self._latent_observe_enabled: bool = (
+            os.environ.get(_LATENT_OBSERVE_ENV) == "1"
+        )
+        self._latent_recent_per_npc: dict[str, list[str]] = {}
+        self._latent_log_path: Optional[Path] = (
+            _LATENT_OBSERVE_LOG_DEFAULT if self._latent_observe_enabled else None
+        )
+        if self._latent_observe_enabled:
+            logger.info(
+                f"latent_align observer enabled. Logging to {self._latent_log_path}"
+            )
 
     def propagate(self, source_npc: str, player_input: str, npc_response: str,
                   knowledge_manager, capability_managers: dict) -> list[str]:
@@ -213,6 +254,15 @@ class GossipPropagator:
     def _inject_gossip(self, target_npc: str, fact: GossipFact,
                        knowledge_manager, capability_managers: dict) -> None:
         """Inject a gossip fact into a target NPC's knowledge."""
+        # Passive latent-align observer fires BEFORE the inject so the
+        # ring buffer reflects what was present at decision time.
+        # Behavior-neutral — pure logging.
+        if self._latent_observe_enabled:
+            try:
+                self._latent_observe(target_npc, fact)
+            except Exception as e:
+                logger.warning(f"latent_align observer failed (non-fatal): {e}")
+
         # Inject as event into NPC knowledge
         knowledge_manager.inject_event(target_npc, fact.text)
 
@@ -224,6 +274,58 @@ class GossipPropagator:
                 gossip_cap.add_rumor(fact)
 
         logger.debug(f"Gossip: {fact.source_npc} → {target_npc}: {fact.text[:60]}...")
+
+    def _latent_observe(self, target_npc: str, fact: GossipFact) -> None:
+        """Score the new fact against the target NPC's recent gossip
+        history using densanon.core.latent_align cosine similarity.
+        Log + maintain the per-NPC ring buffer."""
+        try:
+            from densanon.core.latent_align import (
+                DEFAULT_DUPLICATE_THRESHOLD, is_duplicate, similarity,
+            )
+        except ImportError:
+            return
+
+        history = self._latent_recent_per_npc.setdefault(target_npc, [])
+
+        # Score new fact vs each existing history entry
+        scores = []
+        for prev_text in history:
+            s = similarity(prev_text, fact.text)
+            scores.append({"prev_text": prev_text[:120], "similarity": round(s, 3)})
+        if scores:
+            scores.sort(key=lambda x: -x["similarity"])
+            best = scores[0]
+            best_sim = best["similarity"]
+            is_dup = best_sim >= DEFAULT_DUPLICATE_THRESHOLD
+        else:
+            best, best_sim, is_dup = None, 0.0, False
+
+        record = {
+            "turn": self._turn,
+            "source_npc": fact.source_npc,
+            "target_npc": target_npc,
+            "category": fact.category,
+            "significance": fact.significance,
+            "new_fact": fact.text[:240],
+            "history_size_before": len(history),
+            "best_similarity": best_sim,
+            "best_match_text": (best or {}).get("prev_text"),
+            "is_duplicate_at_default": is_dup,
+            "top_3_history_scores": scores[:3],
+        }
+        if self._latent_log_path is not None:
+            try:
+                self._latent_log_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._latent_log_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(record) + "\n")
+            except Exception as e:
+                logger.warning(f"latent_align log write failed: {e}")
+
+        # Update ring buffer (after logging so the comparison is fair)
+        history.append(fact.text)
+        if len(history) > _LATENT_OBSERVE_BUFFER_PER_NPC:
+            history.pop(0)
 
     def _deliver_pending(self, knowledge_manager,
                          capability_managers: dict) -> list[str]:
