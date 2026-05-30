@@ -37,6 +37,11 @@ logger = logging.getLogger(__name__)
 
 # Latent-align observer config
 _LATENT_OBSERVE_ENV = "NPC_ENGINE_LATENT_ALIGN_OBSERVE"
+# Active dedup config — orthogonal to the observer. When this env var is
+# set to "1", the propagator SUPPRESSES inject_event calls for facts
+# that are semantically duplicate of the target NPC's recent history.
+# Behavior change: gossip duplicates are dropped, not just logged.
+_LATENT_DEDUP_ENV = "NPC_ENGINE_LATENT_ALIGN_DEDUP"
 # Per-NPC ring buffer cap. 30 recent gossip facts is enough to catch
 # drift cascades over a typical play session without unbounded memory.
 _LATENT_OBSERVE_BUFFER_PER_NPC = 30
@@ -116,13 +121,26 @@ class GossipPropagator:
         self._latent_observe_enabled: bool = (
             os.environ.get(_LATENT_OBSERVE_ENV) == "1"
         )
+        self._latent_dedup_enabled: bool = (
+            os.environ.get(_LATENT_DEDUP_ENV) == "1"
+        )
+        # The ring buffer is maintained whenever EITHER observer or dedup
+        # is enabled — both paths read from the same per-NPC history.
         self._latent_recent_per_npc: dict[str, list[str]] = {}
         self._latent_log_path: Optional[Path] = (
             _LATENT_OBSERVE_LOG_DEFAULT if self._latent_observe_enabled else None
         )
+        # Telemetry: how many inject_event calls did dedup suppress?
+        # Reset on each propagate() call; cumulative counter on the instance.
+        self._latent_dedup_suppressed_count: int = 0
         if self._latent_observe_enabled:
             logger.info(
                 f"latent_align observer enabled. Logging to {self._latent_log_path}"
+            )
+        if self._latent_dedup_enabled:
+            logger.info(
+                "latent_align ACTIVE DEDUP enabled — duplicate gossip "
+                "facts will be suppressed before inject_event"
             )
 
     def propagate(self, source_npc: str, player_input: str, npc_response: str,
@@ -253,17 +271,40 @@ class GossipPropagator:
 
     def _inject_gossip(self, target_npc: str, fact: GossipFact,
                        knowledge_manager, capability_managers: dict) -> None:
-        """Inject a gossip fact into a target NPC's knowledge."""
-        # Passive latent-align observer fires BEFORE the inject so the
-        # ring buffer reflects what was present at decision time.
-        # Behavior-neutral — pure logging.
+        """Inject a gossip fact into a target NPC's knowledge.
+
+        Pipeline:
+          1. (observer-on) score against per-NPC history + log to JSONL
+          2. (dedup-on)    score against per-NPC history; if duplicate,
+                           SUPPRESS the inject and skip the rest. Update
+                           the buffer with the suppressed fact so the next
+                           one is also evaluated against it.
+          3. inject_event  + capability update
+          4. buffer append (skipped if dedup suppressed the inject)
+        """
+        # Step 1 — passive observer (logging only, behavior-neutral)
         if self._latent_observe_enabled:
             try:
                 self._latent_observe(target_npc, fact)
             except Exception as e:
                 logger.warning(f"latent_align observer failed (non-fatal): {e}")
 
-        # Inject as event into NPC knowledge
+        # Step 2 — active dedup (behavior change; opt-in)
+        if self._latent_dedup_enabled:
+            try:
+                if self._latent_should_dedup(target_npc, fact):
+                    self._latent_dedup_suppressed_count += 1
+                    self._latent_append_to_history(target_npc, fact.text)
+                    logger.info(
+                        f"latent_align dedup: SUPPRESSED gossip "
+                        f"{fact.source_npc} → {target_npc}: "
+                        f"{fact.text[:60]}... (semantic duplicate)"
+                    )
+                    return
+            except Exception as e:
+                logger.warning(f"latent_align dedup failed (non-fatal): {e}")
+
+        # Step 3 — actual inject
         knowledge_manager.inject_event(target_npc, fact.text)
 
         # Update gossip capability state if available
@@ -273,7 +314,41 @@ class GossipPropagator:
             if hasattr(gossip_cap, "add_rumor"):
                 gossip_cap.add_rumor(fact)
 
+        # Step 4 — append to buffer so future facts can be compared
+        # against this one. Centralized here (NOT in _latent_observe)
+        # so that when both observer + dedup are enabled, dedup sees
+        # history WITHOUT the current fact, avoiding self-match.
+        if self._latent_observe_enabled or self._latent_dedup_enabled:
+            self._latent_append_to_history(target_npc, fact.text)
+
         logger.debug(f"Gossip: {fact.source_npc} → {target_npc}: {fact.text[:60]}...")
+
+    def _latent_should_dedup(self, target_npc: str, fact: GossipFact) -> bool:
+        """Return True iff the new fact is a semantic duplicate of any
+        entry in the target NPC's recent history. Uses
+        densanon.core.latent_align with its default threshold.
+
+        Returns False (don't dedup) when the latent_align backend is
+        unavailable — fail-open, preserve the original gossip behavior.
+        """
+        try:
+            from densanon.core.latent_align import is_duplicate
+        except ImportError:
+            return False
+        history = self._latent_recent_per_npc.get(target_npc, [])
+        if not history:
+            return False
+        for prev_text in history:
+            if is_duplicate(prev_text, fact.text):
+                return True
+        return False
+
+    def _latent_append_to_history(self, target_npc: str, text: str) -> None:
+        """Append text to the per-NPC ring buffer, respecting the cap."""
+        history = self._latent_recent_per_npc.setdefault(target_npc, [])
+        history.append(text)
+        if len(history) > _LATENT_OBSERVE_BUFFER_PER_NPC:
+            history.pop(0)
 
     def _latent_observe(self, target_npc: str, fact: GossipFact) -> None:
         """Score the new fact against the target NPC's recent gossip
@@ -322,10 +397,10 @@ class GossipPropagator:
             except Exception as e:
                 logger.warning(f"latent_align log write failed: {e}")
 
-        # Update ring buffer (after logging so the comparison is fair)
-        history.append(fact.text)
-        if len(history) > _LATENT_OBSERVE_BUFFER_PER_NPC:
-            history.pop(0)
+        # NOTE: buffer maintenance happens in _inject_gossip's final step,
+        # NOT here. Centralizing it there keeps the ordering correct when
+        # both observer and dedup are enabled (dedup must see history WITHOUT
+        # the current fact, else it self-matches).
 
     def _deliver_pending(self, knowledge_manager,
                          capability_managers: dict) -> list[str]:
