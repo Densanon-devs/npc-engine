@@ -673,3 +673,99 @@ device is cheap here because it reuses the NLI scorer and adds no
 context-splitting, but validate that maintaining N candidates doesn't
 blow the per-tick latency budget on the local Qwen 2.5 3B before
 committing to a large pool.
+
+## Design input added 2026-06-09 — Interruptible-tool orchestration (VoLo pattern) + Motion vs. Contact lanes
+
+Sources: VoLo (arXiv 2606.07723, project page chicychen.github.io/VoLo/,
+code "Coming Soon" — borrow the *pattern*, no port possible yet); AGILINK
+framing ("Many of the hardest problems begin only after contact occurs,"
+IEEE Spectrum ICRA 2026, 2026-06-09).
+
+**The gap this addresses.** Today's `StoryDirector.tick()` dispatches a
+multi-action beat and commits its `FactLedger` entries atomically. If the
+world state drifts *during* the beat — a gossip-introduced fact lands, the
+player fires a conflicting `POST /story/player_action`, or an NLI
+contradiction surfaces mid-sequence — the stale action still completes.
+There is no per-capability monitor that can abort the rollout; the
+contradiction is only caught at the *next* NLI pass, one full tick later.
+
+**The AGILINK vocabulary maps cleanly onto the existing architecture.** AGILINK
+distinguishes *motion intelligence* (action sequencing, the planner) from
+*contact intelligence* (maintaining viable interaction during execution, the
+runtime verifier). Story Director already has both halves — they just aren't
+labelled or wired as an abort path:
+
+| AGILINK lane | Story Director component |
+|---|---|
+| **Motion lane** | `_pick_focus_npc` + `_pick_action_kind` + `_propose_arcs` — multi-action tick generation |
+| **Contact lane** | `ContradictionChecker` NLI verifier + `FactLedger` contradiction check — currently post-hoc only |
+
+**VoLo's interruptible-tool framing.** VoLo's orchestrator treats each
+capability dispatch as an *interruptible tool call* — it runs a closed
+plan/execute/monitor/recover loop and can abort mid-rollout when a monitor
+predicate detects divergence between the agent's world-belief and actual
+scene state. Applied here: each action in a multi-action beat becomes an
+interruptible tool call. A lightweight monitor predicate fires between
+action steps (not after the full beat) and can halt the sequence before the
+stale action is committed to the ledger.
+
+**When the contact-lane monitor fires:**
+
+1. **Precondition drift via NLI contradiction.** The predictive lane's
+   `EdgeFilter`/`ActivityPrior` committed a candidate state; a mid-beat
+   `FactLedger.add_entry` call triggers `ContradictionChecker` and returns
+   `contradiction` against an assumption baked into the pending action.
+2. **Gossip-introduced fact.** `GossipPropagator.propagate()` runs
+   post-generation per-turn; if a propagated rumor would directly
+   contradict the *in-flight* beat's primary-actor assumption, the monitor
+   detects the conflict before the beat is committed (composes with the
+   KG-ASG single-primary-agent rule — 2026-05-20 entry).
+3. **Player action invalidates a state assumption.** A concurrent
+   `POST /story/player_action` sets `trust` or `quest_completed` in a way
+   that makes the pending action incoherent (e.g., the Director is about
+   to dispatch an NPC-hostile event, but the player just raised that NPC's
+   trust above the threshold). The monitor checks the delta against the
+   beat's `primary_actor` assumptions.
+
+**What happens on monitor fire:** emit a `recovery_event` (a structured
+signal, not an LLM call) carrying the failure type (same taxonomy as the
+KG-ASG failure-type-specific retry — 2026-05-20 entry); do NOT commit the
+stale action to the `FactLedger`; advance to the next candidate in the
+SUGAR pool (2026-05-21 entry) if one is available, or fall back to a
+cold re-dispatch after clearing the invalidated state.
+
+**Implementation shape (no new module needed in v1).** The contact-lane
+monitor is a method on `StoryDirector` — call it `_check_contact_invariants`
+— invoked between action steps inside the multi-action loop. It gates on
+the same `ContradictionChecker` instance already used for the NLI pass; no
+second model load. The AURA behavioral-delta gate (if/when built) and the
+CLAW predicted-next-state verification naturally slot as additional predicates
+here, evaluated in sequence before each action step commits.
+
+**VoLo async devices (future, not v1).** VoLo also uses asynchronous tools
+and fast/slow memory tiers to keep the monitor cheap relative to the main
+action. The Story Director equivalent would be: fast-tier = the pure-Python
+`_check_contact_invariants` predicate (< 1 ms); slow-tier = a full NLI
+re-check against the committed ledger (current behavior, ~20–40 ms). v1
+runs them sequentially; a future async path could overlap the slow-tier
+check with the next-action generation without blocking the tick clock.
+
+**Composes with:**
+- `ContradictionChecker` / NLI verifier — the contact-lane engine; reused
+  as-is, no new model.
+- KG-ASG failure-type-specific retry (2026-05-20) — the recovery path; the
+  monitor's `recovery_event` carries the failure type that selects the retry
+  branch.
+- SUGAR candidate-state pool (2026-05-21) — on monitor fire, advance pool
+  index instead of cold re-generation.
+- Narrative Judge (2026-05-28) — the coherence scorer over the pool; the
+  contact lane can re-score the next pool candidate before promoting it.
+
+**Action when the predictive lane + SUGAR pool are built:**
+1. Add `_check_contact_invariants(pending_action, beat_context)` to
+   `StoryDirector`. Returns `(ok: bool, failure_type: str | None)`.
+2. Wire into the multi-action dispatch loop: call between steps, abort +
+   emit `recovery_event` on `ok=False`.
+3. Unit test: synthetic mid-beat contradiction triggers abort; stale action
+   absent from ledger; next pool candidate promoted. Mirror the pattern
+   in `tests/test_story_director.py`.
