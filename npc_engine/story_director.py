@@ -31,9 +31,11 @@ import yaml
 
 from npc_engine.bridge import NPC_ENGINE_ROOT
 from npc_engine.knowledge import Quest
+from npc_engine.social.personality_composition import audit_composition
 
 if TYPE_CHECKING:
     from npc_engine.engine import NPCEngine
+    from npc_engine.steering import SteeringSignal
 
 logger = logging.getLogger("NPCEngine.story_director")
 
@@ -43,6 +45,16 @@ logger = logging.getLogger("NPCEngine.story_director")
 # <runtime_dir>/narrative_judge_observations.jsonl. Logging only —
 # never affects dispatch behavior. See npc_engine/narrative_judge.py.
 _NARRATIVE_JUDGE_OBSERVE_ENV = "NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE"
+
+# Personality-composition audit — off by default. Set
+# NPC_ENGINE_PERSONALITY_AUDIT=1 to audit each multi-NPC tick's planned
+# cast for a low-agreeableness (low-trust) majority. When flagged, the
+# tick result carries a ``composition_audit`` block warning that the
+# scene's social consistency (bargaining/alliance/negotiation beats)
+# should not be assumed to hold. Additive — never changes which NPCs are
+# planned or what they do. See npc_engine/social/personality_composition.py
+# + arXiv:2606.27443. Shares the same env var as the gossip-path audit.
+_PERSONALITY_AUDIT_ENV = "NPC_ENGINE_PERSONALITY_AUDIT"
 
 
 DATA_DIR = NPC_ENGINE_ROOT / "data" / "story_director"
@@ -2355,11 +2367,58 @@ class StoryDirector:
                 "raw_response": r["raw_response"],
                 "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
             }
-        return {
+        result = {
             "tick": self.tick_count,
             "sub_actions": sub_results,
             "next_tick_recommended_in_seconds": self._compute_next_tick_hint(),
         }
+        # Personality-composition audit (additive, env-gated). A
+        # multi-NPC tick is exactly the open-ended, multi-agent setting
+        # the paper (arXiv:2606.27443) flags: when the planned cast skews
+        # low-agreeableness (low-trust), high-stakes social beats
+        # (bargaining/alliance/negotiation) can't be assumed consistent.
+        # We surface a warning block so the game (or a future
+        # conflict-resolution branch) can react; the sub-actions
+        # themselves are unchanged.
+        audit_block = self._maybe_audit_composition(planned_focus_ids)
+        if audit_block is not None:
+            result["composition_audit"] = audit_block
+        return result
+
+    def _maybe_audit_composition(self, planned_focus_ids) -> Optional[dict]:
+        """Audit the tick's planned cast for a low-agreeableness majority.
+
+        Returns a serializable audit block when the env gate is on and the
+        audit fired (flagged), ``None`` otherwise — so default tick output
+        is byte-for-byte unchanged when the audit is disabled or the cast
+        is healthy. Fail-open: any error returns ``None``."""
+        if os.environ.get(_PERSONALITY_AUDIT_ENV) != "1":
+            return None
+        try:
+            cap_managers = getattr(self.engine.pie, "capability_managers", {}) or {}
+            audit = audit_composition(planned_focus_ids, cap_managers)
+            if not audit.flagged:
+                return None
+            logger.warning(
+                "personality_composition: multi-NPC tick cast is a "
+                f"low-agreeableness majority ({audit.n_low}/"
+                f"{audit.n_with_signal} below trust {audit.threshold:.0f}); "
+                "high-stakes social consistency NOT assured for this "
+                f"scene. low={audit.low_participants}"
+            )
+            block = audit.as_dict()
+            block["warning"] = (
+                "low-agreeableness majority — bargaining/alliance/"
+                "negotiation outcomes for this scene are unreliable; "
+                "route to conflict resolution rather than assuming "
+                "normal consistency"
+            )
+            return block
+        except Exception as e:
+            logger.warning(
+                f"personality_composition tick audit failed (non-fatal): {e}"
+            )
+            return None
 
     def _run_single_action(self, snapshot: str, focus_npc: Optional[str],
                             action_kind: str, max_tokens: int,
@@ -4788,8 +4847,12 @@ class StoryDirector:
             pass
         return base
 
-    def _pick_action_kind(self, focus_npc: Optional[str],
-                           bypass_per_npc_cap: bool = False) -> str:
+    def _pick_action_kind(
+        self,
+        focus_npc: Optional[str],
+        bypass_per_npc_cap: bool = False,
+        steering: "Optional[SteeringSignal]" = None,
+    ) -> str:
         """
         Python decides the action KIND (event / quest / fact) — round-robin
         so a single kind can't dominate a session. Skips 'quest' when the
@@ -4801,6 +4864,13 @@ class StoryDirector:
         cooldown gate (but NOT the hard ``_MAX_QUESTS_PER_NPC`` open-quest
         limit, which is a sanity check even for authored content).
         Side-rotation callers leave it False.
+
+        ``steering`` is an optional SteeringSignal (see npc_engine/steering.py).
+        When provided and active (urgency > 0, kind_weights non-empty), the
+        selection is biased toward the highest-weight kind within the allowed
+        set. Zero / None steering reproduces exact baseline round-robin.
+        Hard filters (quest cap, zone, activity) still apply FIRST — steering
+        only operates on the final allowed set, never overrides them.
 
         Advances ``self._kind_rotation_index`` even when a kind is skipped
         so the rotation stays predictable across ticks.
@@ -4876,11 +4946,30 @@ class StoryDirector:
             )
             allowed.discard("quest")
 
+        # Advance rotation index so the round-robin trail stays correct
+        # regardless of whether steering picks a different option.
         start = self._kind_rotation_index % len(_ACTION_KIND_ROTATION)
         for offset in range(len(_ACTION_KIND_ROTATION)):
             idx = (start + offset) % len(_ACTION_KIND_ROTATION)
             kind = _ACTION_KIND_ROTATION[idx]
             if kind in allowed:
+                # With an active steering signal, bias the final selection
+                # within the allowed set — hard filters already applied above.
+                # steer_kind_selection returns baseline (first-in-rotation)
+                # when steering is None or inactive.
+                if steering is not None and getattr(steering, "is_active", False):
+                    from npc_engine.steering import steer_kind_selection
+                    chosen = steer_kind_selection(allowed, _ACTION_KIND_ROTATION, steering)
+                    # Advance rotation past the CHOSEN kind so the next
+                    # call (steered or not) continues from after what was
+                    # selected, preserving the round-robin trail.
+                    try:
+                        chosen_idx = _ACTION_KIND_ROTATION.index(chosen)
+                    except ValueError:
+                        chosen_idx = idx
+                    self._kind_rotation_index = (chosen_idx + 1) % len(_ACTION_KIND_ROTATION)
+                    return chosen
+
                 self._kind_rotation_index = (idx + 1) % len(_ACTION_KIND_ROTATION)
                 return kind
 

@@ -32,8 +32,16 @@ from typing import Optional
 from npc_engine.bridge import NPC_ENGINE_ROOT
 from npc_engine.config import GossipRules
 from npc_engine.social.network import SocialGraph
+from npc_engine.social.personality_composition import audit_composition
 
 logger = logging.getLogger(__name__)
+
+# Personality-composition audit config (env-gated, behavior-neutral).
+# When "1", each propagate() audits the source NPC's gossip cluster for a
+# low-agreeableness (low-trust) majority and logs a degraded-fidelity
+# warning. See personality_composition.py + arXiv:2606.27443. Logging
+# only — never changes which NPCs receive gossip.
+_COMPOSITION_AUDIT_ENV = "NPC_ENGINE_PERSONALITY_AUDIT"
 
 # Latent-align observer config
 _LATENT_OBSERVE_ENV = "NPC_ENGINE_LATENT_ALIGN_OBSERVE"
@@ -118,6 +126,14 @@ class GossipPropagator:
         # recently-delivered gossip texts so a new injection can be
         # scored for semantic duplication against the NPC's actual
         # received history. Behavior-neutral — only logging.
+        # Personality-composition audit (env-gated, behavior-neutral).
+        # Stores the most recent audit on the instance so callers/tests
+        # can inspect propagation-fidelity risk without re-walking the graph.
+        self._composition_audit_enabled: bool = (
+            os.environ.get(_COMPOSITION_AUDIT_ENV) == "1"
+        )
+        self.last_composition_audit = None  # set by propagate() when enabled
+
         self._latent_observe_enabled: bool = (
             os.environ.get(_LATENT_OBSERVE_ENV) == "1"
         )
@@ -160,6 +176,30 @@ class GossipPropagator:
 
         if not facts:
             return delivered
+
+        # Personality-composition audit (behavior-neutral). When a
+        # gossip cluster skews low-agreeableness (low-trust), open-ended
+        # propagation fidelity degrades per arXiv:2606.27443 — the facts
+        # still spread, but uncooperative majorities distort/withhold,
+        # so downstream consumers should treat this cluster's gossip as
+        # less reliable. We only flag/log here; propagation is unchanged.
+        if self._composition_audit_enabled:
+            try:
+                audit = self.audit_cluster(source_npc, capability_managers)
+                self.last_composition_audit = audit
+                if audit.flagged:
+                    logger.warning(
+                        "personality_composition: gossip cluster around "
+                        f"'{source_npc}' is a low-agreeableness majority "
+                        f"({audit.n_low}/{audit.n_with_signal} below "
+                        f"trust {audit.threshold:.0f}); propagation "
+                        "fidelity DEGRADED — treat spread facts as "
+                        f"unreliable. low={audit.low_participants}"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"personality_composition audit failed (non-fatal): {e}"
+                )
 
         # Propagate each fact through the social graph
         for fact in facts:
@@ -219,6 +259,22 @@ class GossipPropagator:
             ))
 
         return facts
+
+    def gossip_cluster(self, source_npc: str) -> list[str]:
+        """The set of NPCs that participate in a gossip interaction seeded
+        by ``source_npc`` — the source plus everyone reachable from it
+        within ``max_hops``. This is the group whose personality
+        composition determines propagation fidelity."""
+        reachable = self.graph.get_reachable(source_npc, self.rules.max_hops)
+        return [source_npc] + list(reachable.keys())
+
+    def audit_cluster(self, source_npc: str, capability_managers: dict):
+        """Audit the agreeableness composition of ``source_npc``'s gossip
+        cluster. Returns a ``CompositionAudit``. Pure / behavior-neutral —
+        callable independently of the env gate so games and tests can
+        query propagation-fidelity risk on demand."""
+        cluster = self.gossip_cluster(source_npc)
+        return audit_composition(cluster, capability_managers)
 
     def _walk_graph(self, source_npc: str,
                     fact: GossipFact) -> list[tuple[str, GossipFact]]:
