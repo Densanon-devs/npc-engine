@@ -53,6 +53,30 @@ def _add_profile(engine, profile_path):
     return engine.add_profile(str(profile_path))
 
 
+def _assist(engine, prompt, system=None, max_tokens=256, temperature=0.4,
+            json_mode=False):
+    """General-assistant generation on Anima's OWN loaded model (engine.pie.
+    base_model) — so ONE brain + ONE model serves both NPC dialogue (talk) and
+    the editor copilot (ask). json_mode grammar-constrains the output."""
+    bm = engine.pie.base_model
+    loaded = getattr(bm, "is_loaded", False)
+    if callable(loaded):
+        loaded = loaded()
+    if not loaded:
+        bm.load()
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": str(system)})
+    messages.append({"role": "user", "content": str(prompt)})
+    kw = {}
+    if json_mode:
+        kw["response_format"] = {"type": "json_object"}
+    out = bm.model.create_chat_completion(
+        messages=messages, max_tokens=int(max_tokens),
+        temperature=float(temperature), **kw)
+    return out["choices"][0]["message"]["content"].strip()
+
+
 COMMANDS = {
     "talk": _talk,                    # the core: player text -> NPC reply
     "event": _event,                  # world event raises awareness/context
@@ -63,6 +87,7 @@ COMMANDS = {
     "accept_quest": _accept_quest,
     "complete_quest": _complete_quest,
     "add_profile": _add_profile,
+    "ask": _assist,                   # editor copilot on the SAME model
 }
 
 
