@@ -116,7 +116,9 @@ class AnimaBrain:
     def state(self) -> dict:
         e = self._engine
         npcs = _jsonable(e.list_npcs()) if hasattr(e, "list_npcs") else []
-        active = e.active_npc() if hasattr(e, "active_npc") else None
+        active = getattr(e, "active_npc", None)     # @property or method
+        if callable(active):
+            active = active()
         social = _jsonable(e.get_social_graph()) if hasattr(e, "get_social_graph") else {}
         return {"npcs": npcs, "active": _jsonable(active), "social": social}
 
@@ -176,7 +178,12 @@ def serve_stdio(brain: AnimaBrain, stdin, stdout) -> None:
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     config = argv[0] if argv else "config.yaml"
-    serve_stdio(AnimaBrain(config_path=config), sys.stdin, sys.stdout)
+    # Keep the protocol channel PURE: model-load / PIE / llama_cpp noise must not
+    # land on the stdout the client parses. Reserve the real stdout for JSON only
+    # and send everything else (any print()) to stderr.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    serve_stdio(AnimaBrain(config_path=config), sys.stdin, real_stdout)
     return 0
 
 
