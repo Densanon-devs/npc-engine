@@ -18,7 +18,7 @@ def check(name, fn):
         failed += 1; print(f"  FAIL  {name}: {type(e).__name__}: {e}")
 
 class MockNPCEngine:
-    def __init__(self): self.mood=None; self.events=[]
+    def __init__(self): self.mood=None; self.events=[]; self.pie=_MockPIE()
     def initialize(self): pass
     def process(self, text, npc_id=None): return f"[{npc_id or 'npc'}] heard: {text}"
     def inject_event(self, desc, npc_id=None): self.events.append(desc)
@@ -33,6 +33,15 @@ class MockNPCEngine:
     def get_npc_state(self, npc_id): return {"mood": self.mood}
     def get_social_graph(self): return {"noah": {}}
     def shutdown(self): pass
+
+class _MockLlama:
+    def create_chat_completion(self, messages, **kw): return {"choices":[{"message":{"content":"MOCK ASSIST"}}]}
+class _MockBaseModel:
+    def __init__(self): self.model=_MockLlama()
+    def is_loaded(self): return True
+class _MockPIE:
+    def __init__(self): self.base_model=_MockBaseModel()
+
 
 def _brain(): return AnimaBrain(engine=MockNPCEngine())
 
@@ -70,7 +79,14 @@ def test_stdio_roundtrip():
     lines=[json.loads(x) for x in out.getvalue().splitlines() if x.strip()]
     assert all(r["ok"] for r in lines) and lines[-1].get("shutdown")
 
+
+def test_ask_shared_model():
+    b=_brain(); b.reset()
+    assert b.command("ask", kwargs={"prompt":"help"}) == "MOCK ASSIST"
+    assert "ask" in b.info()["commands"]
+
 check("Anima.reset_state", test_reset_state)
+check("Anima.ask_shared_model", test_ask_shared_model)
 check("Anima.talk_reply", test_talk_returns_reply)
 check("Anima.capabilities", test_capabilities_dispatch)
 check("Anima.rpc_json", test_rpc_and_json)
