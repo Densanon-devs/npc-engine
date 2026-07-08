@@ -1,14 +1,14 @@
 {
   "scenario": "gameplay",
   "failed": 0,
-  "check_count": 40,
+  "check_count": 41,
   "checks": [
     {
       "label": "t1 live tick",
       "ok": true,
       "detail": {
         "label": "t1",
-        "elapsed_s": 7.468,
+        "elapsed_s": 7.781,
         "tick": 1,
         "paused": false,
         "paused_reason": null,
@@ -109,6 +109,11 @@
     {
       "label": "decay timer cleared after reopen",
       "ok": true
+    },
+    {
+      "label": "engine.complete_quest flipped NPC status",
+      "ok": true,
+      "detail": "completed"
     },
     {
       "label": "main_test line state present",
@@ -309,6 +314,13 @@
                 "The player refused Old Bones's quest 'Cruel Task'."
               ]
             },
+            "jordan": {
+              "known_by": [
+                "captain_reva",
+                "thessa"
+              ],
+              "deeds": []
+            },
             "hooded_killer": {
               "known_by": [
                 "finn",
@@ -320,13 +332,6 @@
             },
             "the_dragonslayer": {
               "known_by": [
-                "thessa"
-              ],
-              "deeds": []
-            },
-            "jordan": {
-              "known_by": [
-                "captain_reva",
                 "thessa"
               ],
               "deeds": []
