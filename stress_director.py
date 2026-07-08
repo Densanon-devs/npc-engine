@@ -56,7 +56,12 @@ def boot_engine(world: str = "port_blackwater_zoned", reset: bool = True):
     if reset:
         for fname in ("state.json", "fact_ledger.json",
                        "fact_ledger.embeddings.npy", "arcs.json",
-                       "arcs.embeddings.npy"):
+                       "arcs.embeddings.npy",
+                       # Predictive-lane sidecars — without these a
+                       # previous run's fitted prior leaks into a
+                       # "fresh" scenario boot.
+                       "state.predictive.npz",
+                       "state.activity_history.jsonl"):
             p = world_dir / "story" / fname
             if p.exists():
                 p.unlink()

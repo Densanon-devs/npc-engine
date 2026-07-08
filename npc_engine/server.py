@@ -439,6 +439,19 @@ def create_app():
             raise HTTPException(status_code=503, detail="Story Director not initialized")
         return engine.story_director.get_player_activity()
 
+    @app.get("/story/predictive")
+    async def story_predictive_get():
+        """Read-only predictive-lane observability: activity-prior
+        fit state, last next-tick activity prediction (with drift
+        flag), per-edge-filter counts, and drift totals. The lane is
+        passive in v1 — this endpoint exposes what it WOULD have done
+        so drift-check data can be reviewed before any behavior
+        change is promoted."""
+        engine = get_engine()
+        if engine.story_director is None:
+            raise HTTPException(status_code=503, detail="Story Director not initialized")
+        return engine.story_director.get_predictive_state()
+
     @app.post("/story/quest_pacing")
     async def story_quest_pacing_set(req: QuestPacingRequest):
         """Override the Phase 4b per-NPC quest pacing caps. Pass null

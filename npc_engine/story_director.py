@@ -44,6 +44,19 @@ logger = logging.getLogger("NPCEngine.story_director")
 # never affects dispatch behavior. See npc_engine/narrative_judge.py.
 _NARRATIVE_JUDGE_OBSERVE_ENV = "NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE"
 
+# Predictive FactLedger lane (PHASE_PREDICTIVE_FACTLEDGER_PLAN v1).
+# The layer itself is ON by default because it is behavior-neutral:
+# it observes ticks, logs predicted-drift at DEBUG, and writes two
+# gitignored sidecars. Set NPC_ENGINE_PREDICTIVE_DISABLE=1 to remove
+# it entirely. The edge-prior boost on arc proposal — the lane's one
+# behavior-changing piece — was promoted to DEFAULT-ON on 2026-07-07
+# after two consecutive clean boosted e2e_stress cycles
+# (predictive_drift 13/13 x2 + gameplay 41/41 x2), per the plan's
+# implementation-order step 5. Set NPC_ENGINE_PREDICTIVE_BOOST=0 to
+# opt out; cold filters still reproduce unboosted proposals exactly.
+_PREDICTIVE_DISABLE_ENV = "NPC_ENGINE_PREDICTIVE_DISABLE"
+_PREDICTIVE_BOOST_ENV = "NPC_ENGINE_PREDICTIVE_BOOST"
+
 
 DATA_DIR = NPC_ENGINE_ROOT / "data" / "story_director"
 # Default (Ashenvale-compat) asset and runtime paths. StoryDirector uses
@@ -1029,12 +1042,19 @@ class ArcPlanner:
         return min(candidates, key=lambda a: a.touches_since_last_advance)
 
     def maybe_propose(self, ledger: "FactLedger", available_npcs: list[str],
-                       current_tick: int) -> Optional[NarrativeArc]:
+                       current_tick: int,
+                       edge_prior_boost: Optional[dict[str, float]] = None) -> Optional[NarrativeArc]:
         """
         Attempt to propose a new arc if there's headroom under the
         concurrent-arc cap and the cooldown has elapsed. Returns the
         new arc (and appends it to ``active_arc_ids``) or ``None`` if
         nothing was proposed.
+
+        ``edge_prior_boost`` (predictive lane, optional): per-NPC
+        edge-prior means in [0, 1]. Passed through to
+        ``_propose_from_ledger`` where it soft-prefers cluster
+        centers whose NPC the filters expect to be active next tick.
+        None/empty = scoring identical to pre-predictive behavior.
         """
         active_now = self.active_arcs()
         if len(active_now) >= _MAX_CONCURRENT_ARCS:
@@ -1053,7 +1073,8 @@ class ArcPlanner:
             return None
 
         arc = self._propose_from_ledger(ledger, eligible_npcs, current_tick,
-                                         exclude_npcs=used_npcs)
+                                         exclude_npcs=used_npcs,
+                                         edge_prior_boost=edge_prior_boost)
         if arc is not None:
             self.arcs.append(arc)
             self.active_arc_ids.append(arc.id)
@@ -1204,7 +1225,8 @@ class ArcPlanner:
     def _propose_from_ledger(self, ledger: "FactLedger",
                               available_npcs: list[str],
                               current_tick: int,
-                              exclude_npcs: Optional[set[str]] = None) -> Optional[NarrativeArc]:
+                              exclude_npcs: Optional[set[str]] = None,
+                              edge_prior_boost: Optional[dict[str, float]] = None) -> Optional[NarrativeArc]:
         """
         Greedy clustering over the most recent ledger entries. Pick the
         entry with the most high-similarity neighbors (among entries
@@ -1218,6 +1240,14 @@ class ArcPlanner:
         cast. Without this filter, the densest cluster would keep
         being whatever plot thread is most saturated, and proposals
         would duplicate each other.
+
+        ``edge_prior_boost`` maps npc_id -> edge-prior mean in [0, 1].
+        A candidate center whose NPC the predictive lane expects to be
+        active next tick gets its neighbor-count score multiplied by
+        at most (1 + EDGE_PRIOR_BOOST_CAP) — a sub-10% nudge that can
+        break ties or flip near-equal clusters but never dominates the
+        greedy-cluster heuristic. Cold priors (0.5) and missing NPCs
+        produce a factor of exactly 1.0, i.e. pre-predictive scoring.
         """
         if len(ledger.entries) < _ARC_PROPOSAL_MIN_LEDGER_ENTRIES:
             return None
@@ -1244,7 +1274,20 @@ class ArcPlanner:
             for i in range(len(sims)):
                 sims[i][i] = 0.0
             neighbor_counts = (sims >= _ARC_CLUSTER_SIMILARITY).sum(axis=1)
-            best_idx = int(neighbor_counts.argmax())
+            # Predictive-lane boost: multiply each candidate center's
+            # score by (1 + min(CAP, max(0, prior - 0.5))). Priors at
+            # or below the Beta(1,1) cold value of 0.5 contribute
+            # nothing, so a cold predictive layer reproduces the raw
+            # neighbor-count argmax bit-for-bit.
+            scores = neighbor_counts.astype(float)
+            if edge_prior_boost:
+                from npc_engine.predictive_factledger import EDGE_PRIOR_BOOST_CAP
+                for i, e in enumerate(recent):
+                    prior = edge_prior_boost.get(e.get("npc_id") or "")
+                    if prior is not None:
+                        boost = min(EDGE_PRIOR_BOOST_CAP, max(0.0, float(prior) - 0.5))
+                        scores[i] *= (1.0 + boost)
+            best_idx = int(scores.argmax())
             if int(neighbor_counts[best_idx]) == 0:
                 return None
             cluster_indices = [best_idx] + [
@@ -1592,6 +1635,49 @@ class StoryDirector:
                 self._narrative_judge = None
                 self._narrative_judge_log_path = None
 
+        # Predictive FactLedger lane (PHASE_PREDICTIVE_FACTLEDGER_PLAN
+        # v1). Behavior-neutral by default: predicts next-tick activity
+        # + per-NPC edge priors before each tick, logs drift at DEBUG,
+        # persists to a gitignored .npz sidecar. The arc-proposal boost
+        # is separately gated behind NPC_ENGINE_PREDICTIVE_BOOST=1.
+        self._predictive: Optional[Any] = None
+        self._predictive_boost_enabled: bool = (
+            os.environ.get(_PREDICTIVE_BOOST_ENV) != "0"
+        )
+        self._last_activity_pred: Optional[dict] = None
+        if os.environ.get(_PREDICTIVE_DISABLE_ENV) != "1":
+            try:
+                from npc_engine.predictive_factledger import PredictiveLayer
+                self._predictive = PredictiveLayer(
+                    storage_path=self._predictive_file,
+                    labels=sorted(_PLAYER_ACTIVITY_VALUES),
+                    history_path=self._activity_history_file,
+                )
+                # Cold boot (no sidecar): full warm pass — edge
+                # filters from the ledger stream + prior from the
+                # JSONL. Sidecar-warm boot: the edge filters and
+                # matrix came from the sidecar, but the supervision
+                # PAIRS are not persisted there — rebuild them from
+                # the JSONL so the next refit doesn't replace a
+                # mature matrix with a minimum-sample fit (and so
+                # the 90-day prune runs on long-lived deployments).
+                if not self._predictive._loaded_from_sidecar:
+                    warm_report = self._predictive.warm_from_history(self.ledger)
+                    if warm_report.get("pairs") or warm_report.get("edge_updates"):
+                        logger.info(
+                            f"PredictiveLayer warm-from-history: {warm_report}"
+                        )
+                else:
+                    harvest_report = self._predictive.harvest_pairs_from_history(
+                        self.ledger)
+                    if harvest_report.get("pairs"):
+                        logger.info(
+                            f"PredictiveLayer pair harvest: {harvest_report}"
+                        )
+            except Exception as e:
+                logger.warning(f"PredictiveLayer init failed: {e}")
+                self._predictive = None
+
     def _judge_observe(self, action: dict, dispatch_result: dict) -> None:
         """Passive observer: score the dispatched action against every
         active quest spec via NarrativeJudge and log to sidecar JSONL.
@@ -1752,6 +1838,23 @@ class StoryDirector:
         self._ledger_file = story_dir / "fact_ledger.json"
         self._arcs_file = story_dir / "arcs.json"
         self._runtime_dir = story_dir
+
+    @property
+    def _predictive_file(self) -> Path:
+        """Predictive-layer .npz sidecar. Derived from the state file's
+        stem (``state.json`` -> ``state.predictive.npz``) rather than the
+        plan's literal ``predictive.npz`` so the existing test-isolation
+        pattern — monkey-patching module-level STATE_FILE to a
+        ``_tmp_*`` path — isolates this sidecar for free."""
+        return self._state_file.parent / (self._state_file.stem + ".predictive.npz")
+
+    @property
+    def _activity_history_file(self) -> Path:
+        """Append-only activity-history JSONL (the ActivityPrior's
+        supervision signal). Same stem-derivation rationale as
+        ``_predictive_file``."""
+        return self._state_file.parent / (
+            self._state_file.stem + ".activity_history.jsonl")
 
     # ── Lifecycle ───────────────────────────────────────────────
 
@@ -2105,6 +2208,15 @@ class StoryDirector:
             "bio_mention_counts": self._bio_mention_counts,
         }
         self._state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        # Predictive sidecar rides the existing autosave hook (plan:
+        # "saved on graceful shutdown (and on tick if the existing
+        # autosave hook fires)" — _save_state IS that hook). A few KB
+        # of npz; negligible next to the state.json write.
+        if self._predictive is not None:
+            try:
+                self._predictive.save()
+            except Exception as e:
+                logger.warning(f"Predictive sidecar save failed: {e}")
 
     # ── Public API ──────────────────────────────────────────────
 
@@ -2243,6 +2355,24 @@ class StoryDirector:
         # runs so multi-action workers share a single retry slot.
         self._self_rep_retries_this_tick = 0
 
+        # Predictive lane (v1) — runs before the architect plans so a
+        # future iteration can bias focus/kind selection. Today it only
+        # (a) surfaces the activity prior on /story/state, (b) logs
+        # predicted-drift at DEBUG, and (c) produces per-NPC edge
+        # priors that MAY boost arc proposal when the boost env gate
+        # is on. Cold predictions reduce every path to pre-predictive
+        # behavior. Never raises — tick() must always return.
+        edge_priors: dict[str, float] = {}
+        if self._predictive is not None:
+            try:
+                activity_pred, edge_priors = self._predictive.predict_next(
+                    self.ledger, self.tick_count, self._player_activity,
+                )
+                self._last_activity_pred = activity_pred.to_dict()
+            except Exception as e:
+                logger.warning(f"Predictive lane failed: {e}")
+                edge_priors = {}
+
         # Plan first, then build the snapshot — the bounded snapshot
         # path needs to know which NPCs the architect picked so it can
         # surface them in the per-tick "active scene". On unbounded
@@ -2271,6 +2401,9 @@ class StoryDirector:
         available_npcs = list(self.engine.pie.npc_knowledge.profiles.keys())
         self.arc_planner.maybe_propose(
             self.ledger, available_npcs, current_tick=self.tick_count + 1,
+            edge_prior_boost=(
+                edge_priors if self._predictive_boost_enabled else None
+            ),
         )
 
         if not plan:
@@ -2312,6 +2445,26 @@ class StoryDirector:
 
         self.tick_count += 1
         self.last_tick_at = datetime.now(timezone.utc).isoformat()
+
+        # Predictive lane — feed this tick's ledger delta into the
+        # edge filters. Entries were added with tick = the NEW
+        # tick_count, so select by tick number rather than slicing
+        # from the pre-tick length: FactLedger.add trims the list to
+        # its 200-entry cap, which would make a length-based slice
+        # index stale (empty/short delta) once a long session hits
+        # the cap. Absence updates (known NPCs that did NOT receive
+        # a beat) happen inside record_observation.
+        if self._predictive is not None:
+            try:
+                delta = [
+                    e for e in self.ledger.entries
+                    if e.get("tick") == self.tick_count
+                ]
+                self._predictive.record_observation(
+                    self.tick_count, self._player_activity, delta,
+                )
+            except Exception as e:
+                logger.warning(f"Predictive record_observation failed: {e}")
 
         # Record this tick. For multi-action ticks we store ALL sub-action
         # actions in the recent_decisions trail (under their parent tick)
@@ -2823,9 +2976,20 @@ class StoryDirector:
         self.narration_mode = "prose"
         self._reload_examples()
 
-        # 5. Reset ledger + arcs.
+        # 5. Reset ledger + arcs. The predictive layer zeroes its edge
+        # filters but KEEPS the prior matrix — the activity prior
+        # generalizes across resets, the per-NPC edge filters don't
+        # (plan: composition table, game-reset row). The activity
+        # history JSONL also survives: it's the durable supervision
+        # signal the prior was trained on.
         self.ledger.reset()
         self.arc_planner.reset()
+        if self._predictive is not None:
+            try:
+                self._predictive.reset()
+            except Exception as e:
+                logger.warning(f"Predictive reset failed: {e}")
+        self._last_activity_pred = None
 
         # 6. Re-snapshot original bios from the freshly-reloaded
         # profiles so bio rotation starts clean.
@@ -2851,7 +3015,23 @@ class StoryDirector:
             "example_count": len(self._examples),
             "ledger": self.ledger.stats(),
             "arc_planner": self.arc_planner.stats(),
+            "predictive": self.get_predictive_state(),
         }
+
+    def get_predictive_state(self) -> dict:
+        """Predictive-lane observability rollup. Safe to call whether
+        or not the layer is enabled — disabled returns a stub so
+        /story/state consumers can always read ``predictive.enabled``."""
+        if self._predictive is None:
+            return {"enabled": False}
+        try:
+            stats = self._predictive.stats()
+        except Exception as e:
+            logger.warning(f"Predictive stats failed: {e}")
+            return {"enabled": True, "error": str(e)}
+        stats["boost_enabled"] = self._predictive_boost_enabled
+        stats["last_activity_pred"] = self._last_activity_pred
+        return stats
 
     def record_player_action(self, text: str,
                               target: Optional[str] = None,
@@ -3145,6 +3325,31 @@ class StoryDirector:
             )
         self._player_activity = activity
         self._activity_set_at_tick = self.tick_count
+
+        # Predictive lane — append the observation to the append-only
+        # activity-history JSONL (the ActivityPrior's supervision
+        # signal; written on EVERY post per the plan's schema section)
+        # and harvest a (ledger-latent, activity) training pair. Both
+        # are best-effort: a disk error must never fail the REST call.
+        if self._predictive is not None:
+            try:
+                self._activity_history_file.parent.mkdir(
+                    parents=True, exist_ok=True)
+                with open(self._activity_history_file, "a",
+                          encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "tick": self.tick_count,
+                        "activity": activity,
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                    }) + "\n")
+            except Exception as e:
+                logger.warning(f"activity_history append failed: {e}")
+            try:
+                self._predictive.note_activity(
+                    self.tick_count, activity, self.ledger)
+            except Exception as e:
+                logger.warning(f"Predictive note_activity failed: {e}")
+
         self._save_state()
         return {
             "ok": True,

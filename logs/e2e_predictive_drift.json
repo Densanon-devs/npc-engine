@@ -1,0 +1,923 @@
+{
+  "scenario": "predictive_drift",
+  "failed": 0,
+  "check_count": 13,
+  "checks": [
+    {
+      "label": "predictive layer enabled by default",
+      "ok": true
+    },
+    {
+      "label": "layer observed (nearly) every tick",
+      "ok": true,
+      "detail": 30
+    },
+    {
+      "label": "ActivityPrior fitted within the 30-tick cycle",
+      "ok": true,
+      "detail": {
+        "fitted_at_tick": 25,
+        "pairs": 9
+      }
+    },
+    {
+      "label": "warm (cold=False) predictions after fit",
+      "ok": true,
+      "detail": 6
+    },
+    {
+      "label": "drift flag == (confident AND disagrees) on every warm tick",
+      "ok": true,
+      "detail": 0
+    },
+    {
+      "label": "session ledger produces a latent",
+      "ok": true
+    },
+    {
+      "label": "contrast prior fits",
+      "ok": true
+    },
+    {
+      "label": "drift fires within 1 tick of confident disagreement",
+      "ok": true,
+      "detail": {
+        "distribution": {
+          "idle": 0.0,
+          "in_combat": 0.0,
+          "in_dialogue": 0.0,
+          "in_dungeon": 0.9568,
+          "in_menu": 0.0,
+          "in_town": 0.0432,
+          "traveling": 0.0,
+          "unknown": 0.0,
+          "wandering": 0.0
+        },
+        "top_activity": "in_dungeon",
+        "confidence": 0.9568,
+        "cold": false,
+        "tick": 30,
+        "drift": true,
+        "reported_activity": "in_town"
+      }
+    },
+    {
+      "label": "drift counter incremented",
+      "ok": true,
+      "detail": 1
+    },
+    {
+      "label": "edge priors cover >= 2 NPCs",
+      "ok": true,
+      "detail": {
+        "finn": 0.25,
+        "varro": 0.6666666666666666,
+        "old_bones": 0.5,
+        "captain_reva": 0.4,
+        "thessa": 0.3333333333333333,
+        "brom": 0.2
+      }
+    },
+    {
+      "label": "tracked_npcs >= 2",
+      "ok": true,
+      "detail": 6
+    },
+    {
+      "label": "/story/state predictive block carries last prediction",
+      "ok": true
+    },
+    {
+      "label": "cold boost reproduces unboosted proposal",
+      "ok": true,
+      "detail": {
+        "no_boost": [
+          "finn",
+          "varro"
+        ],
+        "cold_boost": [
+          "finn",
+          "varro"
+        ],
+        "live_boost": [
+          "finn",
+          "varro"
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "name": "30_tick_cycle_with_3_tick_activity_cadence",
+      "payload": null
+    },
+    {
+      "name": "natural_drift_ticks",
+      "payload": 0
+    },
+    {
+      "name": "forced_drift_probe",
+      "payload": null
+    },
+    {
+      "name": "edge_priors_and_boost",
+      "payload": null
+    },
+    {
+      "name": "arc_proposal_comparison",
+      "payload": {
+        "no_boost": [
+          "finn",
+          "varro"
+        ],
+        "cold_boost": [
+          "finn",
+          "varro"
+        ],
+        "live_boost": [
+          "finn",
+          "varro"
+        ]
+      }
+    },
+    {
+      "name": "tick_trail",
+      "payload": [
+        {
+          "tick": 1,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 0,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 2,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 1,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 3,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 2,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 4,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 3,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 5,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 4,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 6,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 5,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 7,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 6,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 8,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 7,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 9,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 8,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 10,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 9,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 11,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 10,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 12,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 11,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 13,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 12,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 14,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 13,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 15,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 14,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 16,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 15,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 17,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 16,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 18,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 17,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 19,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 18,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 20,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 19,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 21,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 20,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 22,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 21,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 23,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 22,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 24,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.1111,
+              "in_combat": 0.1111,
+              "in_dialogue": 0.1111,
+              "in_dungeon": 0.1111,
+              "in_menu": 0.1111,
+              "in_town": 0.1111,
+              "traveling": 0.1111,
+              "unknown": 0.1111,
+              "wandering": 0.1111
+            },
+            "top_activity": "idle",
+            "confidence": 0.1111,
+            "cold": true,
+            "tick": 23,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 25,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.4783,
+              "in_menu": 0.0,
+              "in_town": 0.5217,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_town",
+            "confidence": 0.5217,
+            "cold": false,
+            "tick": 24,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 26,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.4892,
+              "in_menu": 0.0,
+              "in_town": 0.5108,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_town",
+            "confidence": 0.5108,
+            "cold": false,
+            "tick": 25,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 27,
+          "activity": "in_town",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.4892,
+              "in_menu": 0.0,
+              "in_town": 0.5108,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_town",
+            "confidence": 0.5108,
+            "cold": false,
+            "tick": 26,
+            "drift": false,
+            "reported_activity": "in_town"
+          },
+          "paused": false
+        },
+        {
+          "tick": 28,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.5822,
+              "in_menu": 0.0,
+              "in_town": 0.4178,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_dungeon",
+            "confidence": 0.5822,
+            "cold": false,
+            "tick": 27,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 29,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.5874,
+              "in_menu": 0.0,
+              "in_town": 0.4126,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_dungeon",
+            "confidence": 0.5874,
+            "cold": false,
+            "tick": 28,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        },
+        {
+          "tick": 30,
+          "activity": "in_dungeon",
+          "pred": {
+            "distribution": {
+              "idle": 0.0,
+              "in_combat": 0.0,
+              "in_dialogue": 0.0,
+              "in_dungeon": 0.5789,
+              "in_menu": 0.0,
+              "in_town": 0.4211,
+              "traveling": 0.0,
+              "unknown": 0.0,
+              "wandering": 0.0
+            },
+            "top_activity": "in_dungeon",
+            "confidence": 0.5789,
+            "cold": false,
+            "tick": 29,
+            "drift": false,
+            "reported_activity": "in_dungeon"
+          },
+          "paused": false
+        }
+      ]
+    },
+    {
+      "name": "predictive_stats",
+      "payload": {
+        "enabled": true,
+        "prior_fitted": true,
+        "activity_pairs": 16,
+        "edge_filters": {
+          "npc_beat": 48
+        },
+        "tracked_npcs": 6,
+        "observation_count": 31,
+        "drift_count": 2,
+        "loaded_from_sidecar": false,
+        "last_prediction": {
+          "distribution": {
+            "idle": 0.0,
+            "in_combat": 0.0,
+            "in_dialogue": 0.0,
+            "in_dungeon": 0.9568,
+            "in_menu": 0.0,
+            "in_town": 0.0432,
+            "traveling": 0.0,
+            "unknown": 0.0,
+            "wandering": 0.0
+          },
+          "top_activity": "in_dungeon",
+          "confidence": 0.9568,
+          "cold": false,
+          "tick": 31,
+          "drift": true,
+          "reported_activity": "in_town"
+        },
+        "boost_enabled": true,
+        "last_activity_pred": {
+          "distribution": {
+            "idle": 0.0,
+            "in_combat": 0.0,
+            "in_dialogue": 0.0,
+            "in_dungeon": 0.9568,
+            "in_menu": 0.0,
+            "in_town": 0.0432,
+            "traveling": 0.0,
+            "unknown": 0.0,
+            "wandering": 0.0
+          },
+          "top_activity": "in_dungeon",
+          "confidence": 0.9568,
+          "cold": false,
+          "tick": 30,
+          "drift": true,
+          "reported_activity": "in_town"
+        }
+      }
+    }
+  ]
+}

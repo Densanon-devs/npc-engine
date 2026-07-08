@@ -1037,6 +1037,164 @@ def scenario_game_reset(out: Path) -> dict:
     return report
 
 
+# ── Scenario 9 — predictive FactLedger drift cycle ───────────────
+
+def scenario_predictive_drift(out: Path) -> dict:
+    """PHASE_PREDICTIVE_FACTLEDGER_PLAN v1 validation, level 3.
+
+    30-tick scripted cycle that pushes activity transitions on a
+    fixed 3-tick cadence (in_town <-> in_dungeon), so the predictive
+    layer harvests one supervision pair per transition. Asserts:
+
+      - the layer is enabled + observes every real tick;
+      - the ActivityPrior FITS within the cycle (enough history);
+      - once fitted, warm (cold=False) predictions appear;
+      - the drift check is *conditionally correct* over the natural
+        session: drift fires exactly when a confident prediction
+        disagrees with the reported activity (v1 observes only, so
+        the natural fire COUNT is reported, not asserted);
+      - a forced-drift probe — a contrast prior fitted on the real
+        session ledger's latent — makes drift fire within ONE tick
+        (well inside the plan's five-tick bound);
+      - the edge filters accumulated per-NPC counts and their
+        next-tick priors feed a non-empty edge_priors map;
+      - arc proposal with the edge boost enabled still proposes
+        arcs grounded in ledger NPCs (distribution recorded in the
+        report for the with/without comparison).
+    """
+    world = "port_blackwater_zoned"
+    log = StepLog("predictive_drift")
+    engine, _, _ = boot_engine(world=world)
+    sd = engine.story_director
+    sd.set_narration_mode("terse")
+    sd.set_active_zones(["dock_district", "lighthouse_bluffs"])
+
+    layer = sd._predictive
+    log.check(layer is not None, "predictive layer enabled by default")
+    if layer is None:
+        report = log.to_dict()
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        return report
+
+    log.step("30_tick_cycle_with_3_tick_activity_cadence")
+    activities = ["in_town", "in_dungeon"]
+    fitted_at_tick = None
+    warm_ticks = 0
+    natural_drift_ticks = 0
+    conditional_violations = 0
+    tick_trail: list[dict] = []
+    for i in range(30):
+        if i % 3 == 0:
+            sd.set_player_activity(activities[(i // 3) % 2])
+        rec = _tick(sd, f"t{i+1}", actions_per_tick=1)
+        pred = sd._last_activity_pred or {}
+        if fitted_at_tick is None and layer.prior.is_fitted:
+            fitted_at_tick = sd.tick_count
+        if pred and not pred.get("cold", True):
+            warm_ticks += 1
+            if pred.get("drift"):
+                natural_drift_ticks += 1
+            # Conditional correctness: drift <=> confident disagreement.
+            confident = pred.get("confidence", 0) >= 0.55
+            disagrees = (pred.get("top_activity")
+                         != pred.get("reported_activity"))
+            if bool(pred.get("drift")) != bool(confident and disagrees):
+                conditional_violations += 1
+        tick_trail.append({
+            "tick": sd.tick_count,
+            "activity": sd._player_activity,
+            "pred": pred,
+            "paused": bool(rec.get("paused")),
+        })
+
+    log.check(layer._observation_count >= 25,
+               "layer observed (nearly) every tick",
+               layer._observation_count)
+    log.check(fitted_at_tick is not None,
+               "ActivityPrior fitted within the 30-tick cycle",
+               {"fitted_at_tick": fitted_at_tick,
+                "pairs": len(layer._activity_pairs)})
+    log.check(warm_ticks > 0, "warm (cold=False) predictions after fit",
+               warm_ticks)
+    log.check(conditional_violations == 0,
+               "drift flag == (confident AND disagrees) on every warm tick",
+               conditional_violations)
+    log.steps.append({"name": "natural_drift_ticks",
+                       "payload": natural_drift_ticks})
+
+    # Forced-drift probe: fit a contrast prior on the REAL session
+    # ledger latent so the prior confidently says in_dungeon while
+    # the client reports in_town. Drift must fire on the next tick —
+    # the plan allows five ticks; one suffices when the prior is
+    # already confident.
+    log.step("forced_drift_probe")
+    latent = layer.summary_latent(sd.ledger.entries)
+    log.check(latent is not None, "session ledger produces a latent")
+    if latent is not None:
+        pairs = [(latent, "in_dungeon") for _ in range(8)]
+        pairs += [(-latent, "in_town") for _ in range(8)]
+        # Seed the layer's OWN pair store and fit from it. Anything
+        # else gets clobbered: every /story/activity post refits the
+        # prior from _activity_pairs (the prior is data-owned), so a
+        # bare prior.fit() would not survive the next activity post.
+        # The activity is set directly for the same reason — the probe
+        # tests the drift check in tick(), not the harvest path.
+        layer._activity_pairs = list(pairs)
+        log.check(layer.prior.fit(layer._activity_pairs),
+                   "contrast prior fits")
+        sd._player_activity = "in_town"
+        drift_before = layer._drift_count
+        _tick(sd, "drift_probe", actions_per_tick=1)
+        pred = sd._last_activity_pred or {}
+        log.check(pred.get("drift") is True,
+                   "drift fires within 1 tick of confident disagreement",
+                   pred)
+        log.check(layer._drift_count > drift_before,
+                   "drift counter incremented", layer._drift_count)
+
+    # Edge filters + boost path.
+    log.step("edge_priors_and_boost")
+    _, edge_priors = layer.predict_next(sd.ledger, sd.tick_count,
+                                        sd._player_activity)
+    log.check(len(edge_priors) >= 2,
+               "edge priors cover >= 2 NPCs", edge_priors)
+    stats = sd.get_predictive_state()
+    log.check(stats["tracked_npcs"] >= 2, "tracked_npcs >= 2",
+               stats["tracked_npcs"])
+    log.check(stats["last_prediction"] is not None,
+               "/story/state predictive block carries last prediction")
+
+    # Arc-proposal comparison (recorded, not asserted — the plan's
+    # with/without distribution check): propose from the same ledger
+    # with no boost, a cold boost, and the live edge priors.
+    from npc_engine.story_director import ArcPlanner
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        avail = list(engine.pie.npc_knowledge.profiles.keys())
+        results = {}
+        for tag, boost in (
+            ("no_boost", None),
+            ("cold_boost", {n: 0.5 for n in avail}),
+            ("live_boost", edge_priors),
+        ):
+            planner = ArcPlanner(Path(td) / f"arcs_{tag}.json")
+            arc = planner._propose_from_ledger(
+                sd.ledger, avail, current_tick=sd.tick_count,
+                edge_prior_boost=boost,
+            )
+            results[tag] = arc.focus_npcs if arc else None
+        log.check(results["no_boost"] == results["cold_boost"],
+                   "cold boost reproduces unboosted proposal", results)
+        log.steps.append({"name": "arc_proposal_comparison",
+                           "payload": results})
+
+    log.steps.append({"name": "tick_trail", "payload": tick_trail})
+    log.steps.append({"name": "predictive_stats", "payload": stats})
+    report = log.to_dict()
+    out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return report
+
+
 SCENARIOS = {
     "gameplay":              scenario_gameplay,
     "persistence":           scenario_persistence,
@@ -1046,6 +1204,7 @@ SCENARIOS = {
     "activity_transitions":  scenario_activity_transitions,
     "game_reset":            scenario_game_reset,
     "scale_100":             scenario_scale_100,
+    "predictive_drift":      scenario_predictive_drift,
 }
 
 

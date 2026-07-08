@@ -26,6 +26,7 @@ npc-engine/
 │   ├── server.py                # FastAPI REST server
 │   ├── knowledge.py             # NPC knowledge sheets, quests, events
 │   ├── story_director.py        # Cardinal-style overseer + FactLedger
+│   ├── predictive_factledger.py # Predictive lane: Beta edge filters + linear activity prior
 │   ├── capabilities/            # 6 modular NPC capabilities
 │   │   ├── base.py              # Capability ABC + Registry decorator
 │   │   ├── scratchpad.py        # Remember facts about player (~60 tokens)
@@ -253,8 +254,9 @@ ticks, and 4/4 player reactivity.
 | `GET /story/state` | Tick count, recent decisions, ledger stats, activity, arc state |
 | `POST /story/player_action` | Record a player action (text + npc + trust + quest_completed/accepted + witness_npcs + subject_identity) |
 | `POST /story/reset` | Soft-reset to YAML baseline (born NPCs removed, deceased revived, all runtime state cleared) |
-| `POST /story/activity` | Set player activity context (in_town/in_combat/in_menu/idle/in_dungeon/wandering/in_dialogue/traveling) |
+| `POST /story/activity` | Set player activity context (in_town/in_combat/in_menu/idle/in_dungeon/wandering/in_dialogue/traveling); appends to the activity-history JSONL (predictive-lane supervision signal) |
 | `GET /story/activity` | Current player activity + tick at which it was set |
+| `GET /story/predictive` | Read-only predictive-lane state: activity-prior fit status, last next-tick prediction + drift flag, edge-filter counts, drift totals |
 | `POST /story/pause` | Hold all future ticks (explicit pause, does not bump tick_count) |
 | `POST /story/resume` | Clear explicit pause |
 | `GET /story/pause_state` | Pause flag, budget config, trailing-window LLM usage, next-tick hint |
@@ -277,6 +279,40 @@ ticks, and 4/4 player reactivity.
 | `POST /player/vouched_by` | One NPC vouches the player to another (identity inheritance) |
 | `GET /player/identity_state` | Per-NPC player_knowledge + identity trust + feature registry |
 | `GET /player/reputation` | Aggregated per-identity known_by + deeds + intent summary |
+
+### Predictive FactLedger lane (v1)
+
+Per `data/story_director/PHASE_PREDICTIVE_FACTLEDGER_PLAN.md`. A
+passive forward-predictor that runs inside `tick()` before the
+architect plans: Perpetua*-style Beta edge filters over per-NPC
+tick-phase cycles + a Being-H0.7-style linear activity prior
+(closed-form ridge on ledger-latent → activity pairs harvested from
+`POST /story/activity`). Pure NumPy, < 1 ms hot path, no model calls.
+
+- **Behavior-neutral by default.** Cold filters predict exactly 0.5
+  and the cold prior is uniform, so every downstream effect is zero.
+  Drift (confident disagreement between predicted and reported
+  activity) is logged at DEBUG and surfaced on `GET /story/predictive`
+  — v1 observes only.
+- **Gates:** `NPC_ENGINE_PREDICTIVE_DISABLE=1` removes the layer.
+  The one behavior-changing piece — a ≤10% multiplicative nudge on
+  arc-proposal cluster scoring from the per-NPC edge priors — is
+  **default-on** (promoted 2026-07-07 after two consecutive clean
+  boosted e2e cycles: predictive_drift 13/13 ×2 + gameplay 41/41 ×2,
+  per plan step 5); `NPC_ENGINE_PREDICTIVE_BOOST=0` opts out. Cold
+  filters produce a boost factor of exactly 1.0, so proposals are
+  bit-identical to pre-predictive behavior until the filters warm.
+- **Sidecars** (gitignored, re-derivable): `state.predictive.npz`
+  (edge counts + prior matrix, saved on the `_save_state` autosave
+  hook) and `state.activity_history.jsonl` (append-only supervision
+  log, pruned to 90 days at warm time). Filenames derive from the
+  state-file stem so test isolation via STATE_FILE monkey-patching
+  covers them.
+- **Game reset:** edge filters zeroed, prior matrix kept.
+- **Verify:** `python verify_predictive.py` (unit suite + full SD
+  suite + behavior-neutrality A/B + plan-conformance checks);
+  `python e2e_stress.py --scenario predictive_drift` for the
+  real-model drift cycle.
 
 ### Adding new lore
 
