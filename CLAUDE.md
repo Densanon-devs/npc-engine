@@ -297,11 +297,14 @@ tick-phase cycles + a Being-H0.7-style linear activity prior
 - **Gates:** `NPC_ENGINE_PREDICTIVE_DISABLE=1` removes the layer.
   The one behavior-changing piece — a ≤10% multiplicative nudge on
   arc-proposal cluster scoring from the per-NPC edge priors — is
-  **default-on** (promoted 2026-07-07 after two consecutive clean
-  boosted e2e cycles: predictive_drift 13/13 ×2 + gameplay 41/41 ×2,
-  per plan step 5); `NPC_ENGINE_PREDICTIVE_BOOST=0` opts out. Cold
-  filters produce a boost factor of exactly 1.0, so proposals are
-  bit-identical to pre-predictive behavior until the filters warm.
+  **default-off**: the lane merged to master observe-only on
+  2026-07-07 (Story Director frozen), so the nudge is inert unless
+  `NPC_ENGINE_PREDICTIVE_BOOST=1` is set explicitly. With the boost
+  off the Director's decisions are bit-identical to pre-predictive
+  behavior; only observation (activity history, `GET /story/predictive`,
+  drift logging) is active. Cold filters also produce a boost factor
+  of exactly 1.0, so even with the boost on, proposals are unchanged
+  until the filters warm.
 - **Sidecars** (gitignored, re-derivable): `state.predictive.npz`
   (edge counts + prior matrix, saved on the `_save_state` autosave
   hook) and `state.activity_history.jsonl` (append-only supervision

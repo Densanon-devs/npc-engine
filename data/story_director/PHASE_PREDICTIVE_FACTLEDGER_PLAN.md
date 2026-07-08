@@ -11,10 +11,11 @@ them; a read-only `GET /story/predictive` observability endpoint was
 added; the v1 edge kind is `npc_beat` (NPC receives a Director beat
 at a tick-phase bucket) rather than the npc_in_zone/faction_presence
 examples, whose observation streams don't exist yet; the arc boost is
-a multiplicative nudge capped at 0.10, promoted to DEFAULT-ON after
-two consecutive clean boosted e2e cycles (predictive_drift 13/13 x2 +
-gameplay 41/41 x2, 2026-07-07) per step 5 of the implementation order
-below — `NPC_ENGINE_PREDICTIVE_BOOST=0` opts out. Original draft
+a multiplicative nudge capped at 0.10, DEFAULT-OFF: the lane merged to
+master observe-only on 2026-07-07 (Story Director frozen), so the nudge
+is inert unless `NPC_ENGINE_PREDICTIVE_BOOST=1` is set explicitly
+(boosted e2e cycles verified clean before the flip: predictive_drift
+13/13 x2 + gameplay 41/41 x2). Original draft
 2026-05-04; v2+ roadmap refinement 2026-05-10. v1 (pure-Python,
 single linear prior) was the implementation target; v2/v3 (ONNX
 sequence model, multi-expert split) remain roadmap, sketched in the

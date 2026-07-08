@@ -116,9 +116,9 @@ def gate_plan_conformance() -> None:
          "_activity_history_file" in sd and '"activity": activity' in sd)
     gate("edge_prior_boost plumbed through arc proposal",
          "edge_prior_boost=edge_prior_boost" in sd)
-    gate("boost default-on with NPC_ENGINE_PREDICTIVE_BOOST=0 opt-out "
-         "(promoted per plan step 5 after two clean boosted cycles)",
-         "_PREDICTIVE_BOOST_ENV" in sd and "!= \"0\"" in sd)
+    gate("boost default-OFF, opt-in via NPC_ENGINE_PREDICTIVE_BOOST=1 "
+         "(merged observe-only; Story Director frozen)",
+         "_PREDICTIVE_BOOST_ENV" in sd and "== \"1\"" in sd)
     gate("predictive sidecars gitignored (both runtime dirs)",
          "data/story_director/*.predictive.npz" in gi
          and "data/worlds/*/story/*.predictive.npz" in gi

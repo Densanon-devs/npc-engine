@@ -575,14 +575,14 @@ def test_boost_env_gates_arc_proposal_boost():
     try:
         engine = _make_stub_engine()
         director = StoryDirector(engine)
-        assert director._predictive_boost_enabled is True, \
-            "boost is default-on since the two clean boosted e2e cycles"
-        os.environ["NPC_ENGINE_PREDICTIVE_BOOST"] = "0"
+        assert director._predictive_boost_enabled is False, \
+            "boost is default-off — merged observe-only, Story Director frozen"
+        os.environ["NPC_ENGINE_PREDICTIVE_BOOST"] = "1"
         try:
             engine2 = _make_stub_engine()
             director2 = StoryDirector(engine2)
-            assert director2._predictive_boost_enabled is False, \
-                "NPC_ENGINE_PREDICTIVE_BOOST=0 must opt out"
+            assert director2._predictive_boost_enabled is True, \
+                "NPC_ENGINE_PREDICTIVE_BOOST=1 must opt in"
         finally:
             os.environ.pop("NPC_ENGINE_PREDICTIVE_BOOST", None)
     finally:
