@@ -294,11 +294,14 @@ tick-phase cycles + a Being-H0.7-style linear activity prior
   Drift (confident disagreement between predicted and reported
   activity) is logged at DEBUG and surfaced on `GET /story/predictive`
   — v1 observes only.
-- **Gates:** `NPC_ENGINE_PREDICTIVE_DISABLE=1` removes the layer;
-  `NPC_ENGINE_PREDICTIVE_BOOST=1` enables the one behavior-changing
-  piece — a ≤10% multiplicative nudge on arc-proposal cluster scoring
-  from the per-NPC edge priors (off until two consecutive clean
-  stress cycles, plan step 5).
+- **Gates:** `NPC_ENGINE_PREDICTIVE_DISABLE=1` removes the layer.
+  The one behavior-changing piece — a ≤10% multiplicative nudge on
+  arc-proposal cluster scoring from the per-NPC edge priors — is
+  **default-on** (promoted 2026-07-07 after two consecutive clean
+  boosted e2e cycles: predictive_drift 13/13 ×2 + gameplay 41/41 ×2,
+  per plan step 5); `NPC_ENGINE_PREDICTIVE_BOOST=0` opts out. Cold
+  filters produce a boost factor of exactly 1.0, so proposals are
+  bit-identical to pre-predictive behavior until the filters warm.
 - **Sidecars** (gitignored, re-derivable): `state.predictive.npz`
   (edge counts + prior matrix, saved on the `_save_state` autosave
   hook) and `state.activity_history.jsonl` (append-only supervision

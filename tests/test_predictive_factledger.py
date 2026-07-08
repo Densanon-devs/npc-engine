@@ -412,8 +412,8 @@ def test_tick_runs_with_predictive_layer_enabled():
             "fresh ledger + unfitted prior must be cold"
         state = director.get_state()
         assert state["predictive"]["enabled"] is True
-        assert state["predictive"]["boost_enabled"] is False, \
-            "boost must be OFF by default (plan step 5 gating)"
+        assert state["predictive"]["boost_enabled"] is True, \
+            "boost promoted to default-on (plan step 5, two clean boosted cycles)"
         assert state["predictive"]["last_prediction"] is not None
         assert state["predictive"]["observation_count"] >= 1
     finally:
@@ -575,18 +575,60 @@ def test_boost_env_gates_arc_proposal_boost():
     try:
         engine = _make_stub_engine()
         director = StoryDirector(engine)
-        assert director._predictive_boost_enabled is False
-        os.environ["NPC_ENGINE_PREDICTIVE_BOOST"] = "1"
+        assert director._predictive_boost_enabled is True, \
+            "boost is default-on since the two clean boosted e2e cycles"
+        os.environ["NPC_ENGINE_PREDICTIVE_BOOST"] = "0"
         try:
             engine2 = _make_stub_engine()
             director2 = StoryDirector(engine2)
-            assert director2._predictive_boost_enabled is True
+            assert director2._predictive_boost_enabled is False, \
+                "NPC_ENGINE_PREDICTIVE_BOOST=0 must opt out"
         finally:
             os.environ.pop("NPC_ENGINE_PREDICTIVE_BOOST", None)
     finally:
         restore()
         _cleanup_predictive_sidecars()
     print("  [PASS] boost_env_gates_arc_proposal_boost")
+
+
+def test_pairs_rebuilt_from_history_after_sidecar_boot():
+    """Bug-hunt finding: the sidecar does not persist the supervision
+    pairs, so a warm boot must rebuild them from the JSONL — otherwise
+    the first post-restart refit replaces a mature matrix with a
+    minimum-sample fit."""
+    restore = _isolate_state_file("pred_pairs_reboot")
+    try:
+        engine1 = _make_stub_engine()
+        director1 = StoryDirector(engine1)
+        layer1 = director1._predictive
+        # Ledger content first, then activity posts -> harvested pairs.
+        # tick=0 so the replay's `entry.tick <= record.tick` filter
+        # sees the same ledger the live harvest saw (activity posts
+        # below happen at tick_count 0; in production entries never
+        # lead the tick counter).
+        for text in [
+            "Dock workers unload crates of salted cod.",
+            "A storm lantern swings over the harbor office.",
+            "The tide leaves kelp across the quay stones.",
+        ]:
+            director1.ledger.add(text=text, npc_id="kael", kind="event",
+                                 tick=0)
+        director1.set_player_activity("in_town")
+        director1.set_player_activity("in_dungeon")
+        assert len(layer1._activity_pairs) == 2
+        # _save_state (called by set_player_activity) wrote the sidecar.
+
+        engine2 = _make_stub_engine()
+        director2 = StoryDirector(engine2)
+        layer2 = director2._predictive
+        assert layer2._loaded_from_sidecar is True
+        assert len(layer2._activity_pairs) == 2, \
+            (f"pairs must be rebuilt from the JSONL on a sidecar-warm "
+             f"boot, got {len(layer2._activity_pairs)}")
+    finally:
+        restore()
+        _cleanup_predictive_sidecars()
+    print("  [PASS] pairs_rebuilt_from_history_after_sidecar_boot")
 
 
 def test_note_activity_harvests_pairs_and_fits():
@@ -679,6 +721,7 @@ def main():
     test_game_reset_zeroes_edge_filters_keeps_prior()
     test_disable_env_removes_layer()
     test_boost_env_gates_arc_proposal_boost()
+    test_pairs_rebuilt_from_history_after_sidecar_boot()
     test_note_activity_harvests_pairs_and_fits()
 
     print("\nAll predictive FactLedger tests passed.")

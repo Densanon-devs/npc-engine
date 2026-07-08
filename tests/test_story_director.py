@@ -265,7 +265,13 @@ def _isolate_state_file(tag: str):
     tmp_state = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_state.json"
     tmp_ledger = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_ledger.json"
     tmp_arcs = NPC_ROOT / "data" / "story_director" / f"_tmp_{tag}_arcs.json"
-    for p in (tmp_state, tmp_ledger, tmp_arcs):
+    # Predictive-lane sidecars derive from the state-file stem — clean
+    # them alongside so a stale sidecar/history from a prior run can't
+    # leak a fitted prior into a "fresh" Director under the same tag.
+    tmp_predictive = tmp_state.parent / (tmp_state.stem + ".predictive.npz")
+    tmp_history = tmp_state.parent / (tmp_state.stem + ".activity_history.jsonl")
+    for p in (tmp_state, tmp_ledger, tmp_arcs, tmp_predictive, tmp_history,
+              tmp_ledger.with_suffix(".embeddings.npy")):
         if p.exists():
             try:
                 p.unlink()
@@ -279,7 +285,8 @@ def _isolate_state_file(tag: str):
         sd_mod.STATE_FILE = original_state
         sd_mod.LEDGER_FILE = original_ledger
         sd_mod.ARCS_FILE = original_arcs
-        for p in (tmp_state, tmp_ledger, tmp_arcs):
+        for p in (tmp_state, tmp_ledger, tmp_arcs, tmp_predictive, tmp_history,
+                  tmp_ledger.with_suffix(".embeddings.npy")):
             if p.exists():
                 try:
                     p.unlink()
@@ -4446,6 +4453,15 @@ def test_integration_tick_mutates_world():
         print("  [SKIP] integration_tick_mutates_world — PIE model file not found")
         return
 
+    # Isolate the Director's runtime files. Ashenvale has no per-world
+    # story pack, so without this the real engine boot below writes
+    # data/story_director/state.json — and the offline rotation tests
+    # at the TOP of this suite (which build Directors without
+    # isolation) would load that leftover state on the NEXT run and
+    # fail on stale npc_last_planned_tick entries. Found when a second
+    # consecutive full-suite run in a fresh checkout went red.
+    restore_paths = _isolate_state_file("integration_smoke")
+
     import yaml
     raw = yaml.safe_load((PIE_ROOT / "config.yaml").read_text(encoding="utf-8"))
     raw["base_model"]["path"] = str(PIE_ROOT / "models" / "qwen2.5-0.5b-instruct-q4_k_m.gguf")
@@ -4539,6 +4555,7 @@ def test_integration_tick_mutates_world():
         temp_npc.unlink()
     except Exception:
         pass
+    restore_paths()
 
     assert mutated, "integration tick did not mutate world state"
     print("  [PASS] integration_tick_mutates_world")

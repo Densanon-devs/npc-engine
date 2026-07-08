@@ -48,11 +48,12 @@ _NARRATIVE_JUDGE_OBSERVE_ENV = "NPC_ENGINE_NARRATIVE_JUDGE_OBSERVE"
 # The layer itself is ON by default because it is behavior-neutral:
 # it observes ticks, logs predicted-drift at DEBUG, and writes two
 # gitignored sidecars. Set NPC_ENGINE_PREDICTIVE_DISABLE=1 to remove
-# it entirely. The one behavior-CHANGING piece — the edge-prior boost
-# on arc proposal — stays OFF until explicitly enabled with
-# NPC_ENGINE_PREDICTIVE_BOOST=1, per the plan's implementation order
-# (step 5: promote to default-on only after two consecutive clean
-# e2e_stress cycles).
+# it entirely. The edge-prior boost on arc proposal — the lane's one
+# behavior-changing piece — was promoted to DEFAULT-ON on 2026-07-07
+# after two consecutive clean boosted e2e_stress cycles
+# (predictive_drift 13/13 x2 + gameplay 41/41 x2), per the plan's
+# implementation-order step 5. Set NPC_ENGINE_PREDICTIVE_BOOST=0 to
+# opt out; cold filters still reproduce unboosted proposals exactly.
 _PREDICTIVE_DISABLE_ENV = "NPC_ENGINE_PREDICTIVE_DISABLE"
 _PREDICTIVE_BOOST_ENV = "NPC_ENGINE_PREDICTIVE_BOOST"
 
@@ -1641,7 +1642,7 @@ class StoryDirector:
         # is separately gated behind NPC_ENGINE_PREDICTIVE_BOOST=1.
         self._predictive: Optional[Any] = None
         self._predictive_boost_enabled: bool = (
-            os.environ.get(_PREDICTIVE_BOOST_ENV) == "1"
+            os.environ.get(_PREDICTIVE_BOOST_ENV) != "0"
         )
         self._last_activity_pred: Optional[dict] = None
         if os.environ.get(_PREDICTIVE_DISABLE_ENV) != "1":
@@ -1652,14 +1653,26 @@ class StoryDirector:
                     labels=sorted(_PLAYER_ACTIVITY_VALUES),
                     history_path=self._activity_history_file,
                 )
-                # Warm pass only when the sidecar didn't already carry
-                # a state — replaying history on every boot would be
-                # wasted work the sidecar exists to avoid.
+                # Cold boot (no sidecar): full warm pass — edge
+                # filters from the ledger stream + prior from the
+                # JSONL. Sidecar-warm boot: the edge filters and
+                # matrix came from the sidecar, but the supervision
+                # PAIRS are not persisted there — rebuild them from
+                # the JSONL so the next refit doesn't replace a
+                # mature matrix with a minimum-sample fit (and so
+                # the 90-day prune runs on long-lived deployments).
                 if not self._predictive._loaded_from_sidecar:
                     warm_report = self._predictive.warm_from_history(self.ledger)
                     if warm_report.get("pairs") or warm_report.get("edge_updates"):
                         logger.info(
                             f"PredictiveLayer warm-from-history: {warm_report}"
+                        )
+                else:
+                    harvest_report = self._predictive.harvest_pairs_from_history(
+                        self.ledger)
+                    if harvest_report.get("pairs"):
+                        logger.info(
+                            f"PredictiveLayer pair harvest: {harvest_report}"
                         )
             except Exception as e:
                 logger.warning(f"PredictiveLayer init failed: {e}")

@@ -421,7 +421,9 @@ class PredictiveLayer:
     def warm_from_history(self, ledger) -> dict:
         """Replay the activity-history JSONL + the existing ledger to
         train both devices. The only 'training' step in v1 — CPU,
-        seconds at any realistic ledger size.
+        seconds at any realistic ledger size. Cold-boot path only:
+        replaying the ledger into edge filters that a sidecar already
+        populated would double-count every observation.
 
         Returns a small report dict for logging/observability.
         """
@@ -440,9 +442,30 @@ class PredictiveLayer:
             self.record_observation(t, "", by_tick[t])
             report["edge_updates"] += 1
 
-        # 2. Activity prior from the JSONL. Latent per record is
-        # re-derived from the ledger as it stood at that record's
-        # tick (entries with tick <= record tick).
+        # 2. Activity prior from the JSONL.
+        self.harvest_pairs_from_history(ledger, report)
+        return report
+
+    def harvest_pairs_from_history(self, ledger,
+                                   report: Optional[dict] = None) -> dict:
+        """Rebuild the in-memory supervision pairs from the JSONL
+        (pruning stale records) and refit the prior. Latent per record
+        is re-derived from the ledger as it stood at that record's
+        tick (entries with tick <= record tick).
+
+        Runs on EVERY boot — including sidecar-warm ones. The sidecar
+        deliberately does not carry the training set, so if this were
+        skipped after a sidecar load, ``_activity_pairs`` would start
+        empty and the first post-restart refit (the minimum 8 fresh
+        posts) would replace a mature matrix with a minimum-sample
+        fit. Rebuilding here also makes the 90-day prune actually run
+        on long-lived deployments, and lets a changed label set retrain
+        from history instead of silently cold-starting.
+        """
+        if report is None:
+            report = {"history_records": 0, "pairs": 0, "fitted": False,
+                      "pruned": 0}
+        entries = list(getattr(ledger, "entries", []))
         if self.history_path is None or not self.history_path.exists():
             return report
         cutoff = datetime.now(timezone.utc) - timedelta(
