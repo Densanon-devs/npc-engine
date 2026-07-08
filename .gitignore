@@ -19,6 +19,8 @@ data/story_director/fact_ledger.embeddings.npy
 data/story_director/arcs.json
 data/story_director/_tmp_*.json
 data/story_director/_tmp_*.npy
+data/story_director/*.predictive.npz
+data/story_director/*.activity_history.jsonl
 
 # Per-world Story Director runtime state (mirrors the legacy paths above
 # for any world that ships its own data/worlds/<world>/story/ pack)
@@ -28,6 +30,8 @@ data/worlds/*/story/fact_ledger.embeddings.npy
 data/worlds/*/story/arcs.json
 data/worlds/*/story/_tmp_*.json
 data/worlds/*/story/_tmp_*.npy
+data/worlds/*/story/*.predictive.npz
+data/worlds/*/story/*.activity_history.jsonl
 
 # Synthetic worlds for scaling tests — fully regeneratable from
 # generate_synthetic_world.py with a fixed seed, no need to track
