@@ -241,10 +241,17 @@ class ActivityPrior:
                 # Latent dim changed (e.g. different embedder) —
                 # stale matrix, fall back to uniform.
                 return self.uniform()
-            logits = x @ self.weight_matrix
-            logits = logits - logits.max()
-            exp = np.exp(logits)
-            probs = exp / exp.sum()
+            # Ridge against one-hot targets makes the raw scores an
+            # approximation of class probabilities already, so the
+            # link is clip-to-positive + normalize. (A softmax would
+            # squash a well-separated ~one-hot score vector to a
+            # ~0.25 peak over 9 labels and the drift-confidence
+            # threshold could never fire.)
+            scores = np.clip(x @ self.weight_matrix, 0.0, None)
+            total = float(scores.sum())
+            if total <= 1e-9:
+                return self.uniform()
+            probs = scores / total
             return {label: float(p) for label, p in zip(self.labels, probs)}
         except Exception as e:
             logger.warning(f"ActivityPrior predict failed: {e}")
