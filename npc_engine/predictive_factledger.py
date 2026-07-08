@@ -506,7 +506,15 @@ class PredictiveLayer:
     def reset(self) -> None:
         """Game reset: zero the edge filters but KEEP the prior matrix
         — the prior generalizes across resets, the edge filters don't
-        (plan: composition table, game-reset row)."""
+        (plan: composition table, game-reset row).
+
+        The activity-history JSONL also survives reset while the tick
+        counter restarts at 0. A later sidecar-less warm replay would
+        therefore pair pre-reset activity labels with post-reset ledger
+        latents for overlapping tick numbers — mildly mislabeled
+        supervision. Accepted for v1: the sidecar (saved right here)
+        normally short-circuits the replay, and the prior it carries
+        was fitted on correctly-paired data."""
         for filt in self.edge_filters.values():
             filt.reset()
         self._last_prediction = None

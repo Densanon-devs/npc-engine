@@ -183,6 +183,23 @@ def _entry(text, npc_id, tick, vec):
             "embedding": list(vec)}
 
 
+def test_unknown_edge_kind_ignored_not_crashed(tmp_base: Path):
+    """Plan risk register: unknown edge kinds are ignored, not
+    crashed; new kinds need an explicit registration call."""
+    layer = PredictiveLayer(tmp_base / "p0.npz", _LABELS)
+    assert "faction_presence" not in layer.edge_filters
+    # predict_next only consults registered kinds — a missing kind
+    # must not raise and must contribute nothing.
+    pred, edge_priors = layer.predict_next(_fake_ledger([]), tick=0,
+                                           current_activity="unknown")
+    assert edge_priors == {}
+    # Registration is explicit and idempotent.
+    f1 = layer.register_edge_kind("faction_presence", bucket_count=4)
+    f2 = layer.register_edge_kind("faction_presence")
+    assert f1 is f2 and f1.bucket_count == 4
+    print("  [PASS] unknown_edge_kind_ignored_not_crashed")
+
+
 def test_predictive_layer_empty_ledger_cold(tmp_base: Path):
     """Plan level-1 spec: predict_next with an empty ledger returns
     uniform + cold=True."""
@@ -644,6 +661,7 @@ def main():
         test_activity_prior_single_class_stays_cold()
         test_activity_prior_below_min_samples_stays_cold()
         test_activity_prior_dim_mismatch_falls_back_uniform()
+        test_unknown_edge_kind_ignored_not_crashed(base)
         test_predictive_layer_empty_ledger_cold(base)
         test_predictive_layer_record_observation_updates_filters(base)
         test_predictive_layer_sidecar_roundtrip(base)
