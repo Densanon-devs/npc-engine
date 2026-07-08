@@ -73,6 +73,12 @@ EDGE_PRIOR_BOOST_CAP = 0.10
 # warm-from-history time (plan risk register: cap unbounded growth).
 _ACTIVITY_HISTORY_MAX_AGE_DAYS = 90
 
+# In-memory supervision-pair cap. Each pair carries a ~384-dim float64
+# latent; without a cap a multi-day server session would grow the list
+# (and the per-post ridge refit cost) without bound. The newest pairs
+# win — recency matters more than volume for a per-engagement prior.
+_MAX_ACTIVITY_PAIRS = 512
+
 # Sidecar format version, stored in the .npz for forward compat.
 _SIDECAR_VERSION = 1
 
@@ -404,6 +410,8 @@ class PredictiveLayer:
             latent = self.summary_latent(getattr(ledger, "entries", []))
             if latent is not None:
                 self._activity_pairs.append((latent, str(activity)))
+                if len(self._activity_pairs) > _MAX_ACTIVITY_PAIRS:
+                    self._activity_pairs = self._activity_pairs[-_MAX_ACTIVITY_PAIRS:]
                 self.prior.fit(self._activity_pairs)
         except Exception as e:
             logger.warning(f"PredictiveLayer note_activity failed: {e}")
@@ -489,7 +497,7 @@ class PredictiveLayer:
                 pairs.append((latent, activity))
         report["pairs"] = len(pairs)
         if pairs:
-            self._activity_pairs = pairs + self._activity_pairs
+            self._activity_pairs = (pairs + self._activity_pairs)[-_MAX_ACTIVITY_PAIRS:]
             report["fitted"] = self.prior.fit(self._activity_pairs)
         return report
 

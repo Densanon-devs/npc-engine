@@ -2350,7 +2350,6 @@ class StoryDirector:
         # is on. Cold predictions reduce every path to pre-predictive
         # behavior. Never raises — tick() must always return.
         edge_priors: dict[str, float] = {}
-        ledger_len_before_tick = len(self.ledger.entries)
         if self._predictive is not None:
             try:
                 activity_pred, edge_priors = self._predictive.predict_next(
@@ -2436,15 +2435,20 @@ class StoryDirector:
 
         # Predictive lane — feed this tick's ledger delta into the
         # edge filters. Entries were added with tick = the NEW
-        # tick_count, so the bucket is computed from it. Absence
-        # updates (known NPCs that did NOT receive a beat) happen
-        # inside record_observation.
+        # tick_count, so select by tick number rather than slicing
+        # from the pre-tick length: FactLedger.add trims the list to
+        # its 200-entry cap, which would make a length-based slice
+        # index stale (empty/short delta) once a long session hits
+        # the cap. Absence updates (known NPCs that did NOT receive
+        # a beat) happen inside record_observation.
         if self._predictive is not None:
             try:
+                delta = [
+                    e for e in self.ledger.entries
+                    if e.get("tick") == self.tick_count
+                ]
                 self._predictive.record_observation(
-                    self.tick_count,
-                    self._player_activity,
-                    self.ledger.entries[ledger_len_before_tick:],
+                    self.tick_count, self._player_activity, delta,
                 )
             except Exception as e:
                 logger.warning(f"Predictive record_observation failed: {e}")

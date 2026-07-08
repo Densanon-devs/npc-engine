@@ -1131,10 +1131,18 @@ def scenario_predictive_drift(out: Path) -> dict:
     latent = layer.summary_latent(sd.ledger.entries)
     log.check(latent is not None, "session ledger produces a latent")
     if latent is not None:
-        pairs = [(latent, "in_dungeon") for _ in range(5)]
-        pairs += [(-latent, "in_town") for _ in range(5)]
-        log.check(layer.prior.fit(pairs), "contrast prior fits")
-        sd.set_player_activity("in_town")
+        pairs = [(latent, "in_dungeon") for _ in range(8)]
+        pairs += [(-latent, "in_town") for _ in range(8)]
+        # Seed the layer's OWN pair store and fit from it. Anything
+        # else gets clobbered: every /story/activity post refits the
+        # prior from _activity_pairs (the prior is data-owned), so a
+        # bare prior.fit() would not survive the next activity post.
+        # The activity is set directly for the same reason — the probe
+        # tests the drift check in tick(), not the harvest path.
+        layer._activity_pairs = list(pairs)
+        log.check(layer.prior.fit(layer._activity_pairs),
+                   "contrast prior fits")
+        sd._player_activity = "in_town"
         drift_before = layer._drift_count
         _tick(sd, "drift_probe", actions_per_tick=1)
         pred = sd._last_activity_pred or {}

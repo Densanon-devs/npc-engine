@@ -1,10 +1,23 @@
 # Predictive FactLedger — Design Spec
 
-**Status:** Draft, 2026-05-04; v2+ roadmap refinement 2026-05-10. Not
-committed to a phase number yet. v1 (pure-Python, single linear prior)
-is the implementation target; v2/v3 (ONNX sequence model, multi-expert
-split) are sketched in the "2026-05-10 design refinement" section near
-the bottom.
+**Status:** v1 IMPLEMENTED 2026-07-07 (branch
+`feature/predictive-factledger`): `npc_engine/predictive_factledger.py`
++ StoryDirector wiring + `tests/test_predictive_factledger.py` +
+`e2e_stress.py --scenario predictive_drift` + `verify_predictive.py`.
+Documented deviations from this spec: sidecar filenames derive from
+the state-file stem (`state.predictive.npz`, `state.activity_history
+.jsonl`) so the existing STATE_FILE test-isolation pattern covers
+them; a read-only `GET /story/predictive` observability endpoint was
+added; the v1 edge kind is `npc_beat` (NPC receives a Director beat
+at a tick-phase bucket) rather than the npc_in_zone/faction_presence
+examples, whose observation streams don't exist yet; the arc boost is
+a multiplicative nudge capped at 0.10 and env-gated behind
+`NPC_ENGINE_PREDICTIVE_BOOST=1` until two consecutive clean stress
+cycles (step 5 of the implementation order below). Original draft
+2026-05-04; v2+ roadmap refinement 2026-05-10. v1 (pure-Python,
+single linear prior) was the implementation target; v2/v3 (ONNX
+sequence model, multi-expert split) remain roadmap, sketched in the
+"2026-05-10 design refinement" section near the bottom.
 
 This document specifies an enhancement to the existing Story Director
 that turns the FactLedger from a passive **record** into a passive
