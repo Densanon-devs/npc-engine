@@ -47,8 +47,14 @@ _NEGATIVE_PATTERNS = [
     r"\b(?:useless|worthless|pathetic|waste)\b",
 ]
 
+_APOLOGY_PATTERNS = [
+    r"\b(?:sorry|apologi[sz]e|my apologies|apology)\b",
+    r"\b(?:forgive me|i was wrong|didn'?t mean|meant no)\b",
+]
+
 _POSITIVE_COMPILED = [re.compile(p) for p in _POSITIVE_PATTERNS]
 _NEGATIVE_COMPILED = [re.compile(p) for p in _NEGATIVE_PATTERNS]
+_APOLOGY_COMPILED = [re.compile(p) for p in _APOLOGY_PATTERNS]
 
 
 def is_negative_query(query: str) -> bool:
@@ -65,6 +71,16 @@ def is_positive_query(query: str) -> bool:
     """True when the player's query matches a positive-sentiment pattern."""
     q = query.lower()
     return any(p.search(q) for p in _POSITIVE_COMPILED)
+
+
+def is_apology_query(query: str) -> bool:
+    """True when the player's query contains an explicit apology.
+
+    A turn that is BOTH hostile and apologetic ("sorry, but you're an
+    idiot") counts as hostile — callers check is_negative_query first.
+    """
+    q = query.lower()
+    return any(p.search(q) for p in _APOLOGY_COMPILED)
 
 _DEFAULT_THRESHOLDS = {
     "wary": 0,
@@ -133,12 +149,19 @@ class TrustCapability(Capability):
         delta = self._calculate_delta(query, shared_state)
         self.level = max(0, min(100, self.level + delta))
 
-        # Hostility streak: any hostile turn extends it; any non-hostile
-        # turn resets it. Same pattern list as the -5 sentiment delta.
+        # Hostility streak: hostile turns extend it; civil turns DECAY it
+        # rather than resetting (decay -1, explicit apology -2). Full
+        # reset was both too forgiving (one "sorry" after four insults
+        # instantly cleared withdrawal) and exploitable (alternating
+        # insult/civil turns could never accumulate a streak). With
+        # decay, token civility between insults still nets +1 per cycle,
+        # and recovery from a deep streak is a process, not a switch.
         if is_negative_query(query):
             self.consecutive_negative += 1
+        elif is_apology_query(query):
+            self.consecutive_negative = max(0, self.consecutive_negative - 2)
         else:
-            self.consecutive_negative = 0
+            self.consecutive_negative = max(0, self.consecutive_negative - 1)
 
         # Update trend
         if self.level > self._previous_level:
@@ -181,10 +204,19 @@ class TrustCapability(Capability):
                 break  # Max +1 from sentiment per turn
 
         # Negative sentiment
+        is_hostile = False
         for pattern in _NEGATIVE_PATTERNS:
             if re.search(pattern, query_lower):
                 delta -= 5
+                is_hostile = True
                 break  # Max -5 from sentiment per turn
+
+        # Explicit apology — a small mend, deliberately less than one
+        # hostile turn's -5, so lost trust is only fully rebuilt through
+        # sustained good interactions. Hostile turns can't claim it
+        # ("sorry, but you're an idiot" is hostile).
+        if not is_hostile and is_apology_query(query_lower):
+            delta += 2
 
         # Quest-related trust changes (from shared_state or player_quests)
         player_quests = shared_state.get("player_quests", [])

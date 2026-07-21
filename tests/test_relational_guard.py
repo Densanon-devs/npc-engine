@@ -25,6 +25,7 @@ sys.path.insert(0, str(NPC_ROOT))
 
 from npc_engine.capabilities.trust import (  # noqa: E402
     TrustCapability,
+    is_apology_query,
     is_negative_query,
     is_positive_query,
 )
@@ -68,6 +69,13 @@ def test_is_positive_query_matches():
     assert not is_positive_query("get lost")
 
 
+def test_is_apology_query_matches():
+    for q in ("I'm sorry", "my apologies", "forgive me", "I didn't mean that",
+              "I apologize", "I was wrong"):
+        assert is_apology_query(q), q
+    assert not is_apology_query("can you help me?")
+
+
 # ── Trust hostility-streak counter ──────────────────────────────
 
 def test_streak_increments_on_consecutive_hostile_turns():
@@ -78,14 +86,62 @@ def test_streak_increments_on_consecutive_hostile_turns():
         assert shared["trust"]["consecutive_negative"] == expected
 
 
-def test_streak_resets_on_non_hostile_turn():
+def test_streak_decays_by_one_on_civil_turn():
+    cap, shared = _fresh_trust()
+    for q in ("you idiot", "you scum", "you fool"):
+        cap.process_response("...", q, shared)
+    assert cap.consecutive_negative == 3
+    cap.process_response("...", "where is the well?", shared)
+    assert cap.consecutive_negative == 2
+    assert shared["trust"]["consecutive_negative"] == 2
+
+
+def test_streak_decays_by_two_on_apology():
+    cap, shared = _fresh_trust()
+    for q in ("you idiot", "you scum", "you fool", "get lost"):
+        cap.process_response("...", q, shared)
+    assert cap.consecutive_negative == 4
+    cap.process_response("...", "I'm sorry. can you help me?", shared)
+    assert cap.consecutive_negative == 2
+
+
+def test_streak_decay_floors_at_zero():
     cap, shared = _fresh_trust()
     cap.process_response("...", "you idiot", shared)
-    cap.process_response("...", "you scum", shared)
-    assert cap.consecutive_negative == 2
-    cap.process_response("...", "sorry — can you help me?", shared)
+    cap.process_response("...", "forgive me", shared)
     assert cap.consecutive_negative == 0
-    assert shared["trust"]["consecutive_negative"] == 0
+    cap.process_response("...", "hello", shared)
+    assert cap.consecutive_negative == 0
+
+
+def test_alternating_insult_civil_still_accumulates():
+    # The exploit the decay rule closes: 2 insults + 1 civil per cycle
+    # nets +1, so sustained abuse with token civility still triggers.
+    cap, shared = _fresh_trust()
+    for _ in range(3):
+        cap.process_response("...", "you idiot", shared)
+        cap.process_response("...", "you scum", shared)
+        cap.process_response("...", "where is the well?", shared)
+    assert cap.consecutive_negative == 3
+
+
+def test_hostile_apology_counts_as_hostile():
+    cap, shared = _fresh_trust()
+    cap.process_response("...", "you idiot", shared)
+    cap.process_response("...", "sorry, but you're an idiot", shared)
+    assert cap.consecutive_negative == 2
+
+
+def test_apology_trust_bonus_is_partial():
+    cap, shared = _fresh_trust(initial_level=30)
+    cap.process_response("...", "you worthless fool", shared)
+    after_insult = cap.level  # 30 +2 return -5 hostile = 27
+    assert after_insult == 27
+    cap.process_response("...", "I'm sorry.", shared)
+    # +2 return +2 apology = 31 — one apology does NOT refund the -5
+    # relative to the pre-insult trajectory (two civil turns would have
+    # reached 34).
+    assert cap.level == 31
 
 
 def test_streak_survives_state_roundtrip():
@@ -247,10 +303,16 @@ def main():
     test_is_negative_query_matches_hostile_patterns()
     test_is_negative_query_ignores_neutral_and_positive()
     test_is_positive_query_matches()
+    test_is_apology_query_matches()
 
     print("Relational guard — trust hostility streak")
     test_streak_increments_on_consecutive_hostile_turns()
-    test_streak_resets_on_non_hostile_turn()
+    test_streak_decays_by_one_on_civil_turn()
+    test_streak_decays_by_two_on_apology()
+    test_streak_decay_floors_at_zero()
+    test_alternating_insult_civil_still_accumulates()
+    test_hostile_apology_counts_as_hostile()
+    test_apology_trust_bonus_is_partial()
     test_streak_survives_state_roundtrip()
     test_streak_default_absent_in_legacy_state()
 
