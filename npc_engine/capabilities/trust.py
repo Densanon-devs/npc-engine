@@ -47,6 +47,25 @@ _NEGATIVE_PATTERNS = [
     r"\b(?:useless|worthless|pathetic|waste)\b",
 ]
 
+_POSITIVE_COMPILED = [re.compile(p) for p in _POSITIVE_PATTERNS]
+_NEGATIVE_COMPILED = [re.compile(p) for p in _NEGATIVE_PATTERNS]
+
+
+def is_negative_query(query: str) -> bool:
+    """True when the player's query matches a hostile-sentiment pattern.
+
+    Public so the postgen relational guard can share the exact sentiment
+    definition trust uses for its -5 delta — one pattern list, no drift.
+    """
+    q = query.lower()
+    return any(p.search(q) for p in _NEGATIVE_COMPILED)
+
+
+def is_positive_query(query: str) -> bool:
+    """True when the player's query matches a positive-sentiment pattern."""
+    q = query.lower()
+    return any(p.search(q) for p in _POSITIVE_COMPILED)
+
 _DEFAULT_THRESHOLDS = {
     "wary": 0,
     "neutral": 25,
@@ -79,6 +98,9 @@ class TrustCapability(Capability):
         self.trend: str = "stable"  # "rising", "stable", "falling"
         self.last_interaction: float = time.time()
         self._previous_level: int = self.level
+        # Consecutive player turns matching hostile sentiment. Feeds the
+        # postgen relational guard's respectful-withdrawal trigger.
+        self.consecutive_negative: int = 0
 
         # Configuration
         self.thresholds = yaml_config.get("thresholds", _DEFAULT_THRESHOLDS)
@@ -110,6 +132,13 @@ class TrustCapability(Capability):
         # Calculate trust delta from player query
         delta = self._calculate_delta(query, shared_state)
         self.level = max(0, min(100, self.level + delta))
+
+        # Hostility streak: any hostile turn extends it; any non-hostile
+        # turn resets it. Same pattern list as the -5 sentiment delta.
+        if is_negative_query(query):
+            self.consecutive_negative += 1
+        else:
+            self.consecutive_negative = 0
 
         # Update trend
         if self.level > self._previous_level:
@@ -205,6 +234,7 @@ class TrustCapability(Capability):
             "tier": self._get_tier(),
             "interactions": self.interactions,
             "trend": self.trend,
+            "consecutive_negative": self.consecutive_negative,
         }
 
     def on_event(self, event: str, shared_state: dict) -> None:
@@ -221,6 +251,7 @@ class TrustCapability(Capability):
             "interactions": self.interactions,
             "trend": self.trend,
             "last_interaction": self.last_interaction,
+            "consecutive_negative": self.consecutive_negative,
         }
 
     def load_state(self, state: dict) -> None:
@@ -229,3 +260,4 @@ class TrustCapability(Capability):
         self.trend = state.get("trend", "stable")
         self.last_interaction = state.get("last_interaction", time.time())
         self._previous_level = self.level
+        self.consecutive_negative = state.get("consecutive_negative", 0)

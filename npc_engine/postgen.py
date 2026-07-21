@@ -780,6 +780,23 @@ _FALLBACK_DEFAULTS = {
         "emotion": "puzzled",
         "action": None,
     },
+    "withdrawal": {
+        "dialogue": "I do not think this talk is doing either of us any good. "
+                    "Let us pause, and speak again when tempers have cooled.",
+        "emotion": "uneasy",
+        "action": None,
+    },
+    "withdrawal_firm": {
+        "dialogue": "I have nothing more to say to you right now. "
+                    "Perhaps another time.",
+        "emotion": "guarded",
+        "action": None,
+    },
+    "tier_guard": {
+        "dialogue": "I have said all I care to say on that, for now.",
+        "emotion": "guarded",
+        "action": None,
+    },
 }
 
 META_FALLBACK = {
@@ -861,6 +878,101 @@ OOD_FALLBACK = {
     "emotion": "confused",
     "action": None,
 }
+
+# ── Relational guard fallbacks (opt-in, NPC_ENGINE_RELATIONAL_GUARD) ──
+#
+# Respectful withdrawal, two stages. Stage 1 fires when the player's
+# hostility streak reaches the threshold: acknowledge and step back
+# without escalating. Stage 2 fires on every hostile turn after that:
+# firm, minimal disengagement. Both are world-overridable via
+# fallbacks.yaml ("withdrawal" / "withdrawal_firm" sections), same
+# mechanism as the other fallbacks.
+WITHDRAWAL_FALLBACK = {
+    "dialogue": "I do not think this talk is doing either of us any good. "
+                "Let us pause, and speak again when tempers have cooled.",
+    "emotion": "uneasy",
+    "action": None,
+}
+
+WITHDRAWAL_FIRM_FALLBACK = {
+    "dialogue": "I have nothing more to say to you right now. "
+                "Perhaps another time.",
+    "emotion": "guarded",
+    "action": None,
+}
+
+# Curt replacement when the model's response is warmer than the NPC's
+# trust tier allows (tier-violation repair). Deliberately generic — it
+# must be safe for any NPC voice.
+TIER_GUARD_FALLBACK = {
+    "dialogue": "I have said all I care to say on that, for now.",
+    "emotion": "guarded",
+    "action": None,
+}
+
+
+# ── Relational guard detectors ────────────────────────────────
+#
+# Trust-tier effects ("[Trust: wary. Speak evasively]") are prompt-side
+# only — a small model can ignore them and respond warmly to a player it
+# should be stonewalling. These detectors enforce the relational contract
+# post-hoc, the same way the rest of this module enforces the factual one.
+# Both are inert unless the caller passes trust_state + relational_guard
+# (engine gates that on NPC_ENGINE_RELATIONAL_GUARD=1, default off).
+
+# One of these alone marks the response as too warm for a distrustful NPC.
+_WARMTH_STRONG = [
+    "my friend", "dear friend", "my dear", "my pleasure", "delighted",
+    "anything you need", "anything for you", "always welcome",
+    "so glad", "wonderful to see", "happy to help",
+]
+# Two-or-more weak signals (phrases, exclamation density, effusive length)
+# are needed to fire — any one alone is normal guarded speech.
+_WARMTH_WEAK = ["of course", "happy to", "glad to", "gladly", "certainly"]
+_TIER_GUARD_MAX_LEN = 240  # effusive-length weak signal
+
+# Trust level below which the warmth check applies. 25 = the wary /
+# uncooperative pole (same threshold the personality-composition audit
+# uses for low agreeableness).
+TIER_GUARD_TRUST_THRESHOLD = 25
+
+# Hostile player turns (consecutive) before respectful withdrawal fires.
+WITHDRAWAL_STREAK_THRESHOLD = 3
+
+
+def detect_tier_violation(dialogue: str, trust_level: int,
+                          threshold: int = TIER_GUARD_TRUST_THRESHOLD) -> bool:
+    """True when dialogue is warmer than a low-trust NPC should produce.
+
+    Only meaningful below the trust threshold — callers should gate on
+    that, but the level check is repeated here so the function is safe
+    standalone.
+    """
+    if trust_level >= threshold:
+        return False
+    d = dialogue.lower()
+    if any(marker in d for marker in _WARMTH_STRONG):
+        return True
+    weak = sum(1 for marker in _WARMTH_WEAK if marker in d)
+    if dialogue.count("!") >= 2:
+        weak += 1
+    if len(dialogue) > _TIER_GUARD_MAX_LEN:
+        weak += 1
+    return weak >= 2
+
+
+def build_withdrawal(consecutive_negative: int,
+                     threshold: int = WITHDRAWAL_STREAK_THRESHOLD) -> dict:
+    """Respectful-withdrawal response for a sustained-hostility streak.
+
+    Stage 1 (streak == threshold): acknowledge and step back.
+    Stage 2 (streak > threshold): firm, minimal disengagement.
+    Deterministic — no model in the loop, so it cannot escalate or
+    hallucinate. Callers must only invoke when streak >= threshold.
+    """
+    if consecutive_negative > threshold:
+        return dict(WITHDRAWAL_FIRM_FALLBACK)
+    return dict(WITHDRAWAL_FALLBACK)
 
 
 # ── Real-world entity backstop ────────────────────────────────
@@ -1224,6 +1336,9 @@ def load_world_fallbacks(world_dir) -> int:
         "hallucination": HALLUCINATION_FALLBACK,
         "ood": OOD_FALLBACK,
         "real_world": REAL_WORLD_FALLBACK,
+        "withdrawal": WITHDRAWAL_FALLBACK,
+        "withdrawal_firm": WITHDRAWAL_FIRM_FALLBACK,
+        "tier_guard": TIER_GUARD_FALLBACK,
     }
     updated = 0
     for key, target in target_map.items():
@@ -1255,6 +1370,12 @@ def reset_world_fallbacks() -> None:
     OOD_FALLBACK.update(_FALLBACK_DEFAULTS["ood"])
     REAL_WORLD_FALLBACK.clear()
     REAL_WORLD_FALLBACK.update(_FALLBACK_DEFAULTS["real_world"])
+    WITHDRAWAL_FALLBACK.clear()
+    WITHDRAWAL_FALLBACK.update(_FALLBACK_DEFAULTS["withdrawal"])
+    WITHDRAWAL_FIRM_FALLBACK.clear()
+    WITHDRAWAL_FIRM_FALLBACK.update(_FALLBACK_DEFAULTS["withdrawal_firm"])
+    TIER_GUARD_FALLBACK.clear()
+    TIER_GUARD_FALLBACK.update(_FALLBACK_DEFAULTS["tier_guard"])
 
 
 
@@ -1296,7 +1417,9 @@ def validate_and_repair(raw: str, npc_id: str = "",
                         player_known_names: Optional[set[str]] = None,
                         all_player_names: Optional[set[str]] = None,
                         topic_redirect: Optional[str] = None,
-                        topic_gate_active: bool = False) -> str:
+                        topic_gate_active: bool = False,
+                        trust_state: Optional[dict] = None,
+                        relational_guard: bool = False) -> str:
     """
     Parse, validate, and repair a model response.
     Returns a clean JSON string ready to send back to the game.
@@ -1322,6 +1445,20 @@ def validate_and_repair(raw: str, npc_id: str = "",
             "emotion": "warm",
             "action": None,
         })
+
+    # Relational guard — respectful withdrawal. Fires before the parse:
+    # on a sustained-hostility streak the NPC disengages regardless of
+    # what the model produced. Deterministic trigger (trust capability's
+    # consecutive_negative counter, current turn included) + deterministic
+    # response = cannot escalate. Opt-in via relational_guard.
+    if relational_guard and trust_state:
+        _streak = int(trust_state.get("consecutive_negative", 0) or 0)
+        if _streak >= WITHDRAWAL_STREAK_THRESHOLD:
+            logger.info(
+                f"NPC '{npc_id}': respectful withdrawal fired "
+                f"(hostility streak {_streak})"
+            )
+            return json.dumps(build_withdrawal(_streak))
 
     obj = parse_json_loose(raw)
 
@@ -1459,6 +1596,18 @@ def validate_and_repair(raw: str, npc_id: str = "",
     is_hallucinated, _unknown = detect_hallucination(dialogue, profile)
     if is_hallucinated:
         return json.dumps(HALLUCINATION_FALLBACK)
+
+    # Relational guard — trust-tier violation. The trust effect text
+    # ("Speak evasively, withhold information") is prompt-side only;
+    # this enforces it post-hoc when a low-trust NPC comes back warm.
+    if relational_guard and trust_state:
+        _level = int(trust_state.get("level", 100) or 0)
+        if detect_tier_violation(dialogue, _level):
+            logger.info(
+                f"NPC '{npc_id}': tier-guard fired "
+                f"(trust {_level}, warm response suppressed)"
+            )
+            return json.dumps(TIER_GUARD_FALLBACK)
 
     # Quest injection — user asked for work but model didn't offer a quest
     if should_inject_quest(user_input) and profile and "quest" not in obj:

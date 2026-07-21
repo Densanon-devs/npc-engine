@@ -10,6 +10,7 @@ Composition pattern:
 """
 
 import logging
+import os
 from pathlib import Path
 
 from npc_engine.bridge import PluginIntelligenceEngine, NPC_ENGINE_ROOT
@@ -129,6 +130,13 @@ class NPCEngine:
 
         # Post-generation validation & repair (on by default)
         self.postgen_enabled = True
+
+        # Relational guard (tier-violation suppression + respectful
+        # withdrawal on sustained hostility). Opt-in, default OFF —
+        # same rollout pattern as NPC_ENGINE_PERSONALITY_AUDIT.
+        self.relational_guard_enabled = (
+            os.environ.get("NPC_ENGINE_RELATIONAL_GUARD", "0") == "1"
+        )
 
         # Social systems (initialized after PIE loads)
         self.social_graph: SocialGraph | None = None
@@ -281,6 +289,14 @@ class NPCEngine:
                         topic_gate_active = True
                         if not kg_state.get("query_on_topic", True):
                             topic_redirect = kg_state.get("redirect_message")
+                # Relational guard — trust snapshot for this turn.
+                # PIE runs process_all_responses before we get here,
+                # so consecutive_negative already includes this turn.
+                trust_state: dict | None = None
+                if self.relational_guard_enabled and mgr:
+                    ts = mgr.shared_state.get("trust")
+                    if isinstance(ts, dict):
+                        trust_state = ts
                 response = validate_and_repair(
                     response, npc_id=active_npc, profile=profile,
                     user_input=user_input, events=events,
@@ -288,6 +304,8 @@ class NPCEngine:
                     all_player_names=all_player_names,
                     topic_redirect=topic_redirect,
                     topic_gate_active=topic_gate_active,
+                    trust_state=trust_state,
+                    relational_guard=self.relational_guard_enabled,
                 )
             except Exception as e:
                 logger.debug(f"Postgen error (using raw response): {e}")
